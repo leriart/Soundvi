@@ -1,0 +1,28 @@
+# Dependencias principales
+opencv-python>=4.8.0
+numpy>=1.24.0
+librosa>=0.10.0
+moviepy>=1.0.3
+ttkbootstrap>=1.10.0
+pillow>=10.0.0
+scipy>=1.11.0
+pygame-ce>=2.4.0
+
+# Para IA (módulo SubAuto)
+vosk>=0.3.45
+matplotlib>=3.7.0
+
+# Para procesamiento de audio
+pydub>=0.25.1
+soundfile>=0.12.0
+
+# Para procesamiento paralelo
+threadpoolctl>=3.2.0
+joblib>=1.3.0
+
+# Para mejor rendimiento
+numba>=0.58.0
+
+# Dependencias opcionales para funcionalidades avanzadas
+# ffmpeg-python>=0.2.0  # Ya se usa subprocess directamente
+# opencv-contrib-python>=4.8.0  # Si se necesitan características adicionales de OpenCV

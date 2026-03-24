@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """
-Build Script para Soundvi - Soporta PyInstaller y PyOxidizer
+Build Script para Soundvi - Soporta PyInstaller y PyOxidizer (CORREGIDO)
+Versión corregida con sintaxis correcta para PyOxidizer
 """
 
 import os
@@ -192,7 +193,7 @@ exe = EXE(
 '''
     
     # --------------------------------------------------------------------------
-    # Builder: PyOxidizer
+    # Builder: PyOxidizer (CORREGIDO)
     # --------------------------------------------------------------------------
     def build_with_pyoxidizer(self, target_platform):
         print(f"[PyOxidizer] Compilando para {target_platform}...")
@@ -222,71 +223,84 @@ exe = EXE(
         return False
     
     def _create_pyoxidizer_config(self, target_platform):
-        """Genera pyoxidizer.bzl para el proyecto."""
+        """Genera pyoxidizer.bzl para el proyecto con sintaxis correcta."""
         icon_path = self.configs[target_platform]["icon"]
         ext = self.configs[target_platform]["ext"]
         exe_name = f"soundvi{ext}"
         
-        excludes = [
-            "matplotlib", "sklearn", "scikit-learn", "imageio_ffmpeg",
-            "PyQt5", "PySide2", "PyQt6", "IPython", "jupyter",
-            "tensorflow", "torch", "pandas", "notebook",
-        ]
-        
-        # Configuración en Starlark (corregida)
-        config = f'''
-# pyoxidizer.bzl
+        # Configuración en Starlark (sintaxis corregida)
+        config = f'''# pyoxidizer.bzl para Soundvi
 # Generado automáticamente por build.py
 
 def make_exe():
+    # Distribución de Python por defecto
     dist = default_python_distribution()
+    
+    # Política de empaquetado
     policy = dist.make_python_packaging_policy()
     
-    # Usar modo "classify" (recomendado)
-    policy.set_resource_handling_mode("classify")
+    # Configurar ubicación de recursos
+    policy.resources_location_fallback = "in-memory"
     
-    # Excluir módulos pesados
-    for mod in {excludes}:
-        policy.excluded_module_names.add(mod)
-    
+    # Configuración del intérprete Python
     python_config = dist.make_python_interpreter_config()
     python_config.run_module = "main"
     
+    # Crear ejecutable
     exe = dist.to_python_executable(
         name="{exe_name}",
         packaging_policy=policy,
         config=python_config,
     )
     
-    # Incluir main.py
-    exe.add_python_resources(exe.read_file("main.py", dest="main.py"))
-    
     # Instalar dependencias desde requirements.txt
     exe.add_python_resources(exe.pip_install(["-r", "requirements.txt"]))
     
-    # Incluir paquetes de código fuente
-    for pkg in ["core", "gui", "modules", "utils"]:
-        exe.add_python_resources(exe.read_package_root(
-            path=pkg,
-            packages=[pkg],
-            excludes=["**/__pycache__", "**/*.pyc", "**/*.pyo"],
-        ))
+    # Incluir archivos de código fuente como paquetes
+    exe.add_python_resources(exe.read_package_root(
+        path="core",
+        packages=["core"],
+    ))
     
-    # Incluir archivos de recursos
+    exe.add_python_resources(exe.read_package_root(
+        path="gui",
+        packages=["gui"],
+    ))
+    
+    exe.add_python_resources(exe.read_package_root(
+        path="modules",
+        packages=["modules"],
+    ))
+    
+    exe.add_python_resources(exe.read_package_root(
+        path="utils",
+        packages=["utils"],
+    ))
+    
+    # Incluir main.py como módulo principal
+    exe.add_python_resources(exe.read_file("main.py", dest="main.py"))
+    
+    # Incluir archivos de configuración
     exe.add_python_resources(exe.read_file("config.json", dest="config.json"))
-    exe.add_python_resources(exe.read_file("README.md", dest="README.md"))
-    exe.add_python_resources(exe.read_dir("fonts", dest="fonts"))
-    exe.add_python_resources(exe.read_dir("logos", dest="logos"))
+    
+    # Incluir directorios de recursos
+    exe.add_python_resources(exe.read_directory("fonts", dest="fonts"))
+    exe.add_python_resources(exe.read_directory("logos", dest="logos"))
     
     # Configuración específica de plataforma
     if "{target_platform}" == "windows":
         exe.windows_runtime_dlls_mode = "always"
         exe.windows_subsystem = "windows"
-        if os.path.exists("{icon_path}"):
-            exe.icon_file = "{icon_path}"
+        # Configurar icono si existe
+        if "{icon_path}".endswith(".ico"):
+            exe.icon = "{icon_path}"
     elif "{target_platform}" == "linux":
-        if os.path.exists("{icon_path}"):
-            exe.icon_file = "{icon_path}"
+        # Configurar icono si existe
+        if "{icon_path}".endswith(".png"):
+            exe.icon = "{icon_path}"
+    elif "{target_platform}" == "macos":
+        if "{icon_path}".endswith(".icns"):
+            exe.icon = "{icon_path}"
     
     return exe
 
@@ -295,13 +309,15 @@ def make_install(exe):
     files.add_python_resource(".", exe)
     return files
 
+# Registrar targets
 register_target("exe", make_exe)
 register_target("install", make_install, depends=["exe"], default=True)
+
 resolve_targets()
 '''
         with open(self.project_dir / "pyoxidizer.bzl", "w") as f:
             f.write(config)
-        print("[PyOxidizer] Archivo de configuración pyoxidizer.bzl generado.")
+        print("[PyOxidizer] Archivo de configuración pyoxidizer.bzl generado con sintaxis corregida.")
     
     # --------------------------------------------------------------------------
     # Helper para encontrar el ejecutable

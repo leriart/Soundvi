@@ -22,12 +22,11 @@ jobs:
     - name: Instalar dependencias del sistema
       run: |
         sudo apt-get update
-        sudo apt-get install -y ffmpeg python3-tk xvfb upx   # upx para compresión
+        sudo apt-get install -y ffmpeg python3-tk xvfb upx
 
     - name: Instalar dependencias Python
       run: |
         python -m pip install --upgrade pip
-        # Reemplazar opencv-python por opencv-python-headless para reducir tamaño
         if [ -f "requirements.txt" ]; then
           sed -i 's/opencv-python/opencv-python-headless/g' requirements.txt
           pip install -r requirements.txt
@@ -38,12 +37,23 @@ jobs:
 
     - name: Prueba de importación (con X virtual)
       run: |
-        echo "🧪 Probando importación del módulo principal..."
-        xvfb-run python -c "from gui.app import SoundviApp; print('✅ GUI importada correctamente')" || echo "⚠️ Advertencia: falló importación de GUI, continuamos"
+        echo "🧪 Probando importaciones clave..."
+        xvfb-run python -c "
+import sys
+import numpy as np
+import cv2
+from PIL import Image
+import librosa
+import pydub
+import scipy
+import ttkbootstrap
+from core.video_generator import VideoGenerator
+from modules.manager import ModuleManager
+print('✅ Todas las dependencias esenciales OK')
+"
 
     - name: Build con PyInstaller (Linux)
       run: |
-        # Excluir módulos grandes que no son necesarios
         pyinstaller --onefile --name soundvi-linux \
           --noconsole \
           --strip \
@@ -56,10 +66,6 @@ jobs:
           --add-data "utils:utils" \
           --add-data "config.json:." \
           $( [ -d "modules_config" ] && echo "--add-data modules_config:modules_config" ) \
-          $( [ -d "vosk_models" ] && echo "--add-data vosk_models:vosk_models" ) \
-          --exclude-module matplotlib \
-          --exclude-module scipy \
-          --exclude-module moviepy \
           --hidden-import="PIL._imagingtk" \
           --hidden-import="PIL._imaging" \
           --hidden-import="PIL._tkinter_finder" \
@@ -67,8 +73,7 @@ jobs:
           main.py
         mv dist/soundvi-linux .
         chmod +x soundvi-linux
-        # Mostrar tamaño final
-        ls -lh soundvi-linux
+        echo "✅ Tamaño final: $(ls -lh soundvi-linux | awk '{print $5}')"
 
     - name: Subir artefacto Linux
       uses: actions/upload-artifact@v4
@@ -96,7 +101,6 @@ jobs:
       run: |
         python -m pip install --upgrade pip
         if (Test-Path "requirements.txt") {
-          # Reemplazar opencv-python por opencv-python-headless
           (Get-Content requirements.txt) -replace 'opencv-python', 'opencv-python-headless' | Set-Content requirements.txt
           pip install -r requirements.txt
         } else {
@@ -117,15 +121,11 @@ jobs:
           "config.json;."
         )
         if (Test-Path "modules_config") { $addData += "modules_config;modules_config" }
-        if (Test-Path "vosk_models") { $addData += "vosk_models;vosk_models" }
-        $args = @("--onefile", "--name", "soundvi-windows", "--windowed", "--strip")
+        $args = @("--onefile", "--name", "soundvi-windows", "--windowed", "--strip", "--upx-exclude=vcruntime140.dll")
         foreach ($item in $addData) {
           $args += "--add-data", $item
         }
         $args += @(
-          "--exclude-module", "matplotlib",
-          "--exclude-module", "scipy",
-          "--exclude-module", "moviepy",
           "--hidden-import=PIL._imagingtk",
           "--hidden-import=PIL._imaging",
           "--hidden-import=PIL._tkinter_finder",

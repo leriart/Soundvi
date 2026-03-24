@@ -1,0 +1,180 @@
+name: Build Soundvi Executables
+
+on:
+  push:
+    tags:
+      - 'v*'  # Ejecutar en tags como v1.0.0, v1.2.3, etc.
+  workflow_dispatch:  # Permitir ejecución manual
+
+jobs:
+  build:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+        include:
+          - os: ubuntu-latest
+            platform: linux
+            artifact_name: soundvi-linux
+          - os: windows-latest
+            platform: windows
+            artifact_name: soundvi-windows
+          - os: macos-latest
+            platform: macos
+            artifact_name: soundvi-macos
+    
+    steps:
+    - name: Checkout código
+      uses: actions/checkout@v4
+    
+    - name: Setup Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.10'
+    
+    - name: Instalar dependencias del proyecto
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+    
+    - name: Instalar dependencias de build
+      run: |
+        pip install nuitka ordered-set zstandard
+        if [ "${{ matrix.platform }}" = "windows" ]; then
+          # Herramientas adicionales para Windows
+          pip install pyinstaller
+        fi
+    
+    - name: Build con Nuitka
+      run: |
+        echo "🏗️ Building for ${{ matrix.platform }}..."
+        
+        if [ "${{ matrix.platform }}" = "linux" ]; then
+          # Linux - Nuitka onefile
+          python -m nuitka --standalone --onefile \
+            --enable-plugin=tk-inter \
+            --include-data-dir=fonts=fonts \
+            --include-data-dir=logos=logos \
+            --include-data-dir=core=core \
+            --include-data-dir=gui=gui \
+            --include-data-dir=modules=modules \
+            --include-data-dir=utils=utils \
+            --include-data-file=config.json=config.json \
+            --output-filename=soundvi \
+            main.py
+          
+          mv soundvi.bin dist/soundvi-linux
+          chmod +x dist/soundvi-linux
+          
+        elif [ "${{ matrix.platform }}" = "windows" ]; then
+          # Windows - Nuitka onefile
+          python -m nuitka --standalone --onefile \
+            --windows-console-mode=disable \
+            --enable-plugin=tk-inter \
+            --include-data-dir=fonts=fonts \
+            --include-data-dir=logos=logos \
+            --include-data-dir=core=core \
+            --include-data-dir=gui=gui \
+            --include-data-dir=modules=modules \
+            --include-data-dir=utils=utils \
+            --include-data-file=config.json=config.json \
+            --output-filename=soundvi.exe \
+            main.py
+          
+          mv soundvi.exe dist/soundvi-windows.exe
+          
+        elif [ "${{ matrix.platform }}" = "macos" ]; then
+          # macOS - PyInstaller (Nuitka tiene issues en macOS)
+          pip install pyinstaller
+          python -m PyInstaller --clean --noconfirm --onefile \
+            --name soundvi \
+            --add-data "fonts:fonts" \
+            --add-data "logos:logos" \
+            --add-data "core:core" \
+            --add-data "gui:gui" \
+            --add-data "modules:modules" \
+            --add-data "utils:utils" \
+            --add-data "config.json:." \
+            --hidden-import="PIL._imagingtk" \
+            --hidden-import="PIL._imaging" \
+            --hidden-import="PIL._tkinter_finder" \
+            --hidden-import="tkinter" \
+            main.py
+          
+          mv dist/soundvi dist/soundvi-macos
+          chmod +x dist/soundvi-macos
+        fi
+    
+    - name: Crear paquete portable
+      run: |
+        mkdir -p portable
+        cd dist
+        
+        if [ "${{ matrix.platform }}" = "linux" ]; then
+          # Linux portable
+          mkdir -p Soundvi-Linux
+          cp soundvi-linux Soundvi-Linux/
+          cp -r ../fonts ../logos ../core ../gui ../modules ../utils ../config.json Soundvi-Linux/
+          
+          cat > Soundvi-Linux/run.sh << 'EOF'
+          #!/bin/bash
+          echo "Soundvi - Linux Portable"
+          echo ""
+          ./soundvi-linux
+          EOF
+          chmod +x Soundvi-Linux/run.sh
+          
+          tar -czf ../portable/soundvi-portable-linux.tar.gz Soundvi-Linux/
+          
+        elif [ "${{ matrix.platform }}" = "windows" ]; then
+          # Windows portable
+          mkdir -p Soundvi-Windows
+          cp soundvi-windows.exe Soundvi-Windows/
+          cp -r ../fonts ../logos ../core ../gui ../modules ../utils ../config.json Soundvi-Windows/
+          
+          cat > Soundvi-Windows/Run-Soundvi.bat << 'EOF'
+          @echo off
+          echo Soundvi - Windows Portable
+          echo.
+          soundvi-windows.exe
+          pause
+          EOF
+          
+          cd Soundvi-Windows
+          7z a ../../portable/soundvi-portable-windows.zip *
+          
+        elif [ "${{ matrix.platform }}" = "macos" ]; then
+          # macOS portable
+          mkdir -p Soundvi-macOS
+          cp soundvi-macos Soundvi-macOS/
+          cp -r ../fonts ../logos ../core ../gui ../modules ../utils ../config.json Soundvi-macOS/
+          
+          cat > Soundvi-macOS/run.command << 'EOF'
+          #!/bin/bash
+          echo "Soundvi - macOS Portable"
+          echo ""
+          ./soundvi-macos
+          EOF
+          chmod +x Soundvi-macOS/run.command
+          
+          tar -czf ../portable/soundvi-portable-macos.tar.gz Soundvi-macOS/
+        fi
+    
+    - name: Subir artefactos
+      uses: actions/upload-artifact@v4
+      with:
+        name: ${{ matrix.artifact_name }}
+        path: |
+          dist/
+          portable/
+        retention-days: 7
+    
+    - name: Crear Release (solo en tags)
+      if: startsWith(github.ref, 'refs/tags/v')
+      uses: softprops/action-gh-release@v1
+      with:
+        files: |
+          dist/soundvi-*
+          portable/soundvi-portable-*
+        generate_release_notes: true
+        prerelease: false

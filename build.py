@@ -50,7 +50,7 @@ class SoundviBuilder:
             # Mapeo de nombres de paquete a nombre de importación
             import_name = req.replace("-", "_")
             if req == "pyinstaller":
-                import_name = "PyInstaller"   # El módulo se importa con mayúscula
+                import_name = "PyInstaller"
             
             try:
                 __import__(import_name)
@@ -89,6 +89,7 @@ class SoundviBuilder:
             sys.executable, "-m", "PyInstaller",
             "--clean",
             "--noconfirm",
+            "--debug=all",                     # Para obtener más información en caso de error
             str(spec_path)
         ]
         
@@ -106,9 +107,14 @@ class SoundviBuilder:
                     print(f"[OK] Build exitoso: {output_path}")
                     print(f"[Size] {size_mb:.2f} MB")
                     return True
+                else:
+                    print(f"[ERROR] No se encontró el ejecutable en {output_path}")
             else:
-                print(f"[ERROR] PyInstaller falló:")
-                print(result.stderr[:500])
+                print(f"[ERROR] PyInstaller falló (código {result.returncode}):")
+                print("--- STDOUT ---")
+                print(result.stdout)
+                print("--- STDERR ---")
+                print(result.stderr)
         except Exception as e:
             print(f"[ERROR] Error ejecutando PyInstaller: {e}")
         
@@ -116,6 +122,9 @@ class SoundviBuilder:
     
     def _create_pyinstaller_spec(self, target_platform):
         """Crear archivo .spec para PyInstaller."""
+        # Deshabilitar UPX en Linux porque puede causar problemas
+        use_upx = target_platform == "windows"
+        
         return f'''# -*- mode: python ; coding: utf-8 -*-
 import sys
 import os
@@ -144,6 +153,11 @@ a = Analysis(
         'scipy.interpolate', 'scipy.signal', 'scipy.fft',
         'librosa.core.fft', 'librosa.core.audio', 'librosa.util',
         'librosa._cache', 'librosa._version',
+        'librosa.core.spectrum', 'librosa.core.constantq',
+        'librosa.feature', 'librosa.effects',
+        'scipy.signal.spectral', 'scipy.signal.windows',
+        'sklearn', 'sklearn.cluster', 'sklearn.metrics',
+        'numba', 'numba.core', 'numba.types',
     ],
     hookspath=[],
     hooksconfig={{}},
@@ -168,7 +182,7 @@ exe = EXE(
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
-    upx=True,
+    upx={str(use_upx).lower()},
     upx_exclude=[],
     runtime_tmpdir=None,
     console=False,
@@ -186,7 +200,7 @@ coll = COLLECT(
     a.zipfiles,
     a.datas,
     strip=False,
-    upx=True,
+    upx={str(use_upx).lower()},
     upx_exclude=[],
     name='soundvi',
 )

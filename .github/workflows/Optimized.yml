@@ -1,12 +1,7 @@
 name: Optimized Build (PyOxidizer)
 
 on:
-  workflow_dispatch:        # Solo ejecución manual desde la UI
-  # Opcional: también puede activarse en push a ramas de desarrollo (comentar si no se desea)
-  # push:
-  #   branches:
-  #     - main
-  #     - develop
+  workflow_dispatch:        # Solo ejecución manual
 
 jobs:
   build:
@@ -31,11 +26,23 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
 
+      # Instalar Rust (necesario para PyOxidizer)
+      - name: Instalar Rust
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+          override: true
+
+      # Instalar PyOxidizer con cargo
+      - name: Instalar PyOxidizer
+        run: cargo install pyoxidizer
+
       - name: Instalar dependencias Python
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
-          pip install -r requirements-build.txt
+          # Nota: no necesitamos requirements-build.txt para PyOxidizer
+          # pero si aún quieres PyInstaller como alternativa, mantenlo
 
       - name: Instalar FFmpeg (Linux)
         if: matrix.platform == 'linux'
@@ -47,33 +54,22 @@ jobs:
           choco install ffmpeg --no-progress
           echo "C:\ProgramData\chocolatey\bin" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
 
-      # Instalar UPX (opcional, ayuda a comprimir el ejecutable final)
-      - name: Instalar UPX (Linux)
-        if: matrix.platform == 'linux'
-        run: sudo apt-get install -y upx
-
-      - name: Instalar UPX (Windows)
-        if: matrix.platform == 'windows'
-        run: choco install upx --no-progress
-
       - name: Configurar MSVC (Windows)
         if: matrix.platform == 'windows'
         uses: ilammy/msvc-dev-cmd@v1
 
-      # Configurar UTF-8 para evitar errores de emojis en Windows
+      # Evitar error de emojis en Windows
       - name: Configurar UTF-8 (Windows)
         if: matrix.platform == 'windows'
         run: echo "PYTHONIOENCODING=utf-8" >> $env:GITHUB_ENV
 
-      # Ejecutar build.py con PyOxidizer (builder optimizado)
+      # Ejecutar build con PyOxidizer
       - name: Ejecutar build optimizado (PyOxidizer)
         run: python build.py --platform ${{ matrix.platform }} --builder pyoxidizer --portable
 
-      # Subir artefactos (para depuración)
+      # Subir artefactos
       - name: Subir artefactos
         uses: actions/upload-artifact@v4
         with:
           name: soundvi-${{ matrix.platform }}-optimized
           path: dist/*
-
-      # Nota: no se crea release automáticamente porque este workflow es solo para pruebas

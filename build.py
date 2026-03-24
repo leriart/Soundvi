@@ -24,19 +24,19 @@ class SoundviBuilder:
             "windows": {
                 "ext": ".exe",
                 "builder": "nuitka",
-                "icon": self.project_dir / "logos" / "Cagando.ico",
+                "icon": self.project_dir / "logos" / "logo.ico",
                 "requirements": ["nuitka", "ordered-set", "zstandard"],
             },
             "linux": {
                 "ext": "",
                 "builder": "nuitka",
-                "icon": self.project_dir / "logos" / "Cagando.png",
+                "icon": self.project_dir / "logos" / "logo.png",
                 "requirements": ["nuitka", "ordered-set"],
             },
             "macos": {
                 "ext": ".app",
                 "builder": "pyinstaller",
-                "icon": self.project_dir / "logos" / "Cagando.icns",
+                "icon": self.project_dir / "logos" / "logo.icns",
                 "requirements": ["pyinstaller"],
             }
         }

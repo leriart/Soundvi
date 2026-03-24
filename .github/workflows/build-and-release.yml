@@ -44,10 +44,8 @@ jobs:
     - name: Install Python packages
       run: |
         python -m pip install --upgrade pip
-        # Reemplazar opencv-python por headless si existe en requirements
-        if [ -f "requirements.txt" ]; then
-          sed -i 's/opencv-python/opencv-python-headless/g' requirements.txt
-        fi
+        # Reemplazar opencv-python por opencv-python-headless en requirements.txt (multiplataforma)
+        python -c "import os; f='requirements.txt'; open(f, 'r+').write(open(f).read().replace('opencv-python', 'opencv-python-headless'))" 2>/dev/null || true
         pip install -r requirements.txt
         pip install pyinstaller==6.9.0
 
@@ -103,17 +101,17 @@ jobs:
         elif [[ "${{ runner.os }}" == "Windows" ]]; then
           echo "PYINSTALLER_NAME=soundvi-windows.exe" >> $GITHUB_OUTPUT
           echo "PYINSTALLER_ARGS=--windowed" >> $GITHUB_OUTPUT
-          # UPX en Windows se instala en chocolatey/bin, que ya está en PATH
           echo "UPX_DIR=" >> $GITHUB_OUTPUT
         fi
 
     - name: Build with PyInstaller
+      shell: bash   # Asegura que el condicional bash funcione también en Windows
       run: |
-        # Construir el comando de manera segura
         UPX_OPT=""
         if [[ -n "${{ steps.set_vars.outputs.UPX_DIR }}" ]]; then
           UPX_OPT="--upx-dir ${{ steps.set_vars.outputs.UPX_DIR }}"
         fi
+        # Construir comando con PyInstaller
         pyinstaller main.py \
           --onefile \
           --name ${{ steps.set_vars.outputs.PYINSTALLER_NAME }} \
@@ -131,8 +129,7 @@ jobs:
           --hidden-import="PIL._imagingtk" \
           --hidden-import="PIL._imaging" \
           --hidden-import="PIL._tkinter_finder" \
-          --hidden-import="tkinter" \
-          main.py
+          --hidden-import="tkinter"
 
     - name: Upload artifact
       uses: actions/upload-artifact@v4

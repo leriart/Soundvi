@@ -23,19 +23,19 @@ class SoundviBuilder:
         self.configs = {
             "windows": {
                 "ext": ".exe",
-                "builder": "nuitka",  # o "pyinstaller"
+                "builder": "nuitka",
                 "icon": self.project_dir / "logos" / "Cagando.ico",
                 "requirements": ["nuitka", "ordered-set", "zstandard"],
             },
             "linux": {
-                "ext": "",           # Sin extensión (ejecutable normal)
+                "ext": "",
                 "builder": "nuitka",
                 "icon": self.project_dir / "logos" / "Cagando.png",
                 "requirements": ["nuitka", "ordered-set"],
             },
             "macos": {
                 "ext": ".app",
-                "builder": "pyinstaller",  # Nuitka tiene issues en macOS
+                "builder": "pyinstaller",
                 "icon": self.project_dir / "logos" / "Cagando.icns",
                 "requirements": ["pyinstaller"],
             }
@@ -47,18 +47,11 @@ class SoundviBuilder:
         missing = []
         
         for req in config["requirements"]:
-            if req == "appimagetool":
-                # Verificar si appimagetool está disponible
-                result = subprocess.run(["which", "appimagetool"], 
-                                      capture_output=True, text=True)
-                if result.returncode != 0:
-                    missing.append("appimagetool (descargar de GitHub)")
-            else:
-                # Verificar paquete Python
-                try:
-                    __import__(req.replace("-", "_"))
-                except ImportError:
-                    missing.append(req)
+            # Verificar paquete Python
+            try:
+                __import__(req.replace("-", "_"))
+            except ImportError:
+                missing.append(req)
         
         if missing:
             print(f"❌ Dependencias faltantes para {target_platform}:")
@@ -92,39 +85,34 @@ class SoundviBuilder:
             sys.executable, "-m", "nuitka",
             "--standalone",
             "--onefile",
-            "--enable-plugin=upx",          # Compresión UPX (reduce tamaño)
-            "--lto=yes",                    # Link Time Optimization
+            "--enable-plugin=upx",
+            "--lto=yes",
             "--remove-output",
             "--enable-plugin=tk-inter",
-            "--output-dir", str(self.build_dir),
-            "--output-filename", output_name,
+            f"--output-dir={self.build_dir}",
+            f"--output-filename={output_name}",
         ]
-        
-        # Opcional: excluir módulos pesados que no se usan (comentar si se necesitan)
-        # cmd.extend(["--exclude-module", "matplotlib"])   # si no se usa gráficos
-        # cmd.extend(["--exclude-module", "scipy"])        # si no se necesita SciPy
-        # cmd.extend(["--exclude-module", "numba"])        # si no se usa numba
-        # cmd.extend(["--exclude-module", "sklearn"])      # si no se usa scikit-learn
         
         # Plataforma específica
         if target_platform == "windows":
-            cmd.extend(["--windows-console-mode=disable"])
+            cmd.append("--windows-console-mode=disable")
             if self.configs["windows"]["icon"].exists():
-                cmd.extend(["--windows-icon-from-ico", str(self.configs["windows"]["icon"])])
+                cmd.append(f"--windows-icon-from-ico={self.configs['windows']['icon']}")
         elif target_platform == "linux":
-            cmd.extend(["--linux-icon", str(self.configs["linux"]["icon"])])
+            if self.configs["linux"]["icon"].exists():
+                cmd.append(f"--linux-icon={self.configs['linux']['icon']}")
         
         # Incluir datos
         data_dirs = ["fonts", "logos", "core", "gui", "modules", "utils"]
         for data_dir in data_dirs:
             src = self.project_dir / data_dir
             if src.exists():
-                cmd.extend(["--include-data-dir", f"{src}={data_dir}"])
+                cmd.append(f"--include-data-dir={src}={data_dir}")
         
         # Archivos individuales
         config_file = self.project_dir / "config.json"
         if config_file.exists():
-            cmd.extend(["--include-data-file", f"{config_file}=config.json"])
+            cmd.append(f"--include-data-file={config_file}=config.json")
         
         # Script principal
         cmd.append(str(main_script))

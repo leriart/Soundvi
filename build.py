@@ -54,7 +54,7 @@ class SoundviBuilder:
                 missing.append(req)
         
         if missing:
-            print(f"❌ Dependencias faltantes para {target_platform}:")
+            print(f"[ERROR] Dependencias faltantes para {target_platform}:")
             for dep in missing:
                 print(f"   - {dep}")
             print(f"\nInstalar con: pip install {' '.join(missing)}")
@@ -67,14 +67,14 @@ class SoundviBuilder:
         for dir_path in [self.build_dir, self.dist_dir]:
             if dir_path.exists():
                 shutil.rmtree(dir_path)
-                print(f"🧹 Limpiado: {dir_path}")
+                print(f"[Clean] Limpiado: {dir_path}")
         
         self.build_dir.mkdir(exist_ok=True)
         self.dist_dir.mkdir(exist_ok=True)
     
     def build_with_nuitka(self, target_platform):
         """Build usando Nuitka (recomendado)."""
-        print(f"🚀 Compilando con Nuitka para {target_platform}...")
+        print(f"[Nuitka] Compilando para {target_platform}...")
         
         main_script = self.project_dir / "main.py"
         output_name = f"soundvi{self.configs[target_platform]['ext']}"
@@ -117,7 +117,7 @@ class SoundviBuilder:
         # Script principal
         cmd.append(str(main_script))
         
-        print(f"📦 Comando: {' '.join(cmd[:10])}...")
+        print(f"[Nuitka] Comando: {' '.join(cmd[:10])}...")
         
         # Ejecutar
         try:
@@ -128,22 +128,22 @@ class SoundviBuilder:
                 if built_file.exists():
                     shutil.move(built_file, output_path)
                     size_mb = output_path.stat().st_size / (1024 * 1024)
-                    print(f"✅ Build exitoso: {output_path}")
-                    print(f"📊 Tamaño: {size_mb:.2f} MB")
+                    print(f"[OK] Build exitoso: {output_path}")
+                    print(f"[Size] {size_mb:.2f} MB")
                     return True
                 else:
-                    print(f"❌ Archivo no creado: {built_file}")
+                    print(f"[ERROR] Archivo no creado: {built_file}")
             else:
-                print(f"❌ Error en Nuitka:")
+                print(f"[ERROR] Nuitka falló:")
                 print(result.stderr[:500])
         except Exception as e:
-            print(f"❌ Error ejecutando Nuitka: {e}")
+            print(f"[ERROR] Error ejecutando Nuitka: {e}")
         
         return False
     
     def build_with_pyinstaller(self, target_platform):
         """Build usando PyInstaller (alternativa)."""
-        print(f"🚀 Compilando con PyInstaller para {target_platform}...")
+        print(f"[PyInstaller] Compilando para {target_platform}...")
         
         # Crear spec file dinámico
         spec_content = self._create_pyinstaller_spec(target_platform)
@@ -168,14 +168,14 @@ class SoundviBuilder:
                 
                 if output_path.exists():
                     size_mb = output_path.stat().st_size / (1024 * 1024)
-                    print(f"✅ Build exitoso: {output_path}")
-                    print(f"📊 Tamaño: {size_mb:.2f} MB")
+                    print(f"[OK] Build exitoso: {output_path}")
+                    print(f"[Size] {size_mb:.2f} MB")
                     return True
             else:
-                print(f"❌ Error en PyInstaller:")
+                print(f"[ERROR] PyInstaller falló:")
                 print(result.stderr[:500])
         except Exception as e:
-            print(f"❌ Error ejecutando PyInstaller: {e}")
+            print(f"[ERROR] Error ejecutando PyInstaller: {e}")
         
         return False
     
@@ -257,11 +257,11 @@ coll = COLLECT(
     
     def package_portable(self, target_platform):
         """Crear paquete portable."""
-        print(f"📦 Creando paquete portable para {target_platform}...")
+        print(f"[Portable] Creando paquete portable para {target_platform}...")
         
         executable = self.dist_dir / f"soundvi{self.configs[target_platform]['ext']}"
         if not executable.exists():
-            print(f"❌ Ejecutable no encontrado: {executable}")
+            print(f"[ERROR] Ejecutable no encontrado: {executable}")
             return False
         
         # Crear directorio portable
@@ -319,14 +319,14 @@ echo ""
                 tar.add(portable_dir, arcname=f"Soundvi-Portable-{target_platform}")
         
         size_mb = Path(zip_path if target_platform == "windows" else tar_path).stat().st_size / (1024 * 1024)
-        print(f"✅ Paquete portable creado: {size_mb:.2f} MB")
+        print(f"[OK] Paquete portable creado: {size_mb:.2f} MB")
         
         return True
     
     def build(self, target_platform, create_portable=False):
         """Ejecutar build completo."""
         print(f"\n{'='*60}")
-        print(f"🏗️  BUILD SOUNDVI - {target_platform.upper()}")
+        print(f"BUILD SOUNDVI - {target_platform.upper()}")
         print(f"{'='*60}")
         
         # 1. Verificar dependencias
@@ -380,18 +380,18 @@ def main():
         success = builder.build(platform_name, args.portable)
         if not success:
             all_success = False
-            print(f"❌ Build falló para {platform_name}")
+            print(f"[ERROR] Build falló para {platform_name}")
     
     if all_success:
-        print(f"\n{'🎉'*20}")
-        print("¡BUILDS COMPLETADOS EXITOSAMENTE!")
-        print(f"{'🎉'*20}")
-        print(f"\n📁 Output en: {builder.dist_dir}")
-        print("📦 Archivos creados:")
+        print(f"\n{'*'*20}")
+        print("BUILDS COMPLETADOS EXITOSAMENTE")
+        print(f"{'*'*20}")
+        print(f"\nOutput en: {builder.dist_dir}")
+        print("Archivos creados:")
         for item in builder.dist_dir.iterdir():
             if item.is_file():
                 size_mb = item.stat().st_size / (1024 * 1024)
-                print(f"   • {item.name} ({size_mb:.1f} MB)")
+                print(f"   - {item.name} ({size_mb:.1f} MB)")
     
     return 0 if all_success else 1
 

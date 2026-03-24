@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Build Script para Soundvi - Crea ejecutables para Windows/Linux/macOS usando PyInstaller
+Build Script para Soundvi - Crea ejecutables para Windows/Linux usando PyInstaller
 """
 
 import os
@@ -89,7 +89,6 @@ class SoundviBuilder:
             sys.executable, "-m", "PyInstaller",
             "--clean",
             "--noconfirm",
-            "--debug=all",                     # Para obtener más información en caso de error
             str(spec_path)
         ]
         

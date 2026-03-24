@@ -15,5 +15,5 @@ appdirs>=1.4
 packaging>=20.0
 
 # Para builds Windows desde Linux (opcional)
-wine   # Instalar via sistema, no pip
-mingw-w64  # Instalar via sistema
+# wine   # Instalar via sistema, no pip
+# mingw-w64  # Instalar via sistema

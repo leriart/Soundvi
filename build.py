@@ -241,15 +241,15 @@ exe = EXE(
 def make_exe():
     dist = default_python_distribution()
     policy = dist.make_python_packaging_policy()
-    policy.include_distribution_resources = False
-    policy.set_resource_handling_mode("filesystem-relative:standard")
+    
+    # Usar modo "classify" (recomendado)
+    policy.set_resource_handling_mode("classify")
     
     # Excluir módulos pesados
     for mod in {excludes}:
         policy.excluded_module_names.add(mod)
     
     python_config = dist.make_python_interpreter_config()
-    python_config.config["pythonpath"] = []
     python_config.run_module = "main"
     
     exe = dist.to_python_executable(
@@ -258,7 +258,7 @@ def make_exe():
         config=python_config,
     )
     
-    # Incluir main.py (necesario porque run_module apunta a él)
+    # Incluir main.py
     exe.add_python_resources(exe.read_file("main.py", dest="main.py"))
     
     # Instalar dependencias desde requirements.txt

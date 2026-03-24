@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Build Script para Soundvi - Crea ejecutables para Windows/Linux usando PyInstaller
+Build Script para Soundvi - Crea ejecutables para Windows/Linux/macOS usando PyInstaller
 """
 
 import os
@@ -47,11 +47,9 @@ class SoundviBuilder:
         missing = []
         
         for req in config["requirements"]:
-            # Mapeo de nombres de paquete a nombre de importación
             import_name = req.replace("-", "_")
             if req == "pyinstaller":
                 import_name = "PyInstaller"
-            
             try:
                 __import__(import_name)
             except ImportError:
@@ -146,12 +144,11 @@ a = Analysis(
     hiddenimports=[
         'numpy', 'cv2', 'librosa', 'moviepy', 'ttkbootstrap',
         'PIL', 'scipy', 'pygame', 'pydub', 'soundfile',
-        'tkinter', 'ttk', '_tkinter',
-        'PIL._imaging', 'PIL._imagingtk', 'PIL._tkinter_finder',
+        'tkinter', '_tkinter',
+        'PIL._imaging', 'PIL._imagingtk',
         'numpy.core._dtype_ctypes', 'numpy.lib.format',
         'scipy.interpolate', 'scipy.signal', 'scipy.fft',
         'librosa.core.fft', 'librosa.core.audio', 'librosa.util',
-        'librosa._cache', 'librosa._version',
         'librosa.core.spectrum', 'librosa.core.constantq',
         'librosa.feature', 'librosa.effects',
         'scipy.signal.spectral', 'scipy.signal.windows',
@@ -181,7 +178,7 @@ exe = EXE(
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
-    upx={str(use_upx).lower()},
+    upx={use_upx},
     upx_exclude=[],
     runtime_tmpdir=None,
     console=False,
@@ -199,7 +196,7 @@ coll = COLLECT(
     a.zipfiles,
     a.datas,
     strip=False,
-    upx={str(use_upx).lower()},
+    upx={use_upx},
     upx_exclude=[],
     name='soundvi',
 )

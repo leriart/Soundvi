@@ -47,8 +47,13 @@ class SoundviBuilder:
         missing = []
         
         for req in config["requirements"]:
+            # Mapeo de nombres de paquete a nombre de importación
+            import_name = req.replace("-", "_")
+            if req == "pyinstaller":
+                import_name = "PyInstaller"   # El módulo se importa con mayúscula
+            
             try:
-                __import__(req.replace("-", "_"))
+                __import__(import_name)
             except ImportError:
                 missing.append(req)
         

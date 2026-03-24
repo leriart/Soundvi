@@ -28,21 +28,20 @@ jobs:
       if: runner.os == 'Linux'
       run: |
         sudo apt-get update
-        sudo apt-get install -y ffmpeg python3-tk upx-ucl
+        sudo apt-get install -y ffmpeg python3-tk
         
     # --- Windows Specific Setup ---
     - name: Install Windows dependencies
       if: runner.os == 'Windows'
       run: |
         choco install ffmpeg -y --no-progress
-        choco install upx -y --no-progress
         echo "C:\ProgramData\chocolatey\bin" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
         
     - name: Install Python packages
       run: |
         python -m pip install --upgrade pip
         pip install -r requirements.txt
-        pip install pyinstaller==6.9.0
+        pip install pyinstaller==6.9.0  # Versión estable
 
     - name: Set platform-specific variables
       id: set_vars
@@ -63,7 +62,6 @@ jobs:
           --name ${{ steps.set_vars.outputs.PYINSTALLER_NAME }} \
           ${{ steps.set_vars.outputs.PYINSTALLER_ARGS }} \
           --strip \
-          --upx \
           --add-data "fonts:fonts" \
           --add-data "logos:logos" \
           --add-data "core:core" \

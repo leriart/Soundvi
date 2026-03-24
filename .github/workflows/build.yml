@@ -39,18 +39,18 @@ jobs:
       run: |
         echo "🧪 Probando importaciones clave..."
         xvfb-run python -c "
-import sys
-import numpy as np
-import cv2
-from PIL import Image
-import librosa
-import pydub
-import scipy
-import ttkbootstrap
-from core.video_generator import VideoGenerator
-from modules.manager import ModuleManager
-print('✅ Todas las dependencias esenciales OK')
-"
+        import sys
+        import numpy as np
+        import cv2
+        from PIL import Image
+        import librosa
+        import pydub
+        import scipy
+        import ttkbootstrap
+        from core.video_generator import VideoGenerator
+        from modules.manager import ModuleManager
+        print('✅ Todas las dependencias esenciales OK')
+        "
 
     - name: Build con PyInstaller (Linux)
       run: |

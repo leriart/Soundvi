@@ -6,6 +6,10 @@ on:
       - 'v*'  # Ejecutar en tags como v1.0.0, v1.2.3, etc.
   workflow_dispatch:  # Permitir ejecución manual
 
+# Forzar Node.js 24 para evitar warnings
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
 jobs:
   build-linux:
     runs-on: ubuntu-latest
@@ -18,45 +22,89 @@ jobs:
       with:
         python-version: '3.10'
     
-    - name: Instalar dependencias
+    - name: Debug - Mostrar estructura
+      run: |
+        echo "📁 Estructura del proyecto:"
+        find . -type f -name "*.py" | head -20
+        echo ""
+        echo "📦 Archivos en raíz:"
+        ls -la
+    
+    - name: Instalar dependencias básicas
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y ffmpeg python3-tk
+    
+    - name: Instalar dependencias Python
       run: |
         python -m pip install --upgrade pip
-        pip install -r requirements.txt
-        pip install nuitka ordered-set zstandard
+        if [ -f "requirements.txt" ]; then
+          pip install -r requirements.txt
+        else
+          echo "⚠️ requirements.txt no encontrado, instalando manualmente"
+          pip install ttkbootstrap numpy opencv-python pillow librosa moviepy pygame pydub soundfile scipy vosk matplotlib
+        fi
+        pip install pyinstaller
     
-    - name: Build para Linux con Nuitka
+    - name: Build para Linux con PyInstaller
       run: |
         echo "🏗️ Building for Linux..."
-        python -m nuitka --standalone --onefile \
-          --enable-plugin=tk-inter \
-          --include-data-dir=fonts=fonts \
-          --include-data-dir=logos=logos \
-          --include-data-dir=core=core \
-          --include-data-dir=gui=gui \
-          --include-data-dir=modules=modules \
-          --include-data-dir=utils=utils \
-          --include-data-file=config.json=config.json \
-          --output-filename=soundvi \
+        
+        # Primero probar si el proyecto funciona
+        echo "🧪 Probando importación..."
+        python -c "import sys; print('Python:', sys.version)"
+        python -c "from gui.app import SoundviApp; print('✅ GUI importada correctamente')" || echo "⚠️ Error importando GUI"
+        
+        # Build con PyInstaller
+        pyinstaller --onefile --name soundvi-linux \
+          --add-data "fonts:fonts" \
+          --add-data "logos:logos" \
+          --add-data "core:core" \
+          --add-data "gui:gui" \
+          --add-data "modules:modules" \
+          --add-data "utils:utils" \
+          --add-data "config.json:." \
+          --hidden-import="PIL._imagingtk" \
+          --hidden-import="PIL._imaging" \
+          --hidden-import="PIL._tkinter_finder" \
+          --hidden-import="tkinter" \
           main.py
         
-        mv soundvi.bin soundvi-linux
+        # Mover a ubicación esperada
+        mv dist/soundvi-linux .
         chmod +x soundvi-linux
+        
+        echo "✅ Build completado"
+        ls -lh soundvi-linux
     
     - name: Crear paquete portable Linux
       run: |
         mkdir -p Soundvi-Linux
         cp soundvi-linux Soundvi-Linux/
-        cp -r fonts logos core gui modules utils config.json Soundvi-Linux/
+        
+        # Copiar solo si existen
+        [ -d "fonts" ] && cp -r fonts Soundvi-Linux/
+        [ -d "logos" ] && cp -r logos Soundvi-Linux/
+        [ -d "core" ] && cp -r core Soundvi-Linux/
+        [ -d "gui" ] && cp -r gui Soundvi-Linux/
+        [ -d "modules" ] && cp -r modules Soundvi-Linux/
+        [ -d "utils" ] && cp -r utils Soundvi-Linux/
+        [ -f "config.json" ] && cp config.json Soundvi-Linux/
         
         cat > Soundvi-Linux/run.sh << 'EOF'
         #!/bin/bash
         echo "Soundvi - Linux Portable"
+        echo "Para usar: ./soundvi-linux"
+        echo ""
+        echo "Requisito: FFmpeg instalado"
+        echo "  sudo apt install ffmpeg"
         echo ""
         ./soundvi-linux
         EOF
         chmod +x Soundvi-Linux/run.sh
         
         tar -czf soundvi-portable-linux.tar.gz Soundvi-Linux/
+        echo "📦 Portable creado: $(du -h soundvi-portable-linux.tar.gz | cut -f1)"
     
     - name: Subir artefactos Linux
       uses: actions/upload-artifact@v4
@@ -65,6 +113,7 @@ jobs:
         path: |
           soundvi-linux
           soundvi-portable-linux.tar.gz
+        retention-days: 7
 
   build-windows:
     runs-on: windows-latest
@@ -77,50 +126,83 @@ jobs:
       with:
         python-version: '3.10'
     
-    - name: Instalar dependencias
+    - name: Debug - Mostrar estructura Windows
+      run: |
+        Write-Host "📁 Estructura del proyecto:"
+        Get-ChildItem -Recurse -Filter *.py | Select-Object -First 20 Name
+        Write-Host ""
+        Write-Host "📦 Archivos en raíz:"
+        Get-ChildItem
+    
+    - name: Instalar dependencias Python
       run: |
         python -m pip install --upgrade pip
-        pip install -r requirements.txt
-        pip install nuitka ordered-set zstandard
+        if (Test-Path "requirements.txt") {
+          pip install -r requirements.txt
+        } else {
+          Write-Host "⚠️ requirements.txt no encontrado, instalando manualmente"
+          pip install ttkbootstrap numpy opencv-python pillow librosa moviepy pygame pydub soundfile scipy vosk matplotlib
+        }
+        pip install pyinstaller
     
-    - name: Build para Windows con Nuitka
+    - name: Build para Windows con PyInstaller
       run: |
-        echo "🏗️ Building for Windows..."
-        python -m nuitka --standalone --onefile `
-          --windows-console-mode=disable `
-          --enable-plugin=tk-inter `
-          --include-data-dir=fonts=fonts `
-          --include-data-dir=logos=logos `
-          --include-data-dir=core=core `
-          --include-data-dir=gui=gui `
-          --include-data-dir=modules=modules `
-          --include-data-dir=utils=utils `
-          --include-data-file=config.json=config.json `
-          --output-filename=soundvi.exe `
+        Write-Host "🏗️ Building for Windows..."
+        
+        # Build con PyInstaller
+        pyinstaller --onefile --name soundvi-windows `
+          --add-data "fonts;fonts" `
+          --add-data "logos;logos" `
+          --add-data "core;core" `
+          --add-data "gui;gui" `
+          --add-data "modules;modules" `
+          --add-data "utils;utils" `
+          --add-data "config.json;." `
+          --hidden-import="PIL._imagingtk" `
+          --hidden-import="PIL._imaging" `
+          --hidden-import="PIL._tkinter_finder" `
+          --hidden-import="tkinter" `
+          --console `
           main.py
         
-        mv soundvi.exe soundvi-windows.exe
+        # Renombrar
+        Move-Item dist/soundvi-windows.exe soundvi-windows.exe
+        
+        Write-Host "✅ Build completado"
+        Get-ChildItem soundvi-windows.exe
     
     - name: Crear paquete portable Windows
       run: |
-        mkdir Soundvi-Windows
-        copy soundvi-windows.exe Soundvi-Windows\
-        xcopy fonts Soundvi-Windows\fonts /E /I
-        xcopy logos Soundvi-Windows\logos /E /I
-        xcopy core Soundvi-Windows\core /E /I
-        xcopy gui Soundvi-Windows\gui /E /I
-        xcopy modules Soundvi-Windows\modules /E /I
-        xcopy utils Soundvi-Windows\utils /E /I
-        copy config.json Soundvi-Windows\
+        New-Item -ItemType Directory -Force -Path Soundvi-Windows
         
-        echo @echo off > Soundvi-Windows\Run-Soundvi.bat
-        echo echo Soundvi - Windows Portable >> Soundvi-Windows\Run-Soundvi.bat
-        echo echo. >> Soundvi-Windows\Run-Soundvi.bat
-        echo soundvi-windows.exe >> Soundvi-Windows\Run-Soundvi.bat
-        echo pause >> Soundvi-Windows\Run-Soundvi.bat
+        Copy-Item soundvi-windows.exe Soundvi-Windows\
         
-        cd Soundvi-Windows
-        7z a ..\soundvi-portable-windows.zip *
+        # Copiar carpetas si existen
+        if (Test-Path "fonts") { Copy-Item -Recurse fonts Soundvi-Windows\ }
+        if (Test-Path "logos") { Copy-Item -Recurse logos Soundvi-Windows\ }
+        if (Test-Path "core") { Copy-Item -Recurse core Soundvi-Windows\ }
+        if (Test-Path "gui") { Copy-Item -Recurse gui Soundvi-Windows\ }
+        if (Test-Path "modules") { Copy-Item -Recurse modules Soundvi-Windows\ }
+        if (Test-Path "utils") { Copy-Item -Recurse utils Soundvi-Windows\ }
+        if (Test-Path "config.json") { Copy-Item config.json Soundvi-Windows\ }
+        
+        # Crear batch file
+        @"
+@echo off
+echo Soundvi - Windows Portable
+echo.
+echo Para usar: soundvi-windows.exe
+echo.
+echo Requisito: FFmpeg instalado y en PATH
+echo Descarga: https://ffmpeg.org/download.html
+echo.
+pause
+"@ | Out-File -FilePath Soundvi-Windows\Run-Soundvi.bat -Encoding ASCII
+        
+        # Comprimir
+        Compress-Archive -Path Soundvi-Windows\* -DestinationPath soundvi-portable-windows.zip -Force
+        
+        Write-Host "📦 Portable creado: $((Get-Item soundvi-portable-windows.zip).Length / 1MB) MB"
     
     - name: Subir artefactos Windows
       uses: actions/upload-artifact@v4
@@ -129,6 +211,7 @@ jobs:
         path: |
           soundvi-windows.exe
           soundvi-portable-windows.zip
+        retention-days: 7
 
   create-release:
     needs: [build-linux, build-windows]
@@ -147,6 +230,14 @@ jobs:
       with:
         name: soundvi-windows
         path: artifacts/windows
+    
+    - name: Listar archivos para release
+      run: |
+        echo "📦 Archivos listos para release:"
+        find artifacts/ -type f -name "*" | while read f; do
+          size=$(du -h "$f" | cut -f1)
+          echo "  • $(basename "$f") ($size)"
+        done
     
     - name: Crear Release
       uses: softprops/action-gh-release@v1

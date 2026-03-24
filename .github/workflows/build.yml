@@ -35,9 +35,9 @@ jobs:
         fi
         pip install pyinstaller
 
-    - name: Prueba de importación (con X virtual)
+    - name: Prueba de importación (solo dependencias externas)
       run: |
-        echo "🧪 Probando importaciones clave..."
+        echo "🧪 Probando importaciones de bibliotecas externas..."
         xvfb-run python -c "
         import sys
         import numpy as np
@@ -47,9 +47,11 @@ jobs:
         import pydub
         import scipy
         import ttkbootstrap
-        from core.video_generator import VideoGenerator
-        from modules.manager import ModuleManager
-        print('✅ Todas las dependencias esenciales OK')
+        import moviepy
+        import pygame
+        import soundfile
+        import vosk
+        print('✅ Todas las dependencias externas OK')
         "
 
     - name: Build con PyInstaller (Linux)

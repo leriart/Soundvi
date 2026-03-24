@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Build Script para Soundvi - Crea ejecutables para Windows/Linux/macOS
+Build Script para Soundvi - Crea ejecutables para Windows/Linux/macOS usando PyInstaller
 """
 
 import os
@@ -23,15 +23,15 @@ class SoundviBuilder:
         self.configs = {
             "windows": {
                 "ext": ".exe",
-                "builder": "nuitka",
+                "builder": "pyinstaller",
                 "icon": self.project_dir / "logos" / "logo.ico",
-                "requirements": ["nuitka", "ordered-set", "zstandard"],
+                "requirements": ["pyinstaller"],
             },
             "linux": {
                 "ext": "",
-                "builder": "nuitka",
+                "builder": "pyinstaller",
                 "icon": self.project_dir / "logos" / "logo.png",
-                "requirements": ["nuitka", "ordered-set"],
+                "requirements": ["pyinstaller"],
             },
             "macos": {
                 "ext": ".app",
@@ -71,79 +71,8 @@ class SoundviBuilder:
         self.build_dir.mkdir(exist_ok=True)
         self.dist_dir.mkdir(exist_ok=True)
     
-    def build_with_nuitka(self, target_platform):
-        """Build usando Nuitka (recomendado)."""
-        print(f"[Nuitka] Compilando para {target_platform}...")
-        
-        main_script = self.project_dir / "main.py"
-        output_name = f"soundvi{self.configs[target_platform]['ext']}"
-        output_path = self.dist_dir / output_name
-        
-        # Comando base Nuitka
-        cmd = [
-            sys.executable, "-m", "nuitka",
-            "--standalone",
-            "--onefile",
-            "--remove-output",
-            "--enable-plugin=tk-inter",
-            f"--output-dir={self.build_dir}",
-            f"--output-filename={output_name}",
-        ]
-        
-        # Plataforma específica
-        if target_platform == "windows":
-            cmd.append("--windows-console-mode=disable")
-            if self.configs["windows"]["icon"].exists():
-                cmd.append(f"--windows-icon-from-ico={self.configs['windows']['icon']}")
-        elif target_platform == "linux":
-            if self.configs["linux"]["icon"].exists():
-                cmd.append(f"--linux-icon={self.configs['linux']['icon']}")
-        
-        # Incluir datos
-        data_dirs = ["fonts", "logos", "core", "gui", "modules", "utils"]
-        for data_dir in data_dirs:
-            src = self.project_dir / data_dir
-            if src.exists():
-                cmd.append(f"--include-data-dir={src}={data_dir}")
-        
-        # Archivos individuales
-        config_file = self.project_dir / "config.json"
-        if config_file.exists():
-            cmd.append(f"--include-data-file={config_file}=config.json")
-        
-        # Script principal
-        cmd.append(str(main_script))
-        
-        # Imprimir comando (primeros 10 argumentos para no saturar)
-        print(f"[Nuitka] Comando: {' '.join(cmd[:10])}...")
-        
-        # Ejecutar
-        try:
-            result = subprocess.run(cmd, capture_output=True, text=True, cwd=self.project_dir)
-            if result.returncode == 0:
-                # Mover a dist
-                built_file = self.build_dir / output_name
-                if built_file.exists():
-                    shutil.move(built_file, output_path)
-                    size_mb = output_path.stat().st_size / (1024 * 1024)
-                    print(f"[OK] Build exitoso: {output_path}")
-                    print(f"[Size] {size_mb:.2f} MB")
-                    return True
-                else:
-                    print(f"[ERROR] Archivo no creado: {built_file}")
-            else:
-                print(f"[ERROR] Nuitka falló (código {result.returncode}):")
-                print("--- STDERR ---")
-                print(result.stderr)
-                print("--- STDOUT ---")
-                print(result.stdout)
-        except Exception as e:
-            print(f"[ERROR] Error ejecutando Nuitka: {e}")
-        
-        return False
-    
     def build_with_pyinstaller(self, target_platform):
-        """Build usando PyInstaller (alternativa)."""
+        """Build usando PyInstaller."""
         print(f"[PyInstaller] Compilando para {target_platform}...")
         
         # Crear spec file dinámico
@@ -208,6 +137,8 @@ a = Analysis(
         'PIL._imaging', 'PIL._imagingtk', 'PIL._tkinter_finder',
         'numpy.core._dtype_ctypes', 'numpy.lib.format',
         'scipy.interpolate', 'scipy.signal', 'scipy.fft',
+        'librosa.core.fft', 'librosa.core.audio', 'librosa.util',
+        'librosa._cache', 'librosa._version',
     ],
     hookspath=[],
     hooksconfig={{}},
@@ -341,9 +272,7 @@ echo ""
         config = self.configs[target_platform]
         success = False
         
-        if config["builder"] == "nuitka":
-            success = self.build_with_nuitka(target_platform)
-        elif config["builder"] == "pyinstaller":
+        if config["builder"] == "pyinstaller":
             success = self.build_with_pyinstaller(target_platform)
         
         # 4. Crear paquete portable si se solicita

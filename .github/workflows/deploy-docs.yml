@@ -1,0 +1,149 @@
+name: Deploy Documentation
+
+on:
+  push:
+    branches: [ main, master ]
+    paths:
+      - 'docs/**'
+      - 'README.md'
+      - 'mkdocs.yml'
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+    
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.10'
+    
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install mkdocs mkdocs-material mkdocs-git-revision-date-localized-plugin
+        
+        # Check if mkdocs.yml exists
+        if [ -f "mkdocs.yml" ]; then
+          pip install -r requirements.txt 2>/dev/null || true
+        fi
+    
+    - name: Build documentation
+      run: |
+        # Create basic mkdocs config if it doesn't exist
+        if [ ! -f "mkdocs.yml" ]; then
+          cat > mkdocs.yml << 'EOF'
+site_name: Soundvi Documentation
+site_url: https://leriart.github.io/Soundvi/
+repo_url: https://github.com/leriart/Soundvi
+repo_name: leriart/Soundvi
+
+theme:
+  name: material
+  features:
+    - navigation.tabs
+    - navigation.sections
+    - toc.integrate
+    - navigation.top
+    - search.suggest
+    - search.highlight
+    - content.tabs.link
+    - content.code.annotation
+    - content.code.copy
+  palette:
+    - scheme: default
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+      primary: indigo
+      accent: indigo
+    - scheme: dark
+      toggle:
+        icon: material/brightness-4
+        name: Switch to light mode
+      primary: indigo
+      accent: indigo
+
+plugins:
+  - search
+  - git-committers:
+      repository: leriart/Soundvi
+  - git-revision-date-localized:
+      type: date
+
+nav:
+  - Home: index.md
+  - Getting Started:
+    - Installation: getting-started/installation.md
+    - Quick Start: getting-started/quick-start.md
+  - User Guide:
+    - Interface: user-guide/interface.md
+    - Modules: user-guide/modules.md
+    - Video Generation: user-guide/video-generation.md
+  - Developer Guide:
+    - Architecture: developer-guide/architecture.md
+    - Creating Modules: developer-guide/creating-modules.md
+    - Building: developer-guide/building.md
+  - API Reference:
+    - Core: api/core.md
+    - Modules: api/modules.md
+    - Utils: api/utils.md
+  - Contributing: contributing.md
+  - Changelog: changelog.md
+
+markdown_extensions:
+  - admonition
+  - codehilite
+  - footnotes
+  - meta
+  - toc:
+      permalink: true
+  - pymdownx.details
+  - pymdownx.emoji:
+      emoji_index: !!python/name:material.extensions.emoji.twemoji
+      emoji_generator: !!python/name:material.extensions.emoji.to_svg
+  - pymdownx.highlight
+  - pymdownx.inlinehilite
+  - pymdownx.snippets
+  - pymdownx.superfences
+  - pymdownx.tabbed:
+      alternate_style: true
+EOF
+        fi
+        
+        # Create docs directory if it doesn't exist
+        mkdir -p docs
+        
+        # Create index.md from README if it doesn't exist
+        if [ ! -f "docs/index.md" ]; then
+          cp README.md docs/index.md
+          # Add frontmatter
+          echo -e "---\ntitle: Home\n---\n\n$(cat docs/index.md)" > docs/index.md
+        fi
+        
+        # Build docs
+        mkdocs build --site-dir site
+    
+    - name: Deploy to GitHub Pages
+      uses: peaceiris/actions-gh-pages@v3
+      with:
+        github_token: ${{ secrets.GITHUB_TOKEN }}
+        publish_dir: ./site
+        publish_branch: gh-pages
+        force_orphan: true
+    
+    - name: Notify on success
+      if: success()
+      uses: 8398a7/action-slack@v3
+      with:
+        status: ${{ job.status }}
+        channel: '#notifications'
+        username: 'Docs Bot'
+        icon_emoji: ':books:'
+        text: 'Documentation deployed successfully!'
+      env:
+        SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}

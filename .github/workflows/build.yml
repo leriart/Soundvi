@@ -6,7 +6,6 @@ on:
       - 'v*'
   workflow_dispatch:
 
-# Forzar Node.js 24 para evitar warnings
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
@@ -177,91 +176,8 @@ jobs:
           soundvi-portable-windows.zip
         retention-days: 7
 
-  build-macos:
-    runs-on: macos-latest
-    steps:
-    - uses: actions/checkout@v4
-    - name: Setup Python
-      uses: actions/setup-python@v5
-      with:
-        python-version: '3.10'
-
-    - name: Instalar FFmpeg
-      run: brew install ffmpeg
-
-    - name: Instalar dependencias Python
-      run: |
-        pip install --upgrade pip
-        if [ -f "requirements.txt" ]; then
-          pip install -r requirements.txt
-        else
-          pip install ttkbootstrap numpy opencv-python pillow librosa moviepy pygame pydub soundfile scipy vosk matplotlib
-        fi
-        pip install pyinstaller
-
-    - name: Verificar módulos (sin GUI)
-      run: |
-        echo "✅ Probando módulos no gráficos..."
-        python -c "from core.video_generator import VideoGenerator; print('core OK')"
-        python -c "from modules.manager import ModuleManager; print('modules OK')"
-
-    - name: Build con PyInstaller (macOS)
-      run: |
-        pyinstaller --onefile --name soundvi-macos \
-          --noconsole \
-          --add-data "fonts:fonts" \
-          --add-data "logos:logos" \
-          --add-data "core:core" \
-          --add-data "gui:gui" \
-          --add-data "modules:modules" \
-          --add-data "utils:utils" \
-          --add-data "config.json:." \
-          $( [ -d "modules_config" ] && echo "--add-data modules_config:modules_config" ) \
-          $( [ -d "vosk_models" ] && echo "--add-data vosk_models:vosk_models" ) \
-          --hidden-import="PIL._imagingtk" \
-          --hidden-import="PIL._imaging" \
-          --hidden-import="PIL._tkinter_finder" \
-          --hidden-import="tkinter" \
-          main.py
-        mv dist/soundvi-macos .
-        chmod +x soundvi-macos
-
-    - name: Crear paquete portable (macOS)
-      run: |
-        mkdir -p Soundvi-macOS
-        cp soundvi-macos Soundvi-macOS/
-        [ -d "fonts" ] && cp -r fonts Soundvi-macOS/
-        [ -d "logos" ] && cp -r logos Soundvi-macOS/
-        [ -d "core" ] && cp -r core Soundvi-macOS/
-        [ -d "gui" ] && cp -r gui Soundvi-macOS/
-        [ -d "modules" ] && cp -r modules Soundvi-macOS/
-        [ -d "utils" ] && cp -r utils Soundvi-macOS/
-        [ -d "modules_config" ] && cp -r modules_config Soundvi-macOS/
-        [ -d "vosk_models" ] && cp -r vosk_models Soundvi-macOS/
-        [ -f "config.json" ] && cp config.json Soundvi-macOS/
-        cat > Soundvi-macOS/run.sh << 'EOF'
-        #!/bin/bash
-        echo "Soundvi - macOS Portable"
-        echo "Para iniciar: ./soundvi-macos"
-        echo ""
-        echo "Requisito: FFmpeg instalado (brew install ffmpeg)"
-        echo ""
-        ./soundvi-macos
-        EOF
-        chmod +x Soundvi-macOS/run.sh
-        tar -czf soundvi-portable-macos.tar.gz Soundvi-macOS/
-
-    - name: Subir artefactos macOS
-      uses: actions/upload-artifact@v4
-      with:
-        name: soundvi-macos
-        path: |
-          soundvi-macos
-          soundvi-portable-macos.tar.gz
-        retention-days: 7
-
   create-release:
-    needs: [build-linux, build-windows, build-macos]
+    needs: [build-linux, build-windows]
     runs-on: ubuntu-latest
     if: startsWith(github.ref, 'refs/tags/v')
     steps:
@@ -277,12 +193,6 @@ jobs:
         name: soundvi-windows
         path: artifacts/windows
 
-    - name: Descargar artefactos macOS
-      uses: actions/download-artifact@v4
-      with:
-        name: soundvi-macos
-        path: artifacts/macos
-
     - name: Listar archivos para release
       run: |
         echo "📦 Archivos listos para release:"
@@ -297,6 +207,5 @@ jobs:
         files: |
           artifacts/linux/*
           artifacts/windows/*
-          artifacts/macos/*
         generate_release_notes: true
         prerelease: false

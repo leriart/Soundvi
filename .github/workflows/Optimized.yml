@@ -26,23 +26,11 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
 
-      # Instalar Rust (necesario para PyOxidizer)
-      - name: Instalar Rust
-        uses: actions-rs/toolchain@v1
-        with:
-          toolchain: stable
-          override: true
-
-      # Instalar PyOxidizer con cargo
-      - name: Instalar PyOxidizer
-        run: cargo install pyoxidizer
-
       - name: Instalar dependencias Python
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
-          # Nota: no necesitamos requirements-build.txt para PyOxidizer
-          # pero si aún quieres PyInstaller como alternativa, mantenlo
+          pip install -r requirements-build.txt
 
       - name: Instalar FFmpeg (Linux)
         if: matrix.platform == 'linux'
@@ -63,8 +51,12 @@ jobs:
         if: matrix.platform == 'windows'
         run: echo "PYTHONIOENCODING=utf-8" >> $env:GITHUB_ENV
 
+      # Verificar que pyoxidizer esté disponible (opcional)
+      - name: Verificar PyOxidizer
+        run: pyoxidizer --version
+
       # Ejecutar build con PyOxidizer
-      - name: Ejecutar build optimizado (PyOxidizer)
+      - name: Ejecutar build optimizado
         run: python build.py --platform ${{ matrix.platform }} --builder pyoxidizer --portable
 
       # Subir artefactos

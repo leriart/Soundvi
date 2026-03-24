@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Build Script para Soundvi - Crea ejecutables optimizados para Windows/Linux/macOS
+Build Script para Soundvi - Soporta PyInstaller y PyOxidizer
 """
 
 import os
@@ -12,6 +12,7 @@ import platform
 from pathlib import Path
 import zipfile
 import tarfile
+import json
 
 class SoundviBuilder:
     def __init__(self, project_dir=None):
@@ -22,28 +23,30 @@ class SoundviBuilder:
         self.configs = {
             "windows": {
                 "ext": ".exe",
-                "builder": "pyinstaller",
                 "icon": self.project_dir / "logos" / "logo.ico",
-                "requirements": ["pyinstaller"],
+                "requirements": ["pyinstaller", "pyoxidizer"],
             },
             "linux": {
                 "ext": "",
-                "builder": "pyinstaller",
                 "icon": self.project_dir / "logos" / "logo.png",
-                "requirements": ["pyinstaller"],
+                "requirements": ["pyinstaller", "pyoxidizer"],
             },
             "macos": {
                 "ext": ".app",
-                "builder": "pyinstaller",
                 "icon": self.project_dir / "logos" / "logo.icns",
-                "requirements": ["pyinstaller"],
+                "requirements": ["pyinstaller", "pyoxidizer"],
             }
         }
     
-    def check_dependencies(self, target_platform):
+    def check_dependencies(self, target_platform, builder):
+        """Verificar dependencias según el builder elegido."""
         config = self.configs[target_platform]
         missing = []
         for req in config["requirements"]:
+            if builder == "pyoxidizer" and req == "pyinstaller":
+                continue
+            if builder == "pyinstaller" and req == "pyoxidizer":
+                continue
             import_name = req.replace("-", "_")
             if req == "pyinstaller":
                 import_name = "PyInstaller"
@@ -51,8 +54,9 @@ class SoundviBuilder:
                 __import__(import_name)
             except ImportError:
                 missing.append(req)
+        
         if missing:
-            print(f"[ERROR] Dependencias faltantes para {target_platform}:")
+            print(f"[ERROR] Dependencias faltantes para {target_platform} con builder {builder}:")
             for dep in missing:
                 print(f"   - {dep}")
             print(f"\nInstalar con: pip install {' '.join(missing)}")
@@ -67,6 +71,9 @@ class SoundviBuilder:
         self.build_dir.mkdir(exist_ok=True)
         self.dist_dir.mkdir(exist_ok=True)
     
+    # --------------------------------------------------------------------------
+    # Builder: PyInstaller
+    # --------------------------------------------------------------------------
     def build_with_pyinstaller(self, target_platform):
         print(f"[PyInstaller] Compilando para {target_platform}...")
         spec_content = self._create_pyinstaller_spec(target_platform)
@@ -83,23 +90,15 @@ class SoundviBuilder:
         try:
             result = subprocess.run(cmd, capture_output=True, text=True, cwd=self.project_dir)
             if result.returncode == 0:
-                # Buscar el ejecutable generado (en dist/ o en dist/soundvi/)
-                if target_platform == "windows":
-                    possible = [self.dist_dir / "soundvi.exe"]
-                else:
-                    possible = [self.dist_dir / "soundvi", self.dist_dir / "soundvi" / "soundvi"]
-                output_path = None
-                for p in possible:
-                    if p.exists():
-                        output_path = p
-                        break
+                # Buscar el ejecutable generado
+                output_path = self._find_executable(target_platform)
                 if output_path:
                     size_mb = output_path.stat().st_size / (1024 * 1024)
                     print(f"[OK] Build exitoso: {output_path}")
                     print(f"[Size] {size_mb:.2f} MB")
                     return True
                 else:
-                    print(f"[ERROR] No se encontró el ejecutable")
+                    print("[ERROR] No se encontró el ejecutable generado.")
             else:
                 print(f"[ERROR] PyInstaller falló (código {result.returncode}):")
                 print("--- STDOUT ---")
@@ -111,27 +110,12 @@ class SoundviBuilder:
         return False
     
     def _create_pyinstaller_spec(self, target_platform):
-        # UPX se usa en todas las plataformas (puede fallar en Linux, pero probamos)
-        # Si falla, cambiar a: use_upx = target_platform == "windows"
-        use_upx = True
-        
-        # Módulos a excluir (pesados e innecesarios)
+        use_upx = True  # Forzar UPX, si falla en Linux cambiar a target_platform=="windows"
         excludes = [
-            'matplotlib',
-            'sklearn',
-            'scikit-learn',
-            'imageio_ffmpeg',   # importante: evita empaquetar FFmpeg
-            'PyQt5',
-            'PySide2',
-            'PyQt6',
-            'IPython',
-            'jupyter',
-            'tensorflow',
-            'torch',
-            'pandas',
-            'notebook',
+            'matplotlib', 'sklearn', 'scikit-learn', 'imageio_ffmpeg',
+            'PyQt5', 'PySide2', 'PyQt6', 'IPython', 'jupyter',
+            'tensorflow', 'torch', 'pandas', 'notebook',
         ]
-        
         return f'''# -*- mode: python ; coding: utf-8 -*-
 import sys
 import os
@@ -185,7 +169,7 @@ exe = EXE(
     name='soundvi',
     debug=False,
     bootloader_ignore_signals=False,
-    strip=True,            # elimina símbolos de depuración
+    strip=True,
     upx={use_upx},
     upx_exclude=[],
     runtime_tmpdir=None,
@@ -198,22 +182,151 @@ exe = EXE(
     icon='{self.configs[target_platform]["icon"]}' if os.path.exists('{self.configs[target_platform]["icon"]}') else None,
 )
 
-# Nota: no usamos COLLECT porque queremos un solo archivo (--onefile)
-# El archivo resultante se llama 'soundvi' (sin carpeta)
+# Sin COLLECT para generar un solo ejecutable
 '''
     
-    def package_portable(self, target_platform):
-        print(f"[Portable] Creando paquete portable para {target_platform}...")
+    # --------------------------------------------------------------------------
+    # Builder: PyOxidizer
+    # --------------------------------------------------------------------------
+    def build_with_pyoxidizer(self, target_platform):
+        print(f"[PyOxidizer] Compilando para {target_platform}...")
+        self._create_pyoxidizer_config(target_platform)
         
-        executable = self.dist_dir / f"soundvi{self.configs[target_platform]['ext']}"
-        if not executable.exists():
-            # Si no está en la raíz de dist, buscar en dist/soundvi/
-            alt = self.dist_dir / "soundvi" / f"soundvi{self.configs[target_platform]['ext']}"
-            if alt.exists():
-                executable = alt
+        cmd = ["pyoxidizer", "build", "--release"]
+        try:
+            result = subprocess.run(cmd, capture_output=True, text=True, cwd=self.project_dir)
+            if result.returncode == 0:
+                # PyOxidizer suele dejar el ejecutable en build/<target>/release/install/soundvi
+                # Buscamos el archivo
+                output_path = self._find_executable(target_platform, builder="pyoxidizer")
+                if output_path:
+                    size_mb = output_path.stat().st_size / (1024 * 1024)
+                    print(f"[OK] Build exitoso: {output_path}")
+                    print(f"[Size] {size_mb:.2f} MB")
+                    return True
+                else:
+                    print("[ERROR] No se encontró el ejecutable generado por PyOxidizer.")
             else:
-                print(f"[ERROR] Ejecutable no encontrado: {executable}")
-                return False
+                print(f"[ERROR] PyOxidizer falló (código {result.returncode}):")
+                print("--- STDOUT ---")
+                print(result.stdout)
+                print("--- STDERR ---")
+                print(result.stderr)
+        except Exception as e:
+            print(f"[ERROR] Error ejecutando PyOxidizer: {e}")
+        return False
+    
+    def _create_pyoxidizer_config(self, target_platform):
+        """Genera pyoxidizer.bzl para el proyecto."""
+        # Adaptar según plataforma
+        icon_path = self.configs[target_platform]["icon"]
+        ext = self.configs[target_platform]["ext"]
+        exe_name = f"soundvi{ext}"
+        
+        # Lista de módulos a excluir (similares a los de PyInstaller)
+        excludes = [
+            "matplotlib", "sklearn", "scikit-learn", "imageio_ffmpeg",
+            "PyQt5", "PySide2", "PyQt6", "IPython", "jupyter",
+            "tensorflow", "torch", "pandas", "notebook",
+        ]
+        
+        # Configuración básica en Starlark
+        config = f'''
+# pyoxidizer.bzl
+# Generado automáticamente por build.py
+
+set_python_home(expanduser("~/.pyoxi"))
+
+def make_exe():
+    dist = default_python_distribution()
+    policy = dist.make_python_packaging_policy()
+    policy.include_distribution_resources = False
+    policy.set_resource_handling_mode("filesystem-relative:standard")
+    
+    # Excluir módulos pesados
+    for mod in {excludes}:
+        policy.excluded_module_names.add(mod)
+    
+    python_config = dist.make_python_interpreter_config()
+    python_config.config["pythonpath"] = []
+    python_config.run_module = "main"
+    
+    exe = dist.to_python_executable(
+        name="{exe_name}",
+        packaging_policy=policy,
+        config=python_config,
+    )
+    
+    # Añadir recursos (datas)
+    exe.add_python_resources(exe.pip_install(["-r", "requirements.txt"]))
+    exe.add_python_resources(exe.read_package_root(
+        path=".",
+        packages=["core", "gui", "modules", "utils"],
+        excludes=["**/__pycache__", "**/*.pyc", "**/*.pyo"],
+    ))
+    exe.add_python_resources(exe.read_file("config.json", dest="config.json"))
+    exe.add_python_resources(exe.read_file("README.md", dest="README.md"))
+    exe.add_python_resources(exe.read_dir("fonts", dest="fonts"))
+    exe.add_python_resources(exe.read_dir("logos", dest="logos"))
+    
+    # Icono (solo Windows/Linux con soporte)
+    if "{target_platform}" == "windows":
+        exe.windows_runtime_dlls_mode = "always"
+        exe.windows_subsystem = "windows"
+        if os.path.exists("{icon_path}"):
+            exe.icon_file = "{icon_path}"
+    
+    return exe
+
+def make_install(exe):
+    files = FileManifest()
+    files.add_python_resource(".", exe)
+    return files
+
+register_target("exe", make_exe)
+register_target("install", make_install, depends=["exe"], default=True)
+resolve_targets()
+'''
+        with open(self.project_dir / "pyoxidizer.bzl", "w") as f:
+            f.write(config)
+        print("[PyOxidizer] Archivo de configuración pyoxidizer.bzl generado.")
+    
+    # --------------------------------------------------------------------------
+    # Helper para encontrar el ejecutable
+    # --------------------------------------------------------------------------
+    def _find_executable(self, target_platform, builder="pyinstaller"):
+        """Busca el ejecutable generado por el builder."""
+        ext = self.configs[target_platform]["ext"]
+        name = f"soundvi{ext}"
+        
+        if builder == "pyinstaller":
+            # PyInstaller puede dejar el ejecutable en dist/ o en dist/soundvi/
+            candidates = [
+                self.dist_dir / name,
+                self.dist_dir / "soundvi" / name,
+            ]
+            for cand in candidates:
+                if cand.exists():
+                    return cand
+        elif builder == "pyoxidizer":
+            # PyOxidizer suele dejar el ejecutable en build/<target>/release/install/
+            # Buscamos recursivamente en build/
+            build_dir = self.project_dir / "build"
+            if build_dir.exists():
+                for root, dirs, files in os.walk(build_dir):
+                    if name in files:
+                        return Path(root) / name
+        return None
+    
+    # --------------------------------------------------------------------------
+    # Empaquetado portable (común)
+    # --------------------------------------------------------------------------
+    def package_portable(self, target_platform, builder):
+        print(f"[Portable] Creando paquete portable para {target_platform}...")
+        executable = self._find_executable(target_platform, builder)
+        if not executable:
+            print(f"[ERROR] Ejecutable no encontrado para empaquetar.")
+            return False
         
         portable_dir = self.dist_dir / f"Soundvi-Portable-{target_platform.capitalize()}"
         if portable_dir.exists():
@@ -269,36 +382,45 @@ echo ""
         print(f"[OK] Paquete portable creado: {size_mb:.2f} MB")
         return True
     
-    def build(self, target_platform, create_portable=False):
+    # --------------------------------------------------------------------------
+    # Construcción principal
+    # --------------------------------------------------------------------------
+    def build(self, target_platform, builder, create_portable=False):
         print(f"\n{'='*60}")
-        print(f"BUILD SOUNDVI - {target_platform.upper()}")
+        print(f"BUILD SOUNDVI - {target_platform.upper()} (builder: {builder})")
         print(f"{'='*60}")
         
-        if not self.check_dependencies(target_platform):
+        if not self.check_dependencies(target_platform, builder):
             return False
         
         self.clean_build_dirs()
         
-        config = self.configs[target_platform]
         success = False
-        
-        if config["builder"] == "pyinstaller":
+        if builder == "pyinstaller":
             success = self.build_with_pyinstaller(target_platform)
+        elif builder == "pyoxidizer":
+            success = self.build_with_pyoxidizer(target_platform)
+        else:
+            print(f"[ERROR] Builder '{builder}' no soportado.")
+            return False
         
         if success and create_portable:
-            self.package_portable(target_platform)
+            self.package_portable(target_platform, builder)
         
         return success
 
 def main():
-    parser = argparse.ArgumentParser(description="Build Soundvi para múltiples plataformas")
+    parser = argparse.ArgumentParser(description="Build Soundvi con PyInstaller o PyOxidizer")
     parser.add_argument("--platform", choices=["windows", "linux", "macos", "all"], 
                        default=platform.system().lower(), help="Plataforma objetivo")
+    parser.add_argument("--builder", choices=["pyinstaller", "pyoxidizer"], 
+                       default="pyinstaller", help="Herramienta de construcción")
     parser.add_argument("--portable", action="store_true", help="Crear paquete portable")
     parser.add_argument("--output-dir", help="Directorio de salida")
     parser.add_argument("--clean", action="store_true", help="Limpiar antes de build")
     
     args = parser.parse_args()
+    
     builder = SoundviBuilder()
     
     if args.output_dir:
@@ -314,10 +436,10 @@ def main():
     
     all_success = True
     for platform_name in platforms:
-        success = builder.build(platform_name, args.portable)
+        success = builder.build(platform_name, args.builder, args.portable)
         if not success:
             all_success = False
-            print(f"[ERROR] Build falló para {platform_name}")
+            print(f"[ERROR] Build falló para {platform_name} con {args.builder}")
     
     if all_success:
         print(f"\n{'*'*20}")

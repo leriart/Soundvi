@@ -12,7 +12,6 @@ import platform
 from pathlib import Path
 import zipfile
 import tarfile
-import json
 
 class SoundviBuilder:
     def __init__(self, project_dir=None):
@@ -64,9 +63,8 @@ class SoundviBuilder:
             print(f"[ERROR] Dependencias faltantes para {target_platform} con builder {builder}:")
             for dep in missing:
                 print(f"   - {dep}")
-            # Mensaje especial para PyOxidizer
             if builder == "pyoxidizer" and "pyoxidizer" in missing:
-                print("\n[INFO] PyOxidizer debe instalarse con: cargo install pyoxidizer")
+                print("\n[INFO] PyOxidizer debe instalarse con: pip install pyoxidizer")
             else:
                 print(f"\nInstalar con: pip install {' '.join(missing)}")
             return False
@@ -118,7 +116,7 @@ class SoundviBuilder:
         return False
     
     def _create_pyinstaller_spec(self, target_platform):
-        use_upx = True
+        use_upx = True  # Forzar UPX, si falla en Linux cambiar a target_platform=="windows"
         excludes = [
             'matplotlib', 'sklearn', 'scikit-learn', 'imageio_ffmpeg',
             'PyQt5', 'PySide2', 'PyQt6', 'IPython', 'jupyter',
@@ -200,7 +198,7 @@ exe = EXE(
         print(f"[PyOxidizer] Compilando para {target_platform}...")
         self._create_pyoxidizer_config(target_platform)
         
-        # Ejecutar pyoxidizer (el binario ya está en PATH)
+        # Ejecutar pyoxidizer
         cmd = ["pyoxidizer", "build", "--release"]
         try:
             result = subprocess.run(cmd, capture_output=True, text=True, cwd=self.project_dir)
@@ -235,12 +233,10 @@ exe = EXE(
             "tensorflow", "torch", "pandas", "notebook",
         ]
         
-        # Configuración básica en Starlark
+        # Configuración en Starlark (corregida)
         config = f'''
 # pyoxidizer.bzl
 # Generado automáticamente por build.py
-
-set_python_home(expanduser("~/.pyoxi"))
 
 def make_exe():
     dist = default_python_distribution()
@@ -262,22 +258,33 @@ def make_exe():
         config=python_config,
     )
     
-    # Añadir recursos
+    # Incluir main.py (necesario porque run_module apunta a él)
+    exe.add_python_resources(exe.read_file("main.py", dest="main.py"))
+    
+    # Instalar dependencias desde requirements.txt
     exe.add_python_resources(exe.pip_install(["-r", "requirements.txt"]))
-    exe.add_python_resources(exe.read_package_root(
-        path=".",
-        packages=["core", "gui", "modules", "utils"],
-        excludes=["**/__pycache__", "**/*.pyc", "**/*.pyo"],
-    ))
+    
+    # Incluir paquetes de código fuente
+    for pkg in ["core", "gui", "modules", "utils"]:
+        exe.add_python_resources(exe.read_package_root(
+            path=pkg,
+            packages=[pkg],
+            excludes=["**/__pycache__", "**/*.pyc", "**/*.pyo"],
+        ))
+    
+    # Incluir archivos de recursos
     exe.add_python_resources(exe.read_file("config.json", dest="config.json"))
     exe.add_python_resources(exe.read_file("README.md", dest="README.md"))
     exe.add_python_resources(exe.read_dir("fonts", dest="fonts"))
     exe.add_python_resources(exe.read_dir("logos", dest="logos"))
     
-    # Icono (solo Windows/Linux con soporte)
+    # Configuración específica de plataforma
     if "{target_platform}" == "windows":
         exe.windows_runtime_dlls_mode = "always"
         exe.windows_subsystem = "windows"
+        if os.path.exists("{icon_path}"):
+            exe.icon_file = "{icon_path}"
+    elif "{target_platform}" == "linux":
         if os.path.exists("{icon_path}"):
             exe.icon_file = "{icon_path}"
     

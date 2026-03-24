@@ -1,164 +1,36 @@
-name: Build and Release
-
-on:
-  push:
-    tags:
-      - 'v*'
-  workflow_dispatch:
-
-env:
-  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
-
-jobs:
-  build-executables:
-    strategy:
-      matrix:
-        os: [ubuntu-latest, windows-latest]
-      fail-fast: false
-    runs-on: ${{ matrix.os }}
-
-    steps:
-    - name: Checkout repository
-      uses: actions/checkout@v4
-
-    - name: Set up Python
-      uses: actions/setup-python@v5
-      with:
-        python-version: '3.10'
-
-    # --- Linux Specific Setup ---
-    - name: Install Linux dependencies
-      if: runner.os == 'Linux'
-      run: |
-        sudo apt-get update
-        sudo apt-get install -y ffmpeg python3-tk xvfb upx
-
-    # --- Windows Specific Setup ---
-    - name: Install Windows dependencies
-      if: runner.os == 'Windows'
-      run: |
-        choco install ffmpeg -y --no-progress
-        choco install upx -y --no-progress
-        echo "C:\ProgramData\chocolatey\bin" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
-
-    - name: Install Python packages
-      run: |
-        python -m pip install --upgrade pip
-        # Reemplazar opencv-python por opencv-python-headless en requirements.txt (multiplataforma)
-        python -c "import os; f='requirements.txt'; \
-                   if os.path.exists(f): \
-                     with open(f, 'r') as fin: data = fin.read(); \
-                     data = data.replace('opencv-python', 'opencv-python-headless'); \
-                     with open(f, 'w') as fout: fout.write(data); \
-                     print('✅ Reemplazado opencv-python por headless en requirements.txt')"
-        pip install -r requirements.txt
-        pip install pyinstaller==6.9.0
-
-    # Prueba de importaciones externas (evita errores de clases internas)
-    - name: Test imports (Linux)
-      if: runner.os == 'Linux'
-      run: |
-        echo "🧪 Probando importaciones de bibliotecas externas..."
-        xvfb-run python -c "
-        import sys
-        import numpy as np
-        import cv2
-        from PIL import Image
-        import librosa
-        import pydub
-        import scipy
-        import ttkbootstrap
-        import moviepy
-        import pygame
-        import soundfile
-        import vosk
-        print('✅ Todas las dependencias externas OK')
-        "
-
-    - name: Test imports (Windows)
-      if: runner.os == 'Windows'
-      run: |
-        echo "🧪 Probando importaciones de bibliotecas externas..."
-        python -c "
-        import sys
-        import numpy as np
-        import cv2
-        from PIL import Image
-        import librosa
-        import pydub
-        import scipy
-        import ttkbootstrap
-        import moviepy
-        import pygame
-        import soundfile
-        import vosk
-        print('✅ Todas las dependencias externas OK')
-        "
-
-    - name: Set platform-specific variables
-      id: set_vars
-      shell: bash
-      run: |
-        if [[ "${{ runner.os }}" == "Linux" ]]; then
-          echo "PYINSTALLER_NAME=soundvi-linux" >> $GITHUB_OUTPUT
-          echo "PYINSTALLER_ARGS=--noconsole" >> $GITHUB_OUTPUT
-          echo "UPX_DIR=/usr/bin" >> $GITHUB_OUTPUT
-        elif [[ "${{ runner.os }}" == "Windows" ]]; then
-          echo "PYINSTALLER_NAME=soundvi-windows.exe" >> $GITHUB_OUTPUT
-          echo "PYINSTALLER_ARGS=--windowed" >> $GITHUB_OUTPUT
-          echo "UPX_DIR=" >> $GITHUB_OUTPUT
-        fi
-
-    - name: Build with PyInstaller
-      shell: bash   # Asegura que el condicional bash funcione también en Windows
-      run: |
-        UPX_OPT=""
-        if [[ -n "${{ steps.set_vars.outputs.UPX_DIR }}" ]]; then
-          UPX_OPT="--upx-dir ${{ steps.set_vars.outputs.UPX_DIR }}"
-        fi
-        pyinstaller main.py \
-          --onefile \
-          --name ${{ steps.set_vars.outputs.PYINSTALLER_NAME }} \
-          ${{ steps.set_vars.outputs.PYINSTALLER_ARGS }} \
-          --strip \
-          ${UPX_OPT} \
-          --add-data "fonts:fonts" \
-          --add-data "logos:logos" \
-          --add-data "core:core" \
-          --add-data "gui:gui" \
-          --add-data "modules:modules" \
-          --add-data "utils:utils" \
-          --add-data "config.json:." \
-          $( [ -d "modules_config" ] && echo "--add-data modules_config:modules_config" ) \
-          --hidden-import="PIL._imagingtk" \
-          --hidden-import="PIL._imaging" \
-          --hidden-import="PIL._tkinter_finder" \
-          --hidden-import="tkinter"
-
-    - name: Upload artifact
-      uses: actions/upload-artifact@v4
-      with:
-        name: ${{ steps.set_vars.outputs.PYINSTALLER_NAME }}
-        path: dist/${{ steps.set_vars.outputs.PYINSTALLER_NAME }}
-        retention-days: 7
-
-  create-release:
-    needs: build-executables
-    runs-on: ubuntu-latest
-    if: startsWith(github.ref, 'refs/tags/v')
-
-    steps:
-    - name: Download all artifacts
-      uses: actions/download-artifact@v4
-      with:
-        path: artifacts/
-
-    - name: List downloaded files
-      run: find artifacts -type f
-
-    - name: Create GitHub Release
-      uses: softprops/action-gh-release@v2
-      with:
-        files: artifacts/**/*
-        generate_release_notes: true
-        prerelease: false
+            - name: Python Executable Builder Action
+  # You may pin to the exact commit or the version.
+  # uses: kentsx/Python2Exe@19c006f72ad75562ab3fea363131a3615e5ff17c
+  uses: kentsx/Python2Exe@v1.1.1
+  with:
+    # the main python file (without .py)
+    main: 
+    # the dist path
+    dist: # optional, default is ./dist
+    # the version of python
+    python_version: # optional, default is 3.9
+    # the version of pyinstaller
+    pyinstaller_version: # optional, default is 6.7
+    # the output exe name
+    exe_name: # optional, default is main
+    # whether to install requirements.txt before build, which is in the root dir
+    use-dependencies: # optional, default is true
+    # whether to disappear console terminal
+    no-console: # optional, default is true
+    # add the icon mark into your executable, the file path of your ico, e.g. logo.png or logo.ico
+    icon: # optional, default is NONE
+    # Whether upload the build executable to artifact
+    artifact: # optional
+    # The level of compression for Zlib to be applied to the artifact archive, range from 0(no compression) to 9(max compression)
+    compression_level: # optional, default is 6
+    # Whether create a release with the executable
+    release: # optional, default is true
+    # The Github token. Make sure you have the permission to create release.
+    token: # optional, default is ${{ github.token }}
+    # An optional tag for the release. If this is omitted the git ref will be used (if it is a tag).
+    tag: # optional, default is ${{ github.ref_name }}-Run#${{ github.run_id }}-Attempt#${{ github.run_attempt }}
+    # An optional body file for the release. This should be the path to the file
+    bodyfile: # optional, default is 
+    # The path of your version.py file (file name can be different). It must contains a variable "VER"
+    version_file_path: # optional, default is 
+          

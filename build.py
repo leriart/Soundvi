@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Build Script para Soundvi - Crea ejecutables para Windows/Linux/macOS usando PyInstaller
+Build Script para Soundvi - Crea ejecutables optimizados para Windows/Linux/macOS
 """
 
 import os
@@ -19,7 +19,6 @@ class SoundviBuilder:
         self.build_dir = self.project_dir / "build_output"
         self.dist_dir = self.project_dir / "dist"
         
-        # Configuraciones por plataforma
         self.configs = {
             "windows": {
                 "ext": ".exe",
@@ -42,10 +41,8 @@ class SoundviBuilder:
         }
     
     def check_dependencies(self, target_platform):
-        """Verificar dependencias necesarias."""
         config = self.configs[target_platform]
         missing = []
-        
         for req in config["requirements"]:
             import_name = req.replace("-", "_")
             if req == "pyinstaller":
@@ -54,31 +51,24 @@ class SoundviBuilder:
                 __import__(import_name)
             except ImportError:
                 missing.append(req)
-        
         if missing:
             print(f"[ERROR] Dependencias faltantes para {target_platform}:")
             for dep in missing:
                 print(f"   - {dep}")
             print(f"\nInstalar con: pip install {' '.join(missing)}")
             return False
-        
         return True
     
     def clean_build_dirs(self):
-        """Limpiar directorios de build anteriores."""
         for dir_path in [self.build_dir, self.dist_dir]:
             if dir_path.exists():
                 shutil.rmtree(dir_path)
                 print(f"[Clean] Limpiado: {dir_path}")
-        
         self.build_dir.mkdir(exist_ok=True)
         self.dist_dir.mkdir(exist_ok=True)
     
     def build_with_pyinstaller(self, target_platform):
-        """Build usando PyInstaller."""
         print(f"[PyInstaller] Compilando para {target_platform}...")
-        
-        # Crear spec file dinámico
         spec_content = self._create_pyinstaller_spec(target_platform)
         spec_path = self.project_dir / "soundvi.spec"
         spec_path.write_text(spec_content)
@@ -93,19 +83,23 @@ class SoundviBuilder:
         try:
             result = subprocess.run(cmd, capture_output=True, text=True, cwd=self.project_dir)
             if result.returncode == 0:
-                # PyInstaller crea en dist/soundvi/ o dist/soundvi.exe
+                # Buscar el ejecutable generado (en dist/ o en dist/soundvi/)
                 if target_platform == "windows":
-                    output_path = self.dist_dir / "soundvi.exe"
+                    possible = [self.dist_dir / "soundvi.exe"]
                 else:
-                    output_path = self.dist_dir / "soundvi"
-                
-                if output_path.exists():
+                    possible = [self.dist_dir / "soundvi", self.dist_dir / "soundvi" / "soundvi"]
+                output_path = None
+                for p in possible:
+                    if p.exists():
+                        output_path = p
+                        break
+                if output_path:
                     size_mb = output_path.stat().st_size / (1024 * 1024)
                     print(f"[OK] Build exitoso: {output_path}")
                     print(f"[Size] {size_mb:.2f} MB")
                     return True
                 else:
-                    print(f"[ERROR] No se encontró el ejecutable en {output_path}")
+                    print(f"[ERROR] No se encontró el ejecutable")
             else:
                 print(f"[ERROR] PyInstaller falló (código {result.returncode}):")
                 print("--- STDOUT ---")
@@ -114,13 +108,29 @@ class SoundviBuilder:
                 print(result.stderr)
         except Exception as e:
             print(f"[ERROR] Error ejecutando PyInstaller: {e}")
-        
         return False
     
     def _create_pyinstaller_spec(self, target_platform):
-        """Crear archivo .spec para PyInstaller."""
-        # Deshabilitar UPX en Linux porque puede causar problemas
-        use_upx = target_platform == "windows"
+        # UPX se usa en todas las plataformas (puede fallar en Linux, pero probamos)
+        # Si falla, cambiar a: use_upx = target_platform == "windows"
+        use_upx = True
+        
+        # Módulos a excluir (pesados e innecesarios)
+        excludes = [
+            'matplotlib',
+            'sklearn',
+            'scikit-learn',
+            'imageio_ffmpeg',   # importante: evita empaquetar FFmpeg
+            'PyQt5',
+            'PySide2',
+            'PyQt6',
+            'IPython',
+            'jupyter',
+            'tensorflow',
+            'torch',
+            'pandas',
+            'notebook',
+        ]
         
         return f'''# -*- mode: python ; coding: utf-8 -*-
 import sys
@@ -152,13 +162,11 @@ a = Analysis(
         'librosa.core.spectrum', 'librosa.core.constantq',
         'librosa.feature', 'librosa.effects',
         'scipy.signal.spectral', 'scipy.signal.windows',
-        'sklearn', 'sklearn.cluster', 'sklearn.metrics',
-        'numba', 'numba.core', 'numba.types',
     ],
     hookspath=[],
     hooksconfig={{}},
     runtime_hooks=[],
-    excludes=[],
+    excludes={excludes},
     win_no_prefer_redirects=False,
     win_private_assemblies=False,
     cipher=block_cipher,
@@ -177,7 +185,7 @@ exe = EXE(
     name='soundvi',
     debug=False,
     bootloader_ignore_signals=False,
-    strip=False,
+    strip=True,            # elimina símbolos de depuración
     upx={use_upx},
     upx_exclude=[],
     runtime_tmpdir=None,
@@ -190,35 +198,28 @@ exe = EXE(
     icon='{self.configs[target_platform]["icon"]}' if os.path.exists('{self.configs[target_platform]["icon"]}') else None,
 )
 
-coll = COLLECT(
-    exe,
-    a.binaries,
-    a.zipfiles,
-    a.datas,
-    strip=False,
-    upx={use_upx},
-    upx_exclude=[],
-    name='soundvi',
-)
+# Nota: no usamos COLLECT porque queremos un solo archivo (--onefile)
+# El archivo resultante se llama 'soundvi' (sin carpeta)
 '''
     
     def package_portable(self, target_platform):
-        """Crear paquete portable."""
         print(f"[Portable] Creando paquete portable para {target_platform}...")
         
         executable = self.dist_dir / f"soundvi{self.configs[target_platform]['ext']}"
         if not executable.exists():
-            print(f"[ERROR] Ejecutable no encontrado: {executable}")
-            return False
+            # Si no está en la raíz de dist, buscar en dist/soundvi/
+            alt = self.dist_dir / "soundvi" / f"soundvi{self.configs[target_platform]['ext']}"
+            if alt.exists():
+                executable = alt
+            else:
+                print(f"[ERROR] Ejecutable no encontrado: {executable}")
+                return False
         
-        # Crear directorio portable
         portable_dir = self.dist_dir / f"Soundvi-Portable-{target_platform.capitalize()}"
         if portable_dir.exists():
             shutil.rmtree(portable_dir)
-        
         portable_dir.mkdir()
         
-        # Copiar ejecutable
         shutil.copy(executable, portable_dir / executable.name)
         
         # Copiar recursos
@@ -227,13 +228,12 @@ coll = COLLECT(
             if src.exists():
                 shutil.copytree(src, portable_dir / data_dir)
         
-        # Copiar archivos individuales
         for data_file in ["config.json", "README.md"]:
             src = self.project_dir / data_file
             if src.exists():
                 shutil.copy(src, portable_dir / data_file)
         
-        # Crear script de lanzamiento
+        # Script de lanzamiento
         if target_platform == "windows":
             launcher = portable_dir / "Run-Soundvi.bat"
             launcher.write_text('''@echo off
@@ -267,30 +267,24 @@ echo ""
         
         size_mb = Path(zip_path if target_platform == "windows" else tar_path).stat().st_size / (1024 * 1024)
         print(f"[OK] Paquete portable creado: {size_mb:.2f} MB")
-        
         return True
     
     def build(self, target_platform, create_portable=False):
-        """Ejecutar build completo."""
         print(f"\n{'='*60}")
         print(f"BUILD SOUNDVI - {target_platform.upper()}")
         print(f"{'='*60}")
         
-        # 1. Verificar dependencias
         if not self.check_dependencies(target_platform):
             return False
         
-        # 2. Limpiar
         self.clean_build_dirs()
         
-        # 3. Build según plataforma
         config = self.configs[target_platform]
         success = False
         
         if config["builder"] == "pyinstaller":
             success = self.build_with_pyinstaller(target_platform)
         
-        # 4. Crear paquete portable si se solicita
         if success and create_portable:
             self.package_portable(target_platform)
         
@@ -305,12 +299,10 @@ def main():
     parser.add_argument("--clean", action="store_true", help="Limpiar antes de build")
     
     args = parser.parse_args()
-    
     builder = SoundviBuilder()
     
     if args.output_dir:
         builder.dist_dir = Path(args.output_dir)
-    
     if args.clean:
         builder.clean_build_dirs()
     

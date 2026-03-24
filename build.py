@@ -47,7 +47,6 @@ class SoundviBuilder:
         missing = []
         
         for req in config["requirements"]:
-            # Verificar paquete Python
             try:
                 __import__(req.replace("-", "_"))
             except ImportError:
@@ -80,43 +79,46 @@ class SoundviBuilder:
         output_name = f"soundvi{self.configs[target_platform]['ext']}"
         output_path = self.dist_dir / output_name
         
-        # Comando base Nuitka con optimizaciones de tamaño
+        # Comando base Nuitka (sin UPX ni LTO por ahora, para depurar)
         cmd = [
             sys.executable, "-m", "nuitka",
             "--standalone",
             "--onefile",
-            "--enable-plugin=upx",
-            "--lto=yes",
             "--remove-output",
             "--enable-plugin=tk-inter",
-            f"--output-dir={self.build_dir}",
-            f"--output-filename={output_name}",
+            "--output-dir", str(self.build_dir),
+            "--output-filename", output_name,
         ]
         
         # Plataforma específica
         if target_platform == "windows":
             cmd.append("--windows-console-mode=disable")
             if self.configs["windows"]["icon"].exists():
-                cmd.append(f"--windows-icon-from-ico={self.configs['windows']['icon']}")
+                cmd.append("--windows-icon-from-ico")
+                cmd.append(str(self.configs["windows"]["icon"]))
         elif target_platform == "linux":
             if self.configs["linux"]["icon"].exists():
-                cmd.append(f"--linux-icon={self.configs['linux']['icon']}")
+                cmd.append("--linux-icon")
+                cmd.append(str(self.configs["linux"]["icon"]))
         
         # Incluir datos
         data_dirs = ["fonts", "logos", "core", "gui", "modules", "utils"]
         for data_dir in data_dirs:
             src = self.project_dir / data_dir
             if src.exists():
-                cmd.append(f"--include-data-dir={src}={data_dir}")
+                cmd.append("--include-data-dir")
+                cmd.append(f"{src}={data_dir}")
         
         # Archivos individuales
         config_file = self.project_dir / "config.json"
         if config_file.exists():
-            cmd.append(f"--include-data-file={config_file}=config.json")
+            cmd.append("--include-data-file")
+            cmd.append(f"{config_file}=config.json")
         
         # Script principal
         cmd.append(str(main_script))
         
+        # Imprimir comando (primeros 10 argumentos para no saturar)
         print(f"[Nuitka] Comando: {' '.join(cmd[:10])}...")
         
         # Ejecutar
@@ -134,8 +136,12 @@ class SoundviBuilder:
                 else:
                     print(f"[ERROR] Archivo no creado: {built_file}")
             else:
-                print(f"[ERROR] Nuitka falló:")
-                print(result.stderr[:500])
+                print(f"[ERROR] Nuitka falló (código {result.returncode}):")
+                # Imprimir todo el stderr para diagnóstico
+                print("--- STDERR ---")
+                print(result.stderr)
+                print("--- STDOUT ---")
+                print(result.stdout)
         except Exception as e:
             print(f"[ERROR] Error ejecutando Nuitka: {e}")
         

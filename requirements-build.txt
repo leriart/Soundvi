@@ -1,7 +1,7 @@
 # Dependencias para build de ejecutables (usando PyInstaller)
-pyinstaller>=6.0
+pyinstaller
 
 # Herramientas de empaquetado (opcional, no son paquetes Python)
-appdirs>=1.4
-packaging>=20.0
+appdirs>
+packaging>
 

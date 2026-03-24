@@ -22,15 +22,17 @@ jobs:
     - name: Instalar dependencias del sistema
       run: |
         sudo apt-get update
-        sudo apt-get install -y ffmpeg python3-tk xvfb
+        sudo apt-get install -y ffmpeg python3-tk xvfb upx   # upx para compresión
 
     - name: Instalar dependencias Python
       run: |
         python -m pip install --upgrade pip
+        # Reemplazar opencv-python por opencv-python-headless para reducir tamaño
         if [ -f "requirements.txt" ]; then
+          sed -i 's/opencv-python/opencv-python-headless/g' requirements.txt
           pip install -r requirements.txt
         else
-          pip install ttkbootstrap numpy opencv-python pillow librosa moviepy pygame pydub soundfile scipy vosk matplotlib
+          pip install ttkbootstrap numpy opencv-python-headless pillow librosa moviepy pygame pydub soundfile scipy vosk
         fi
         pip install pyinstaller
 
@@ -41,8 +43,11 @@ jobs:
 
     - name: Build con PyInstaller (Linux)
       run: |
+        # Excluir módulos grandes que no son necesarios
         pyinstaller --onefile --name soundvi-linux \
           --noconsole \
+          --strip \
+          --upx-dir /usr/bin \
           --add-data "fonts:fonts" \
           --add-data "logos:logos" \
           --add-data "core:core" \
@@ -52,6 +57,9 @@ jobs:
           --add-data "config.json:." \
           $( [ -d "modules_config" ] && echo "--add-data modules_config:modules_config" ) \
           $( [ -d "vosk_models" ] && echo "--add-data vosk_models:vosk_models" ) \
+          --exclude-module matplotlib \
+          --exclude-module scipy \
+          --exclude-module moviepy \
           --hidden-import="PIL._imagingtk" \
           --hidden-import="PIL._imaging" \
           --hidden-import="PIL._tkinter_finder" \
@@ -59,39 +67,14 @@ jobs:
           main.py
         mv dist/soundvi-linux .
         chmod +x soundvi-linux
+        # Mostrar tamaño final
+        ls -lh soundvi-linux
 
-    - name: Crear paquete portable (Linux)
-      run: |
-        mkdir -p Soundvi-Linux
-        cp soundvi-linux Soundvi-Linux/
-        [ -d "fonts" ] && cp -r fonts Soundvi-Linux/
-        [ -d "logos" ] && cp -r logos Soundvi-Linux/
-        [ -d "core" ] && cp -r core Soundvi-Linux/
-        [ -d "gui" ] && cp -r gui Soundvi-Linux/
-        [ -d "modules" ] && cp -r modules Soundvi-Linux/
-        [ -d "utils" ] && cp -r utils Soundvi-Linux/
-        [ -d "modules_config" ] && cp -r modules_config Soundvi-Linux/
-        [ -d "vosk_models" ] && cp -r vosk_models Soundvi-Linux/
-        [ -f "config.json" ] && cp config.json Soundvi-Linux/
-        cat > Soundvi-Linux/run.sh << 'EOF'
-        #!/bin/bash
-        echo "Soundvi - Linux Portable"
-        echo "Para iniciar: ./soundvi-linux"
-        echo ""
-        echo "Requisito: FFmpeg instalado (sudo apt install ffmpeg)"
-        echo ""
-        ./soundvi-linux
-        EOF
-        chmod +x Soundvi-Linux/run.sh
-        tar -czf soundvi-portable-linux.tar.gz Soundvi-Linux/
-
-    - name: Subir artefactos Linux
+    - name: Subir artefacto Linux
       uses: actions/upload-artifact@v4
       with:
         name: soundvi-linux
-        path: |
-          soundvi-linux
-          soundvi-portable-linux.tar.gz
+        path: soundvi-linux
         retention-days: 7
 
   build-windows:
@@ -103,13 +86,21 @@ jobs:
       with:
         python-version: '3.10'
 
+    - name: Instalar UPX (Windows)
+      run: |
+        curl -L -o upx.zip https://github.com/upx/upx/releases/download/v4.2.4/upx-4.2.4-win64.zip
+        7z x upx.zip -y
+        echo "$(pwd)/upx-4.2.4-win64" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+
     - name: Instalar dependencias Python
       run: |
         python -m pip install --upgrade pip
         if (Test-Path "requirements.txt") {
+          # Reemplazar opencv-python por opencv-python-headless
+          (Get-Content requirements.txt) -replace 'opencv-python', 'opencv-python-headless' | Set-Content requirements.txt
           pip install -r requirements.txt
         } else {
-          pip install ttkbootstrap numpy opencv-python pillow librosa moviepy pygame pydub soundfile scipy vosk matplotlib
+          pip install ttkbootstrap numpy opencv-python-headless pillow librosa moviepy pygame pydub soundfile scipy vosk
         }
         pip install pyinstaller
 
@@ -127,11 +118,14 @@ jobs:
         )
         if (Test-Path "modules_config") { $addData += "modules_config;modules_config" }
         if (Test-Path "vosk_models") { $addData += "vosk_models;vosk_models" }
-        $args = @("--onefile", "--name", "soundvi-windows", "--windowed")
+        $args = @("--onefile", "--name", "soundvi-windows", "--windowed", "--strip")
         foreach ($item in $addData) {
           $args += "--add-data", $item
         }
         $args += @(
+          "--exclude-module", "matplotlib",
+          "--exclude-module", "scipy",
+          "--exclude-module", "moviepy",
           "--hidden-import=PIL._imagingtk",
           "--hidden-import=PIL._imaging",
           "--hidden-import=PIL._tkinter_finder",
@@ -140,40 +134,13 @@ jobs:
         )
         pyinstaller @args
         Move-Item dist/soundvi-windows.exe soundvi-windows.exe -Force
+        Get-ChildItem soundvi-windows.exe | Select-Object Name, Length
 
-    - name: Crear paquete portable (Windows)
-      run: |
-        New-Item -ItemType Directory -Force -Path Soundvi-Windows
-        Copy-Item soundvi-windows.exe Soundvi-Windows\
-        if (Test-Path "fonts") { Copy-Item -Recurse fonts Soundvi-Windows\ }
-        if (Test-Path "logos") { Copy-Item -Recurse logos Soundvi-Windows\ }
-        if (Test-Path "core") { Copy-Item -Recurse core Soundvi-Windows\ }
-        if (Test-Path "gui") { Copy-Item -Recurse gui Soundvi-Windows\ }
-        if (Test-Path "modules") { Copy-Item -Recurse modules Soundvi-Windows\ }
-        if (Test-Path "utils") { Copy-Item -Recurse utils Soundvi-Windows\ }
-        if (Test-Path "modules_config") { Copy-Item -Recurse modules_config Soundvi-Windows\ }
-        if (Test-Path "vosk_models") { Copy-Item -Recurse vosk_models Soundvi-Windows\ }
-        if (Test-Path "config.json") { Copy-Item config.json Soundvi-Windows\ }
-        @"
-        @echo off
-        echo Soundvi - Windows Portable
-        echo.
-        echo Para iniciar, ejecute soundvi-windows.exe
-        echo.
-        echo Requisito: FFmpeg instalado y en PATH
-        echo Descarga: https://ffmpeg.org/download.html
-        echo.
-        pause
-        "@ | Out-File -FilePath Soundvi-Windows\Run-Soundvi.bat -Encoding ASCII
-        Compress-Archive -Path Soundvi-Windows\* -DestinationPath soundvi-portable-windows.zip -Force
-
-    - name: Subir artefactos Windows
+    - name: Subir artefacto Windows
       uses: actions/upload-artifact@v4
       with:
         name: soundvi-windows
-        path: |
-          soundvi-windows.exe
-          soundvi-portable-windows.zip
+        path: soundvi-windows.exe
         retention-days: 7
 
   create-release:

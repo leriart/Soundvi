@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Build Script para Soundvi - Soporta PyInstaller y PyOxidizer (CORREGIDO)
-Versión corregida con sintaxis correcta para PyOxidizer y sin espacios iniciales.
+Versión final con sintaxis Starlark válida.
 """
 
 import os
@@ -191,7 +191,7 @@ exe = EXE(
 '''
     
     # --------------------------------------------------------------------------
-    # Builder: PyOxidizer (con plantilla final sin espacios iniciales)
+    # Builder: PyOxidizer (sin try/except)
     # --------------------------------------------------------------------------
     def build_with_pyoxidizer(self, target_platform):
         print(f"[PyOxidizer] Compilando para {target_platform}...")
@@ -220,12 +220,12 @@ exe = EXE(
         return False
     
     def _create_pyoxidizer_config(self, target_platform):
-        """Genera pyoxidizer.bzl usando la plantilla final sin espacios iniciales."""
+        """Genera pyoxidizer.bzl con sintaxis Starlark válida (sin try/except)."""
         icon_path = self.configs[target_platform]["icon"]
         ext = self.configs[target_platform]["ext"]
         exe_name = f"soundvi{ext}"
         
-        # Contenido sin sangría inicial (la primera línea es la definición)
+        # Contenido sin espacios iniciales y sin try/except
         config = '''# pyoxidizer.bzl para Soundvi - Generador de Video con Visualizador
 # Configuración específica para el proyecto Soundvi de https://github.com/leriart/Soundvi
 
@@ -313,31 +313,24 @@ def make_exe():
     # Incluir directorios de configuración de módulos
     exe.add_python_resources(exe.read_directory("modules_config", dest="modules_config"))
     
-    # Configuración específica de plataforma
+    # Configuración específica de plataforma (icono asignado directamente)
     if VARS.get("TARGET_TRIPLE", "").endswith("-windows-msvc"):
         # Configuración para Windows
         exe.windows_runtime_dlls_mode = "always"
         exe.windows_subsystem = "windows"  # O "console" para aplicaciones de consola
-        
-        # Configurar icono si existe
-        icon_path = "logos/logo.ico"
-        if file_exists(icon_path):
-            exe.icon = icon_path
-            print("[PyOxidizer] Icono configurado: " + icon_path)
+        # Configurar icono (se asume que el archivo existe)
+        exe.icon = "logos/logo.ico"
+        print("[PyOxidizer] Icono configurado: logos/logo.ico")
             
     elif VARS.get("TARGET_TRIPLE", "").endswith("-linux-"):
         # Configuración para Linux
-        icon_path = "logos/logo.png"
-        if file_exists(icon_path):
-            exe.icon = icon_path
-            print("[PyOxidizer] Icono configurado: " + icon_path)
+        exe.icon = "logos/logo.png"
+        print("[PyOxidizer] Icono configurado: logos/logo.png")
             
     elif VARS.get("TARGET_TRIPLE", "").endswith("-darwin"):
         # Configuración para macOS
-        icon_path = "logos/logo.icns"
-        if file_exists(icon_path):
-            exe.icon = icon_path
-            print("[PyOxidizer] Icono configurado: " + icon_path)
+        exe.icon = "logos/logo.icns"
+        print("[PyOxidizer] Icono configurado: logos/logo.icns")
     
     return exe
 
@@ -352,7 +345,7 @@ def make_install(exe):
     
     # Agregar archivos adicionales si es necesario
     for extra_file in ["README.md", "LICENSE"]:
-        if file_exists(extra_file):
+        if read_file(extra_file):
             files.add_file(extra_file)
     
     return files
@@ -384,14 +377,6 @@ def make_macos_app_bundle(exe):
     
     return bundle
 
-# Función auxiliar para verificar existencia de archivos
-def file_exists(path):
-    """Verifica si un archivo existe en el contexto de Starlark."""
-    try:
-        return read_file(path) is not None
-    except:
-        return False
-
 # Registrar targets
 register_target("exe", make_exe)
 register_target("resources", make_embedded_resources, depends=["exe"])
@@ -404,11 +389,11 @@ elif VARS.get("TARGET_TRIPLE", "").endswith("-darwin"):
     register_target("macos_bundle", make_macos_app_bundle, depends=["exe"])
 
 resolve_targets()
-''' % exe_name  # Sustituir el nombre del ejecutable al final
+''' % exe_name
         
         with open(self.project_dir / "pyoxidizer.bzl", "w") as f:
             f.write(config)
-        print("[PyOxidizer] Archivo de configuración pyoxidizer.bzl generado con plantilla final (sin espacios iniciales).")
+        print("[PyOxidizer] Archivo de configuración pyoxidizer.bzl generado (sin try/except).")
     
     # --------------------------------------------------------------------------
     # Helper para encontrar el ejecutable

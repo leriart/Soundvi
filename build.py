@@ -28,10 +28,10 @@ class SoundviBuilder:
                 "requirements": ["nuitka", "ordered-set", "zstandard"],
             },
             "linux": {
-                "ext": ".AppImage",
+                "ext": "",           # Sin extensión (ejecutable normal)
                 "builder": "nuitka",
                 "icon": self.project_dir / "logos" / "Cagando.png",
-                "requirements": ["nuitka", "ordered-set", "appimagetool"],
+                "requirements": ["nuitka", "ordered-set"],
             },
             "macos": {
                 "ext": ".app",
@@ -87,16 +87,24 @@ class SoundviBuilder:
         output_name = f"soundvi{self.configs[target_platform]['ext']}"
         output_path = self.dist_dir / output_name
         
-        # Comando base Nuitka
+        # Comando base Nuitka con optimizaciones de tamaño
         cmd = [
             sys.executable, "-m", "nuitka",
             "--standalone",
             "--onefile",
+            "--enable-plugin=upx",          # Compresión UPX (reduce tamaño)
+            "--lto=yes",                    # Link Time Optimization
             "--remove-output",
             "--enable-plugin=tk-inter",
             "--output-dir", str(self.build_dir),
             "--output-filename", output_name,
         ]
+        
+        # Opcional: excluir módulos pesados que no se usan (comentar si se necesitan)
+        # cmd.extend(["--exclude-module", "matplotlib"])   # si no se usa gráficos
+        # cmd.extend(["--exclude-module", "scipy"])        # si no se necesita SciPy
+        # cmd.extend(["--exclude-module", "numba"])        # si no se usa numba
+        # cmd.extend(["--exclude-module", "sklearn"])      # si no se usa scikit-learn
         
         # Plataforma específica
         if target_platform == "windows":
@@ -259,36 +267,6 @@ coll = COLLECT(
 )
 '''
     
-    def create_appimage(self):
-        """Crear AppImage para Linux."""
-        print("📦 Creando AppImage...")
-        
-        # Requiere appimagetool
-        appimagetool = shutil.which("appimagetool")
-        if not appimagetool:
-            # Descargar si no existe
-            appimagetool = "/tmp/appimagetool-x86_64.AppImage"
-            if not Path(appimagetool).exists():
-                print("📥 Descargando appimagetool...")
-                subprocess.run([
-                    "wget", "-q", 
-                    "https://github.com/AppImage/AppImageKit/releases/download/continuous/appimagetool-x86_64.AppImage",
-                    "-O", appimagetool
-                ], check=True)
-                os.chmod(appimagetool, 0o755)
-        
-        # Crear estructura AppDir
-        appdir = self.build_dir / "Soundvi.AppDir"
-        if appdir.exists():
-            shutil.rmtree(appdir)
-        
-        # Copiar ejecutable y recursos
-        # (Esto es simplificado - en realidad necesitarías una estructura completa)
-        
-        print("⚠️  Creación de AppImage requiere estructura completa")
-        print("   Usa Nuitka --onefile para Linux en su lugar")
-        return False
-    
     def package_portable(self, target_platform):
         """Crear paquete portable."""
         print(f"📦 Creando paquete portable para {target_platform}...")
@@ -379,11 +357,7 @@ echo ""
         elif config["builder"] == "pyinstaller":
             success = self.build_with_pyinstaller(target_platform)
         
-        # 4. Crear AppImage si es Linux
-        if success and target_platform == "linux" and config["ext"] == ".AppImage":
-            success = self.create_appimage()
-        
-        # 5. Crear paquete portable si se solicita
+        # 4. Crear paquete portable si se solicita
         if success and create_portable:
             self.package_portable(target_platform)
         

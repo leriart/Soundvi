@@ -2,6 +2,6 @@
 pyinstaller
 
 # Herramientas de empaquetado (opcional, no son paquetes Python)
-appdirs>
-packaging>
+appdirs
+packaging
 

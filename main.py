@@ -18,36 +18,57 @@ import sys
 import os
 import multiprocessing as mp
 import threading
-import signal  # <-- AÑADIDO: Para manejo de señales
-import socket  # <-- AÑADIDO: Para instancia única
-import atexit  # <-- AÑADIDO: Para limpieza al salir
+import signal
+import socket
+import atexit
 
-# -- Asegurar ruta del proyecto -----------------------------------------------
-_RAIZ_PROYECTO = os.path.dirname(os.path.abspath(__file__))
-if _RAIZ_PROYECTO not in sys.path:
-    sys.path.insert(0, _RAIZ_PROYECTO)
+# -----------------------------------------------------------------------------
+# Detección de entorno empaquetado (PyInstaller, PyOxidizer)
+# -----------------------------------------------------------------------------
+def is_frozen():
+    """Retorna True si el código se ejecuta dentro de un ejecutable empaquetado."""
+    return getattr(sys, 'frozen', False) or hasattr(sys, '_MEIPASS') or hasattr(sys, 'oxidized')
+
+def resource_path(relative_path):
+    """
+    Obtiene la ruta absoluta a un recurso, funcionando en desarrollo y en ejecutable.
+    En modo empaquetado, busca en el directorio del ejecutable.
+    """
+    if is_frozen():
+        # Para PyInstaller usa sys._MEIPASS; para PyOxidizer usamos sys.executable
+        if hasattr(sys, '_MEIPASS'):
+            base_path = sys._MEIPASS
+        else:
+            base_path = os.path.dirname(sys.executable)
+    else:
+        base_path = os.path.dirname(os.path.abspath(__file__))
+    return os.path.join(base_path, relative_path)
+
+# -----------------------------------------------------------------------------
+# Ajuste de sys.path para desarrollo (en empaquetado ya está todo en PYTHONPATH)
+# -----------------------------------------------------------------------------
+if not is_frozen():
+    # En desarrollo, añadir la raíz del proyecto al path
+    _RAIZ_PROYECTO = os.path.dirname(os.path.abspath(__file__))
+    if _RAIZ_PROYECTO not in sys.path:
+        sys.path.insert(0, _RAIZ_PROYECTO)
 
 # =============================================================================
 # PARCHE: Instancia única y manejo de señales
 # =============================================================================
-
 def setup_single_instance():
     """Asegurar que solo haya una instancia ejecutándose."""
     try:
-        # Intentar crear socket lock (más confiable que archivo)
         lock_socket = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
-        # Usar abstract socket (comienza con \0) que se limpia automáticamente
         lock_socket.bind('\0soundvi_single_instance_lock')
         print("[*] Soundvi iniciado (instancia única)")
         return lock_socket
     except socket.error:
-        # Ya hay una instancia ejecutándose
         print("[!] ERROR: Ya hay una instancia de Soundvi ejecutándose")
         print("[!] Cierra la ventana existente antes de abrir otra.")
         sys.exit(1)
 
 def cleanup_single_instance(lock_socket):
-    """Limpiar recursos al salir."""
     if lock_socket:
         try:
             lock_socket.close()
@@ -55,15 +76,12 @@ def cleanup_single_instance(lock_socket):
             pass
 
 def signal_handler(signum, frame):
-    """Manejar señales de terminación."""
     print("\n[*] Recibida señal de terminación. Cerrando Soundvi...")
     sys.exit(0)
 
-# Configurar manejadores de señales
-signal.signal(signal.SIGINT, signal_handler)   # Ctrl+C
-signal.signal(signal.SIGTERM, signal_handler)  # kill command
+signal.signal(signal.SIGINT, signal_handler)
+signal.signal(signal.SIGTERM, signal_handler)
 
-# Configurar instancia única
 lock_socket = setup_single_instance()
 atexit.register(lambda: cleanup_single_instance(lock_socket))
 
@@ -109,7 +127,7 @@ def main():
     optimize_python_settings()
     check_dependencies()
 
-    # -- Importar GUI después de verificar dependencias -----------------------
+    # Importar GUI después de verificar dependencias
     try:
         from gui.app import SoundviApp
     except ImportError as e:
@@ -117,7 +135,6 @@ def main():
         print("[!] Asegúrate de que la estructura de carpetas sea correcta.")
         sys.exit(1)
 
-    # -- Inicializar y ejecutar aplicación ------------------------------------
     print("[*] Iniciando interfaz gráfica...")
     app = SoundviApp()
     app.run()

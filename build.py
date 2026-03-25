@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Build Script para Soundvi - Soporta PyInstaller y PyOxidizer (CORREGIDO)
-Versión final con sintaxis PyOxidizer 0.24 compatible.
+Versión final con PyOxidizer simplificado (sin exclusión de módulos).
 """
 
 import os
@@ -191,7 +191,7 @@ exe = EXE(
 '''
     
     # --------------------------------------------------------------------------
-    # Builder: PyOxidizer (compatible 0.24)
+    # Builder: PyOxidizer (simplificado, sin exclusión de módulos)
     # --------------------------------------------------------------------------
     def build_with_pyoxidizer(self, target_platform):
         print(f"[PyOxidizer] Compilando para {target_platform}...")
@@ -220,12 +220,8 @@ exe = EXE(
         return False
     
     def _create_pyoxidizer_config(self, target_platform):
-        """Genera pyoxidizer.bzl con sintaxis compatible con PyOxidizer 0.24."""
-        # Nombre del ejecutable sin extensión (PyOxidizer añade la correcta)
-        exe_name = "soundvi"
-        
-        config = '''# pyoxidizer.bzl para Soundvi - Generador de Video con Visualizador
-# Configuración compatible con PyOxidizer 0.24
+        """Genera pyoxidizer.bzl simplificado (sin exclusión de módulos)."""
+        config = '''# pyoxidizer.bzl para Soundvi - Configuración simplificada
 
 def make_exe():
     """Crea un ejecutable para Soundvi."""
@@ -233,16 +229,8 @@ def make_exe():
     # Usar la distribución de Python por defecto
     dist = default_python_distribution()
     
-    # Configurar política de empaquetado
+    # Política de empaquetado por defecto
     policy = dist.make_python_packaging_policy()
-    
-    # Excluir módulos pesados que no son necesarios
-    for mod in [
-        "matplotlib", "sklearn", "scikit-learn", "imageio_ffmpeg",
-        "PyQt5", "PySide2", "PyQt6", "IPython", "jupyter",
-        "tensorflow", "torch", "pandas", "notebook",
-    ]:
-        policy.exclude_module(mod)
     
     # Configuración del intérprete Python
     python_config = dist.make_python_interpreter_config()
@@ -250,7 +238,7 @@ def make_exe():
     # Ejecutar el módulo main al iniciar
     python_config.run_module = "main"
     
-    # Configurar para usar el intérprete embebido
+    # Usar intérprete embebido
     python_config.use_module_runner = True
     
     # Crear ejecutable
@@ -309,7 +297,7 @@ def make_exe():
     # Incluir directorios de configuración de módulos
     exe.add_python_resources(exe.read_directory("modules_config", dest="modules_config"))
     
-    # Configuración específica de plataforma (icono asignado directamente)
+    # Configuración específica de plataforma
     if VARS.get("TARGET_TRIPLE", "").endswith("-windows-msvc"):
         # Configuración para Windows
         exe.windows_runtime_dlls_mode = "always"
@@ -366,7 +354,7 @@ def make_macos_app_bundle(exe):
     bundle.add_macos_manifest(m)
     return bundle
 
-# Registrar targets (todos, sin condicionales globales)
+# Registrar targets
 register_target("exe", make_exe)
 register_target("resources", make_embedded_resources, depends=["exe"])
 register_target("install", make_install, depends=["exe"], default=True)
@@ -377,7 +365,7 @@ resolve_targets()
 '''
         with open(self.project_dir / "pyoxidizer.bzl", "w") as f:
             f.write(config)
-        print("[PyOxidizer] Archivo de configuración pyoxidizer.bzl generado (compatible PyOxidizer 0.24).")
+        print("[PyOxidizer] Archivo de configuración pyoxidizer.bzl generado (sin exclusión de módulos).")
     
     # --------------------------------------------------------------------------
     # Helper para encontrar el ejecutable

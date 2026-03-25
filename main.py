@@ -29,7 +29,6 @@ def resource_path(relative_path):
     En modo empaquetado, busca en el directorio del ejecutable.
     """
     if is_frozen():
-        # Para PyInstaller usa sys._MEIPASS; para PyOxidizer usamos sys.executable
         if hasattr(sys, '_MEIPASS'):
             base_path = sys._MEIPASS
         else:
@@ -53,10 +52,9 @@ def patch_ttkbootstrap_msgcat():
         return
     try:
         import ttkbootstrap.localization.msgcat as msgcat_module
-        # La clase se llama MessageCatalog (con mayúscula M)
         if hasattr(msgcat_module, 'MessageCatalog'):
-            original = msgcat_module.MessageCatalog.set_many
-            def noop_set_many(self, mapping):
+            # Reemplazar con función que acepta cualquier argumento
+            def noop_set_many(self, *args, **kwargs):
                 pass
             msgcat_module.MessageCatalog.set_many = noop_set_many
             print("[*] ttkbootstrap patcheado (msgcat desactivado)")

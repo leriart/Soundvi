@@ -1,0 +1,51 @@
+name: Build Soundvi
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    
+    runs-on: ${{ matrix.os }}
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: "3.10"
+        
+    - name: Install Rust
+      uses: actions-rs/toolchain@v1
+      with:
+        toolchain: stable
+        profile: minimal
+        override: true
+        
+    - name: Install PyOxidizer
+      run: pip install pyoxidizer
+        
+    - name: Install Python dependencies
+      run: pip install -r requirements.txt
+        
+    - name: Generate PyOxidizer configuration
+      run: python build.py --platform ${{ matrix.os == 'ubuntu-latest' && 'linux' || matrix.os == 'windows-latest' && 'windows' || 'macos' }} --builder pyoxidizer
+        
+    - name: Build executable
+      run: pyoxidizer build --release
+        
+    - name: Upload artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: soundvi-${{ matrix.os }}
+        path: build/
+        if-no-files-found: warn

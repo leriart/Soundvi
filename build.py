@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Build Script for Soundvi - Supports PyInstaller and PyOxidizer
-Versión final: PyOxidizer con entorno limpio (solo .py + requirements.txt).
+Versión final: PyOxidizer con entorno limpio (solo archivos .py copiados manualmente).
 """
 
 import os
@@ -191,7 +191,7 @@ exe = EXE(
 '''
     
     # --------------------------------------------------------------------------
-    # Builder: PyOxidizer (con entorno limpio de solo .py + requirements.txt)
+    # Builder: PyOxidizer (entorno limpio copiando solo .py)
     # --------------------------------------------------------------------------
     def build_with_pyoxidizer(self, target_platform):
         print(f"[PyOxidizer] Compilando para {target_platform}...")
@@ -200,39 +200,49 @@ exe = EXE(
         temp_dir = self.project_dir / "pyoxidizer_temp"
         if temp_dir.exists():
             shutil.rmtree(temp_dir)
+        temp_dir.mkdir()
         
-        # Función para ignorar archivos no .py excepto requirements.txt
-        def ignore_non_py(dirname, files):
-            ignores = []
-            for f in files:
-                fp = os.path.join(dirname, f)
-                if os.path.isfile(fp):
-                    # Permitir requirements.txt
-                    if f == "requirements.txt":
-                        continue
-                    if not f.endswith('.py'):
-                        ignores.append(f)
-                # También ignoramos directorios que no queremos copiar
-                if os.path.isdir(fp) and f in ['build', 'dist', 'build_output', '__pycache__', '.git', 'pyoxidizer_temp']:
-                    ignores.append(f)
-            return ignores
+        # Copiar todos los archivos .py preservando estructura
+        print("[PyOxidizer] Copiando archivos .py al entorno limpio...")
+        py_files = []
+        # Directorios a ignorar
+        ignore_dirs = {'build', 'dist', 'build_output', '__pycache__', '.git', 'pyoxidizer_temp'}
         
-        # Copiar el proyecto completo, pero solo archivos .py y requirements.txt
-        shutil.copytree(self.project_dir, temp_dir, ignore=ignore_non_py)
-        print("[PyOxidizer] Copiado proyecto a entorno limpio (archivos .py + requirements.txt).")
+        for root, dirs, files in os.walk(self.project_dir):
+            # Modificar dirs in-place para evitar entrar en directorios ignorados
+            dirs[:] = [d for d in dirs if d not in ignore_dirs]
+            
+            # Crear subdirectorio equivalente en temp
+            rel_path = Path(root).relative_to(self.project_dir)
+            target_dir = temp_dir / rel_path
+            target_dir.mkdir(parents=True, exist_ok=True)
+            
+            # Copiar archivos .py
+            for file in files:
+                if file.endswith('.py'):
+                    src = Path(root) / file
+                    dst = target_dir / file
+                    shutil.copy2(src, dst)
+                    py_files.append(dst)
         
-        # Asegurar __init__.py en directorios que lo necesiten
-        for pkg in ["core", "gui", "modules", "utils"]:
-            pkg_dir = temp_dir / pkg
+        # Copiar requirements.txt si existe
+        req_src = self.project_dir / "requirements.txt"
+        if req_src.exists():
+            shutil.copy2(req_src, temp_dir / "requirements.txt")
+            print("[PyOxidizer] Copiado requirements.txt.")
+        else:
+            print("[PyOxidizer] Advertencia: No se encontró requirements.txt.")
+        
+        # Asegurar __init__.py en los directorios necesarios
+        for pkg in [".", "core", "gui", "modules", "utils"]:
+            pkg_dir = temp_dir / pkg if pkg != "." else temp_dir
             if pkg_dir.exists():
                 init_file = pkg_dir / "__init__.py"
                 if not init_file.exists():
                     init_file.touch()
+                    print(f"[PyOxidizer] Creado {init_file}")
         
-        # También asegurar __init__.py en la raíz
-        init_root = temp_dir / "__init__.py"
-        if not init_root.exists():
-            init_root.touch()
+        print(f"[PyOxidizer] Copiados {len(py_files)} archivos .py.")
         
         try:
             # Generar pyoxidizer.bzl dentro del temporal
@@ -312,7 +322,7 @@ register_target("exe", make_exe)
 register_target("install", make_install, depends=["exe"], default=True)
 resolve_targets()
 '''
-        with open(temp_dir / "pyoxidizer.bzl", "w") as f:
+        with open(temp_dir / "pyoxidizer.bzl", "w", encoding="utf-8") as f:
             f.write(config)
         print("[PyOxidizer] Archivo pyoxidizer.bzl generado en entorno temporal.")
     

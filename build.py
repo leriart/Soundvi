@@ -157,6 +157,7 @@ a = Analysis(
         'PIL', 'scipy', 'pygame', 'pydub', 'soundfile',
         'tkinter', '_tkinter',
         'PIL._imaging', 'PIL._imagingtk',
+        'PIL._tkinter_finder',   # <-- AÑADIDO
         'numpy.core._dtype_ctypes', 'numpy.lib.format',
         'scipy.interpolate', 'scipy.signal', 'scipy.fft',
         'librosa.core.fft', 'librosa.core.audio', 'librosa.util',

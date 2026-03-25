@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Build Script for Soundvi - Supports PyInstaller and PyOxidizer
-Versión final con PyOxidizer funcional (incluye main.py como parte del paquete raíz).
+Versión final con PyOxidizer: solo código Python incluido, datos en paquete portable.
 """
 
 import os
@@ -191,7 +191,7 @@ exe = EXE(
 '''
     
     # --------------------------------------------------------------------------
-    # Builder: PyOxidizer (configuración con paquete raíz)
+    # Builder: PyOxidizer (solo código Python, datos externos)
     # --------------------------------------------------------------------------
     def build_with_pyoxidizer(self, target_platform):
         print(f"[PyOxidizer] Compilando para {target_platform}...")
@@ -220,14 +220,8 @@ exe = EXE(
         return False
     
     def _create_pyoxidizer_config(self, target_platform):
-        """Genera pyoxidizer.bzl incluyendo el paquete raíz y los subpaquetes."""
-        # Crear __init__.py en la raíz si no existe para que la raíz sea un paquete
-        init_file = self.project_dir / "__init__.py"
-        if not init_file.exists():
-            init_file.touch()
-            print("[PyOxidizer] Creado __init__.py vacío en la raíz para empaquetado completo.")
-        
-        config = '''# pyoxidizer.bzl for Soundvi - Incluye paquete raíz y subpaquetes
+        """Genera pyoxidizer.bzl incluyendo solo código Python (main.py + paquetes)."""
+        config = '''# pyoxidizer.bzl for Soundvi - Solo código Python, datos externos
 def make_exe():
     dist = default_python_distribution()
     policy = dist.make_python_packaging_policy()
@@ -248,11 +242,12 @@ def make_exe():
     # Instalar dependencias
     exe.add_python_resources(exe.pip_install(["-r", "requirements.txt"]))
 
-    # Incluir el paquete raíz (con main.py y __init__.py) y los subpaquetes
-    exe.add_python_resources(exe.read_package_root(
-        path=".",
-        packages=["."] + ["core", "gui", "modules", "utils"],
-    ))
+    # Incluir main.py como módulo principal
+    exe.add_python_resources(exe.read_file("main.py"))
+
+    # Incluir paquetes de código
+    for pkg in ["core", "gui", "modules", "utils"]:
+        exe.add_python_resources(exe.read_package_root(path=pkg, packages=[pkg]))
 
     # Configuración específica de plataforma
     target_triple = VARS.get("target_triple", "")
@@ -273,7 +268,7 @@ resolve_targets()
 '''
         with open(self.project_dir / "pyoxidizer.bzl", "w") as f:
             f.write(config)
-        print("[PyOxidizer] Archivo pyoxidizer.bzl generado (paquete raíz incluido).")
+        print("[PyOxidizer] Archivo pyoxidizer.bzl generado (solo código Python).")
     
     # --------------------------------------------------------------------------
     # Helper para encontrar el ejecutable

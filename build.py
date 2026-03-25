@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
-Build Script para Soundvi - Soporta PyInstaller y PyOxidizer (CORREGIDO)
-Versión final con PyOxidizer simplificado (sin exclusión de módulos).
+Build Script para Soundvi - Soporta PyInstaller y PyOxidizer
+Versión final con PyOxidizer configurado según docs oficiales.
 """
 
 import os
@@ -191,7 +191,7 @@ exe = EXE(
 '''
     
     # --------------------------------------------------------------------------
-    # Builder: PyOxidizer (simplificado, sin exclusión de módulos)
+    # Builder: PyOxidizer (versión funcional según docs)
     # --------------------------------------------------------------------------
     def build_with_pyoxidizer(self, target_platform):
         print(f"[PyOxidizer] Compilando para {target_platform}...")
@@ -220,28 +220,24 @@ exe = EXE(
         return False
     
     def _create_pyoxidizer_config(self, target_platform):
-        """Genera pyoxidizer.bzl simplificado (sin exclusión de módulos)."""
-        config = '''# pyoxidizer.bzl para Soundvi - Configuración simplificada
+        """Genera pyoxidizer.bzl funcional para PyOxidizer 0.24."""
+        config = '''# pyoxidizer.bzl para Soundvi - Configuración funcional
+# Basado en ejemplos oficiales de PyOxidizer
 
 def make_exe():
-    """Crea un ejecutable para Soundvi."""
-    
-    # Usar la distribución de Python por defecto
+    # Obtener la distribución de Python
     dist = default_python_distribution()
     
     # Política de empaquetado por defecto
     policy = dist.make_python_packaging_policy()
     
-    # Configuración del intérprete Python
+    # Configuración del intérprete
     python_config = dist.make_python_interpreter_config()
     
-    # Ejecutar el módulo main al iniciar
+    # Ejecutar el módulo main
     python_config.run_module = "main"
     
-    # Usar intérprete embebido
-    python_config.use_module_runner = True
-    
-    # Crear ejecutable
+    # Crear el ejecutable
     exe = dist.to_python_executable(
         name="soundvi",
         packaging_policy=policy,
@@ -249,123 +245,49 @@ def make_exe():
     )
     
     # Instalar dependencias desde requirements.txt
-    print("[PyOxidizer] Instalando dependencias desde requirements.txt...")
     exe.add_python_resources(exe.pip_install(["-r", "requirements.txt"]))
     
-    # Incluir módulos de código fuente como paquetes Python
-    print("[PyOxidizer] Incluyendo módulos de código fuente...")
+    # Incluir el código fuente
+    for pkg in ["core", "gui", "modules", "utils"]:
+        exe.add_python_resources(exe.read_package_root(
+            path=pkg,
+            packages=[pkg],
+            excludes=["**/__pycache__", "**/*.pyc"],
+        ))
     
-    # Core - motor de procesamiento
-    exe.add_python_resources(exe.read_package_root(
-        path="core",
-        packages=["core"],
-        excludes=["**/__pycache__", "**/*.pyc"],
-    ))
-    
-    # GUI - interfaz gráfica
-    exe.add_python_resources(exe.read_package_root(
-        path="gui",
-        packages=["gui"],
-        excludes=["**/__pycache__", "**/*.pyc"],
-    ))
-    
-    # Modules - sistema modular plug-and-play
-    exe.add_python_resources(exe.read_package_root(
-        path="modules",
-        packages=["modules"],
-        excludes=["**/__pycache__", "**/*.pyc"],
-    ))
-    
-    # Utils - utilidades
-    exe.add_python_resources(exe.read_package_root(
-        path="utils",
-        packages=["utils"],
-        excludes=["**/__pycache__", "**/*.pyc"],
-    ))
-    
-    # Incluir main.py como módulo principal
+    # Archivos principales
     exe.add_python_resources(exe.read_file("main.py", dest="main.py"))
-    
-    # Incluir archivos de configuración
     exe.add_python_resources(exe.read_file("config.json", dest="config.json"))
     exe.add_python_resources(exe.read_file("README.md", dest="README.md"))
     
-    # Incluir directorios de recursos
+    # Directorios de recursos
     exe.add_python_resources(exe.read_directory("fonts", dest="fonts"))
     exe.add_python_resources(exe.read_directory("logos", dest="logos"))
-    
-    # Incluir directorios de configuración de módulos
     exe.add_python_resources(exe.read_directory("modules_config", dest="modules_config"))
     
-    # Configuración específica de plataforma
+    # Configuración de plataforma (icono)
     if VARS.get("TARGET_TRIPLE", "").endswith("-windows-msvc"):
-        # Configuración para Windows
-        exe.windows_runtime_dlls_mode = "always"
-        exe.windows_subsystem = "windows"  # O "console" para aplicaciones de consola
+        exe.windows_subsystem = "windows"
         exe.icon = "logos/logo.ico"
-        print("[PyOxidizer] Icono configurado: logos/logo.ico")
-            
     elif VARS.get("TARGET_TRIPLE", "").endswith("-linux-"):
         exe.icon = "logos/logo.png"
-        print("[PyOxidizer] Icono configurado: logos/logo.png")
-            
     elif VARS.get("TARGET_TRIPLE", "").endswith("-darwin"):
         exe.icon = "logos/logo.icns"
-        print("[PyOxidizer] Icono configurado: logos/logo.icns")
     
     return exe
 
-def make_embedded_resources(exe):
-    """Crea recursos embebidos a partir del ejecutable."""
-    return exe.to_embedded_resources()
-
 def make_install(exe):
-    """Crea un manifiesto de instalación."""
     files = FileManifest()
     files.add_python_resource(".", exe)
-    # Agregar archivos adicionales si es necesario
-    for extra_file in ["README.md", "LICENSE"]:
-        if read_file(extra_file):
-            files.add_file(extra_file)
     return files
 
-def make_windows_installer(exe):
-    """Crea un instalador MSI para Windows."""
-    return exe.to_wix_msi_builder(
-        id_prefix="soundvi",
-        product_name="Soundvi",
-        product_version="1.0.0",
-        product_manufacturer="Lerit",
-        arch="x64" if "x86_64" in VARS.get("TARGET_TRIPLE", "") else "x86",
-    )
-
-def make_macos_app_bundle(exe):
-    """Crea un bundle de aplicación para macOS."""
-    bundle = MacOsApplicationBundleBuilder("Soundvi")
-    bundle.set_info_plist_required_keys(
-        display_name="Soundvi",
-        identifier="com.leriart.soundvi",
-        version="1.0.0",
-        signature="????",
-        executable="soundvi",
-    )
-    m = FileManifest()
-    m.add_python_resource(".", exe)
-    bundle.add_macos_manifest(m)
-    return bundle
-
-# Registrar targets
 register_target("exe", make_exe)
-register_target("resources", make_embedded_resources, depends=["exe"])
 register_target("install", make_install, depends=["exe"], default=True)
-register_target("msi_installer", make_windows_installer, depends=["exe"])
-register_target("macos_bundle", make_macos_app_bundle, depends=["exe"])
-
 resolve_targets()
 '''
         with open(self.project_dir / "pyoxidizer.bzl", "w") as f:
             f.write(config)
-        print("[PyOxidizer] Archivo de configuración pyoxidizer.bzl generado (sin exclusión de módulos).")
+        print("[PyOxidizer] Archivo de configuración pyoxidizer.bzl generado (versión funcional).")
     
     # --------------------------------------------------------------------------
     # Helper para encontrar el ejecutable
@@ -383,6 +305,7 @@ resolve_targets()
                 if cand.exists():
                     return cand
         elif builder == "pyoxidizer":
+            # PyOxidizer suele poner el ejecutable en build/<target>/release/install/
             build_dir = self.project_dir / "build"
             if build_dir.exists():
                 for root, dirs, files in os.walk(build_dir):

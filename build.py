@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Build Script for Soundvi - Supports PyInstaller and PyOxidizer
-Versión final: PyOxidizer con entorno limpio de solo Python.
+Versión final: PyOxidizer con entorno limpio (solo .py + requirements.txt).
 """
 
 import os
@@ -191,7 +191,7 @@ exe = EXE(
 '''
     
     # --------------------------------------------------------------------------
-    # Builder: PyOxidizer (con entorno limpio de solo Python)
+    # Builder: PyOxidizer (con entorno limpio de solo .py + requirements.txt)
     # --------------------------------------------------------------------------
     def build_with_pyoxidizer(self, target_platform):
         print(f"[PyOxidizer] Compilando para {target_platform}...")
@@ -201,21 +201,25 @@ exe = EXE(
         if temp_dir.exists():
             shutil.rmtree(temp_dir)
         
-        # Función para copiar solo archivos .py
+        # Función para ignorar archivos no .py excepto requirements.txt
         def ignore_non_py(dirname, files):
             ignores = []
             for f in files:
                 fp = os.path.join(dirname, f)
-                if os.path.isfile(fp) and not f.endswith('.py'):
-                    ignores.append(f)
+                if os.path.isfile(fp):
+                    # Permitir requirements.txt
+                    if f == "requirements.txt":
+                        continue
+                    if not f.endswith('.py'):
+                        ignores.append(f)
                 # También ignoramos directorios que no queremos copiar
-                if os.path.isdir(fp) and f in ['build', 'dist', 'build_output', '__pycache__', '.git']:
+                if os.path.isdir(fp) and f in ['build', 'dist', 'build_output', '__pycache__', '.git', 'pyoxidizer_temp']:
                     ignores.append(f)
             return ignores
         
-        # Copiar el proyecto completo, pero solo archivos .py
+        # Copiar el proyecto completo, pero solo archivos .py y requirements.txt
         shutil.copytree(self.project_dir, temp_dir, ignore=ignore_non_py)
-        print("[PyOxidizer] Copiado proyecto a entorno limpio (solo archivos .py).")
+        print("[PyOxidizer] Copiado proyecto a entorno limpio (archivos .py + requirements.txt).")
         
         # Asegurar __init__.py en directorios que lo necesiten
         for pkg in ["core", "gui", "modules", "utils"]:

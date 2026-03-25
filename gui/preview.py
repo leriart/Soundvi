@@ -6,11 +6,22 @@ from PIL import Image, ImageTk
 import numpy as np
 import cv2
 
-from ..utils.config import get_default_font, load_config
-from ..utils.ffmpeg import FFmpegWrapper
-from ..core.video_generator import VideoGenerator
-from ..core.audio_processor import AudioProcessor
-from ..modules import list_modules, load_module
+# Cambiar importaciones relativas por absolutas (root del proyecto)
+from utils.config import get_default_font, load_config
+from utils.ffmpeg import FFmpegWrapper
+from core.video_generator import VideoGenerator
+from core.audio_processor import AudioProcessor
+from modules import list_modules, load_module
+
+# Importar resource_path desde main.py (o definirlo localmente)
+def resource_path(relative_path):
+    """Obtener ruta absoluta a un recurso en ejecutable empaquetado."""
+    if getattr(sys, 'frozen', False) or hasattr(sys, '_MEIPASS'):
+        base_path = getattr(sys, '_MEIPASS', os.path.dirname(sys.executable))
+    else:
+        base_path = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    return os.path.join(base_path, relative_path)
+
 
 class PreviewPanel:
     """Panel de vista previa y control principal."""
@@ -151,7 +162,8 @@ class PreviewPanel:
         """Cargar logo de fondo de forma asíncrona."""
         def load_logo():
             try:
-                logo_path = os.path.join(os.path.dirname(__file__), "..", "..", "logos", "Cagando.png")
+                # Usar resource_path para localizar el logo en cualquier entorno
+                logo_path = resource_path("logos/Cagando.png")
                 if os.path.exists(logo_path):
                     # Esperar a que la ventana tenga tamaño
                     w = self.preview_label.winfo_width()
@@ -163,10 +175,7 @@ class PreviewPanel:
                     img = Image.open(logo_path)
                     max_size = min(w - 40, h - 100, 500)
                     
-                    # =============================================================
-                    # PARCHE: Validar tamaño antes de redimensionar
-                    # =============================================================
-                    if max_size > 10:  # <-- AÑADIDO: Solo redimensionar si tamaño es válido
+                    if max_size > 10:
                         img.thumbnail((max_size, max_size), Image.Resampling.LANCZOS)
                         self._empty_photo = ImageTk.PhotoImage(img)
                         self.preview_label.config(
@@ -177,18 +186,15 @@ class PreviewPanel:
                             foreground="#4ec9b0"
                         )
                     else:
-                        # Si la ventana es muy pequeña, solo mostrar texto
                         self.preview_label.config(
                             text="Soundvi\n\nCarga un archivo de audio\ny video para empezar",
                             font=(get_default_font(), 12, "bold")
                         )
-                    # =============================================================
-                    # FIN DEL PARCHE
-                    # =============================================================
                 else:
                     self.preview_label.config(text="Soundvi", font=(get_default_font(), 16, "bold"))
                 
-                self.app.root.after(100, load_logo)
+                # Repetir cada segundo para ajustar si la ventana cambia de tamaño
+                self.app.root.after(1000, load_logo)
             except Exception as e:
                 print(f"Error cargando logo en preview: {e}")
                 self.preview_label.config(text="Soundvi", font=(get_default_font(), 16, "bold"))
@@ -204,18 +210,15 @@ class PreviewPanel:
             self.module_combo.current(0)
     
     def _on_module_selected(self, event):
-        """Manejador de selección de módulo."""
         pass
     
     def _add_module(self):
-        """Añadir módulo seleccionado a la lista."""
         module_name = self.module_var.get()
         if module_name and module_name not in self.module_listbox.get(0, tk.END):
             self.module_listbox.insert(tk.END, module_name)
             self._modules.append(module_name)
     
     def _remove_module(self):
-        """Remover módulo seleccionado de la lista."""
         selection = self.module_listbox.curselection()
         if selection:
             index = selection[0]
@@ -225,7 +228,6 @@ class PreviewPanel:
                 self._modules.remove(module_name)
     
     def _load_audio(self):
-        """Cargar archivo de audio."""
         filetypes = [
             ("Audio files", "*.mp3 *.wav *.flac *.ogg *.m4a"),
             ("All files", "*.*")
@@ -236,7 +238,6 @@ class PreviewPanel:
             self._show_preview()
     
     def _load_video(self):
-        """Cargar archivo de video."""
         filetypes = [
             ("Video files", "*.mp4 *.avi *.mov *.mkv *.webm"),
             ("All files", "*.*")
@@ -247,20 +248,16 @@ class PreviewPanel:
             self._show_preview()
     
     def _show_preview(self):
-        """Mostrar vista previa del video."""
         if self._current_video and self.preview_label.winfo_exists():
-            # Detener preview anterior
             self._stop_preview.set()
             if self._preview_thread and self._preview_thread.is_alive():
                 self._preview_thread.join(timeout=1)
             
-            # Iniciar nuevo preview
             self._stop_preview.clear()
             self._preview_thread = threading.Thread(target=self._update_preview, daemon=True)
             self._preview_thread.start()
     
     def _update_preview(self):
-        """Actualizar vista previa en segundo plano."""
         cap = cv2.VideoCapture(self._current_video)
         if not cap.isOpened():
             return
@@ -272,7 +269,6 @@ class PreviewPanel:
                     cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
                     continue
                 
-                # Redimensionar para preview
                 height, width = frame.shape[:2]
                 max_size = 400
                 if width > height:
@@ -285,43 +281,33 @@ class PreviewPanel:
                 frame = cv2.resize(frame, (new_width, new_height))
                 frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
                 
-                # Convertir a PhotoImage
                 img = Image.fromarray(frame)
                 photo = ImageTk.PhotoImage(img)
                 
-                # Actualizar en el hilo principal
                 self.app.root.after(0, lambda p=photo: self._update_preview_image(p))
-                
-                # Esperar para siguiente frame (≈15 FPS)
                 self._stop_preview.wait(0.066)
-        
         finally:
             cap.release()
     
     def _update_preview_image(self, photo):
-        """Actualizar imagen de preview (ejecutar en hilo principal)."""
         if self.preview_label.winfo_exists():
             self.preview_label.config(image=photo, text="")
             self.preview_label.image = photo
     
     def _generate_video(self):
-        """Generar video final."""
         if not self._current_audio or not self._current_video:
             messagebox.showerror("Error", "Debes cargar un audio y un video primero.")
             return
         
-        # Pedir ubicación de salida
         filetypes = [("MP4 files", "*.mp4"), ("All files", "*.*")]
         output_file = filedialog.asksaveasfilename(
             title="Guardar video como",
             defaultextension=".mp4",
             filetypes=filetypes
         )
-        
         if not output_file:
             return
         
-        # Configurar generador
         self._generator = VideoGenerator(
             audio_path=self._current_audio,
             video_path=self._current_video,
@@ -329,19 +315,16 @@ class PreviewPanel:
             quality=self.quality_var.get()
         )
         
-        # Cargar módulos
         modules = []
         for module_name in self._modules:
             module = load_module(module_name)
             if module:
                 modules.append(module)
         
-        # Generar en segundo plano
         thread = threading.Thread(target=self._run_generation, args=(modules,), daemon=True)
         thread.start()
     
     def _run_generation(self, modules):
-        """Ejecutar generación en segundo plano."""
         try:
             self._generator.generate(modules, progress_callback=self._update_progress)
             self.app.root.after(0, lambda: messagebox.showinfo("Éxito", "Video generado correctamente."))
@@ -351,5 +334,4 @@ class PreviewPanel:
             self.app.root.after(0, lambda: self.progress_var.set(0))
     
     def _update_progress(self, progress):
-        """Actualizar barra de progreso."""
         self.app.root.after(0, lambda: self.progress_var.set(progress * 100))

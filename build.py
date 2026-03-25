@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Build Script para Soundvi - Soporta PyInstaller y PyOxidizer
-Versión final con PyOxidizer configurado para evitar errores de módulos en memoria.
+Versión final con PyOxidizer funcional (sin parámetros extra).
 """
 
 import os
@@ -191,7 +191,7 @@ exe = EXE(
 '''
     
     # --------------------------------------------------------------------------
-    # Builder: PyOxidizer (configuración final funcional)
+    # Builder: PyOxidizer (configuración final sin parámetros extra)
     # --------------------------------------------------------------------------
     def build_with_pyoxidizer(self, target_platform):
         print(f"[PyOxidizer] Compilando para {target_platform}...")
@@ -246,8 +246,8 @@ def make_exe():
         config=python_config,
     )
     
-    # Instalar dependencias desde requirements.txt (usando wheels cuando sea posible)
-    exe.add_python_resources(exe.pip_install(["-r", "requirements.txt"], prefer_wheel=True))
+    # Instalar dependencias desde requirements.txt (sin parámetros extra)
+    exe.add_python_resources(exe.pip_install(["-r", "requirements.txt"]))
     
     # Incluir código fuente del proyecto
     for pkg in ["core", "gui", "modules", "utils"]:
@@ -289,7 +289,7 @@ resolve_targets()
 '''
         with open(self.project_dir / "pyoxidizer.bzl", "w") as f:
             f.write(config)
-        print("[PyOxidizer] Archivo de configuración pyoxidizer.bzl generado (versión funcional).")
+        print("[PyOxidizer] Archivo de configuración pyoxidizer.bzl generado (versión funcional final).")
     
     # --------------------------------------------------------------------------
     # Helper para encontrar el ejecutable

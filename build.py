@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Build Script for Soundvi - Supports PyInstaller and PyOxidizer
-Final version with functional PyOxidizer (no extra parameters).
+Final version with functional PyOxidizer (includes main.py and data).
 """
 
 import os
@@ -194,7 +194,7 @@ exe = EXE(
 '''
     
     # --------------------------------------------------------------------------
-    # Builder: PyOxidizer (final configuration without extra parameters)
+    # Builder: PyOxidizer (final configuration with main.py and data)
     # --------------------------------------------------------------------------
     def build_with_pyoxidizer(self, target_platform):
         print(f"[PyOxidizer] Compilando para {target_platform}...")
@@ -223,55 +223,55 @@ exe = EXE(
         return False
     
     def _create_pyoxidizer_config(self, target_platform):
-        """Genera pyoxidizer.bzl funcional para PyOxidizer 0.24."""
-        config = '''# pyoxidizer.bzl for Soundvi - Corrected configuration based on real examples
-# Version compatible with PyOxidizer 0.24+
+        """Genera pyoxidizer.bzl funcional para PyOxidizer 0.24+ incluyendo main.py y datos."""
+        config = '''# pyoxidizer.bzl for Soundvi - Incluye main.py y archivos de datos
+# Compatible con PyOxidizer 0.24+
 
 def make_exe():
-    # Python distribution
+    # Distribución de Python
     dist = default_python_distribution()
-    
-    # Packaging policy
+
+    # Política de empaquetado
     policy = dist.make_python_packaging_policy()
-    
-    # Extension module configuration
     policy.extension_module_filter = "all"
     policy.allow_in_memory_shared_library_loading = True
     policy.resources_location = "in-memory"
     policy.resources_location_fallback = "filesystem-relative:prefix"
-    
-    # Interpreter configuration
+
+    # Configuración del intérprete
     python_config = dist.make_python_interpreter_config()
-    python_config.run_module = "main"
-    
-    # Create executable
+    python_config.run_module = "main"   # Ejecuta main.py como módulo
+
+    # Crear ejecutable
     exe = dist.to_python_executable(
         name="soundvi",
         packaging_policy=policy,
         config=python_config,
     )
-    
-    # Install dependencies from requirements.txt
+
+    # Instalar dependencias desde requirements.txt
     exe.add_python_resources(exe.pip_install(["-r", "requirements.txt"]))
-    
-    # Include project source code
-    # Use current directory and specify packages
+
+    # Incluir paquetes del proyecto (core, gui, modules, utils)
     exe.add_python_resources(exe.read_package_root(
         path=".",
         packages=["core", "gui", "modules", "utils"],
     ))
-    
-    # Also include files in root directory (like main.py)
-    # PyOxidizer should automatically detect Python modules
-    
-    # Platform-specific configuration
-    # Use VARS instead of BUILD_CONFIG
+
+    # Incluir main.py explícitamente
+    exe.add_python_resources(exe.read_file("main.py", "main.py"))
+
+    # Incluir archivos de datos necesarios
+    exe.add_python_resources(exe.read_file("config.json", "config.json"))
+    exe.add_python_resources(exe.read_directory("fonts", "fonts"))
+    exe.add_python_resources(exe.read_directory("logos", "logos"))
+
+    # Configuración específica de plataforma
     target_triple = VARS.get("target_triple", "")
     if "windows" in target_triple:
         exe.windows_subsystem = "windows"
-        # For Windows, we can copy runtime DLLs
         exe.windows_runtime_dlls_mode = "when-present"
-    
+
     return exe
 
 def make_install(exe):
@@ -285,7 +285,7 @@ resolve_targets()
 '''
         with open(self.project_dir / "pyoxidizer.bzl", "w") as f:
             f.write(config)
-        print("[PyOxidizer] Configuration file pyoxidizer.bzl generated (final functional version).")
+        print("[PyOxidizer] Archivo pyoxidizer.bzl generado con inclusión de main.py y datos.")
     
     # --------------------------------------------------------------------------
     # Helper para encontrar el ejecutable

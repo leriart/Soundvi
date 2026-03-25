@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Build Script for Soundvi - Supports PyInstaller and PyOxidizer
-Versión final con PyOxidizer funcional (incluye main.py mediante __init__.py).
+Versión final con PyOxidizer funcional (solo código Python incluido, datos externos).
 """
 
 import os
@@ -191,7 +191,7 @@ exe = EXE(
 '''
     
     # --------------------------------------------------------------------------
-    # Builder: PyOxidizer (versión corregida)
+    # Builder: PyOxidizer (versión corregida: solo código Python, datos externos)
     # --------------------------------------------------------------------------
     def build_with_pyoxidizer(self, target_platform):
         print(f"[PyOxidizer] Compilando para {target_platform}...")
@@ -220,46 +220,36 @@ exe = EXE(
         return False
     
     def _create_pyoxidizer_config(self, target_platform):
-        """Genera pyoxidizer.bzl funcional con inclusión de todo el código Python mediante __init__.py."""
-        # Crear __init__.py en la raíz si no existe para que read_package_root incluya todo
-        init_file = self.project_dir / "__init__.py"
-        if not init_file.exists():
-            init_file.touch()
-            print("[PyOxidizer] Creado __init__.py vacío en la raíz para empaquetado completo.")
-        
-        config = '''# pyoxidizer.bzl for Soundvi - Incluye todo el código Python mediante __init__.py
-# Compatible con PyOxidizer 0.24+
-
+        """Genera pyoxidizer.bzl incluyendo solo el código Python (paquetes + main.py)."""
+        config = '''# pyoxidizer.bzl for Soundvi - Solo código Python, datos externos
 def make_exe():
-    # Distribución de Python
     dist = default_python_distribution()
-
-    # Política de empaquetado
     policy = dist.make_python_packaging_policy()
     policy.extension_module_filter = "all"
     policy.allow_in_memory_shared_library_loading = True
     policy.resources_location = "in-memory"
     policy.resources_location_fallback = "filesystem-relative:prefix"
 
-    # Configuración del intérprete
     python_config = dist.make_python_interpreter_config()
-    python_config.run_module = "main"   # main.py ahora es parte del paquete raíz
+    python_config.run_module = "main"
 
-    # Crear ejecutable
     exe = dist.to_python_executable(
         name="soundvi",
         packaging_policy=policy,
         config=python_config,
     )
 
-    # Instalar dependencias desde requirements.txt
+    # Instalar dependencias
     exe.add_python_resources(exe.pip_install(["-r", "requirements.txt"]))
 
-    # Incluir todo el código Python (paquete raíz y todos los subpaquetes)
-    # Esto requiere que exista __init__.py en el directorio raíz
-    exe.add_python_resources(exe.read_package_root(path="."))
+    # Incluir main.py como módulo
+    exe.add_python_resources(dist.read_file("main.py", "main.py"))
 
-    # Configuración específica de plataforma
+    # Incluir paquetes del proyecto
+    for pkg in ["core", "gui", "modules", "utils"]:
+        exe.add_python_resources(dist.read_package_root(path=pkg, packages=[pkg]))
+
+    # Configuración de plataforma
     target_triple = VARS.get("target_triple", "")
     if "windows" in target_triple:
         exe.windows_subsystem = "windows"
@@ -278,7 +268,7 @@ resolve_targets()
 '''
         with open(self.project_dir / "pyoxidizer.bzl", "w") as f:
             f.write(config)
-        print("[PyOxidizer] Archivo pyoxidizer.bzl generado (código Python completo incluido).")
+        print("[PyOxidizer] Archivo pyoxidizer.bzl generado (solo código Python).")
     
     # --------------------------------------------------------------------------
     # Helper para encontrar el ejecutable

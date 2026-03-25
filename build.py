@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Build Script for Soundvi - Supports PyInstaller and PyOxidizer
-Versión final: PyOxidizer con entorno limpio (solo archivos .py copiados manualmente).
+Versión final: PyOxidizer con main.py en src/.
 """
 
 import os
@@ -191,7 +191,7 @@ exe = EXE(
 '''
     
     # --------------------------------------------------------------------------
-    # Builder: PyOxidizer (entorno limpio copiando solo .py)
+    # Builder: PyOxidizer (entorno limpio con main.py en src/)
     # --------------------------------------------------------------------------
     def build_with_pyoxidizer(self, target_platform):
         print(f"[PyOxidizer] Compilando para {target_platform}...")
@@ -202,30 +202,34 @@ exe = EXE(
             shutil.rmtree(temp_dir)
         temp_dir.mkdir()
         
-        # Copiar todos los archivos .py preservando estructura
-        print("[PyOxidizer] Copiando archivos .py al entorno limpio...")
-        py_files = []
         # Directorios a ignorar
         ignore_dirs = {'build', 'dist', 'build_output', '__pycache__', '.git', 'pyoxidizer_temp'}
+        # Paquetes a incluir (sin src porque lo manejamos aparte)
+        packages = ["core", "gui", "modules", "utils"]
+        
+        print("[PyOxidizer] Copiando archivos .py al entorno limpio...")
+        py_count = 0
         
         for root, dirs, files in os.walk(self.project_dir):
-            # Modificar dirs in-place para evitar entrar en directorios ignorados
+            # Evitar entrar en directorios ignorados
             dirs[:] = [d for d in dirs if d not in ignore_dirs]
             
-            # Crear subdirectorio equivalente en temp
             rel_path = Path(root).relative_to(self.project_dir)
-            target_dir = temp_dir / rel_path
-            target_dir.mkdir(parents=True, exist_ok=True)
-            
-            # Copiar archivos .py
+            # Determinar destino: si el archivo es main.py, irá a src/
             for file in files:
                 if file.endswith('.py'):
                     src = Path(root) / file
-                    dst = target_dir / file
+                    # Para main.py, irá a src/main.py
+                    if file == "main.py" and rel_path == Path("."):
+                        dst_dir = temp_dir / "src"
+                    else:
+                        dst_dir = temp_dir / rel_path
+                    dst_dir.mkdir(parents=True, exist_ok=True)
+                    dst = dst_dir / file
                     shutil.copy2(src, dst)
-                    py_files.append(dst)
+                    py_count += 1
         
-        # Copiar requirements.txt si existe
+        # Copiar requirements.txt
         req_src = self.project_dir / "requirements.txt"
         if req_src.exists():
             shutil.copy2(req_src, temp_dir / "requirements.txt")
@@ -233,20 +237,20 @@ exe = EXE(
         else:
             print("[PyOxidizer] Advertencia: No se encontró requirements.txt.")
         
-        # Asegurar __init__.py en los directorios necesarios
-        for pkg in [".", "core", "gui", "modules", "utils"]:
-            pkg_dir = temp_dir / pkg if pkg != "." else temp_dir
-            if pkg_dir.exists():
-                init_file = pkg_dir / "__init__.py"
+        # Crear __init__.py en los paquetes necesarios
+        for pkg_dir in ["src"] + packages:
+            pkg_path = temp_dir / pkg_dir
+            if pkg_path.exists():
+                init_file = pkg_path / "__init__.py"
                 if not init_file.exists():
                     init_file.touch()
                     print(f"[PyOxidizer] Creado {init_file}")
         
-        print(f"[PyOxidizer] Copiados {len(py_files)} archivos .py.")
+        print(f"[PyOxidizer] Copiados {py_count} archivos .py.")
         
         try:
             # Generar pyoxidizer.bzl dentro del temporal
-            self._create_pyoxidizer_config_temp(temp_dir, target_platform)
+            self._create_pyoxidizer_config_temp(temp_dir, packages, target_platform)
             
             # Ejecutar pyoxidizer
             cmd = ["pyoxidizer", "build", "--release"]
@@ -279,9 +283,11 @@ exe = EXE(
             shutil.rmtree(temp_dir)
             print("[PyOxidizer] Limpiado directorio temporal.")
     
-    def _create_pyoxidizer_config_temp(self, temp_dir, target_platform):
+    def _create_pyoxidizer_config_temp(self, temp_dir, packages, target_platform):
         """Genera pyoxidizer.bzl dentro del directorio temporal."""
-        config = f'''# pyoxidizer.bzl for Soundvi - Configuración para entorno limpio
+        # Lista de paquetes para read_package_root
+        pkg_list = ", ".join(f'"{pkg}"' for pkg in ["src"] + packages)
+        config = f'''# pyoxidizer.bzl for Soundvi - main.py en src/
 def make_exe():
     dist = default_python_distribution()
     policy = dist.make_python_packaging_policy()
@@ -291,7 +297,7 @@ def make_exe():
     policy.resources_location_fallback = "filesystem-relative:prefix"
 
     python_config = dist.make_python_interpreter_config()
-    python_config.run_module = "main"
+    python_config.run_module = "src.main"   # main.py está en src/
 
     exe = dist.to_python_executable(
         name="soundvi",
@@ -302,8 +308,11 @@ def make_exe():
     # Instalar dependencias
     exe.add_python_resources(exe.pip_install(["-r", "requirements.txt"]))
 
-    # Incluir el paquete raíz (todo el código Python)
-    exe.add_python_resources(exe.read_package_root(path=".", packages=["."]))
+    # Incluir los paquetes (src, core, gui, modules, utils)
+    exe.add_python_resources(exe.read_package_root(
+        path=".",
+        packages=[{pkg_list}],
+    ))
 
     # Configuración específica de plataforma
     target_triple = VARS.get("target_triple", "")

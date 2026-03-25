@@ -27,16 +27,10 @@ import tkinter as tk
 # Detección de entorno empaquetado (PyInstaller, PyOxidizer)
 # -----------------------------------------------------------------------------
 def is_frozen():
-    """Retorna True si el código se ejecuta dentro de un ejecutable empaquetado."""
     return getattr(sys, 'frozen', False) or hasattr(sys, '_MEIPASS') or hasattr(sys, 'oxidized')
 
 def resource_path(relative_path):
-    """
-    Obtiene la ruta absoluta a un recurso, funcionando en desarrollo y en ejecutable.
-    En modo empaquetado, busca en el directorio del ejecutable.
-    """
     if is_frozen():
-        # Para PyInstaller usa sys._MEIPASS; para PyOxidizer usamos sys.executable
         if hasattr(sys, '_MEIPASS'):
             base_path = sys._MEIPASS
         else:
@@ -56,7 +50,6 @@ if not is_frozen():
 # =============================================================================
 
 def setup_single_instance():
-    """Asegurar que solo haya una instancia ejecutándose."""
     try:
         lock_socket = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
         lock_socket.bind('\0soundvi_single_instance_lock')
@@ -89,7 +82,6 @@ atexit.register(lambda: cleanup_single_instance(lock_socket))
 # =============================================================================
 
 def optimize_python_settings():
-    """Optimiza configuraciones de Python para mejor rendimiento."""
     print("=== INICIANDO SOUNDVI (MODO OPTIMIZADO) ===")
     num_cores = max(1, mp.cpu_count() - 1)
     os.environ['OMP_NUM_THREADS'] = str(num_cores)
@@ -105,7 +97,6 @@ def optimize_python_settings():
     print(f"[*] Optimizacion activada. Nucleos: {num_cores}\n")
 
 def check_dependencies():
-    """Verifica dependencias críticas."""
     faltantes = []
     for pkg in ("ttkbootstrap", "numpy", "cv2", "PIL", "librosa"):
         try:
@@ -122,11 +113,9 @@ def check_dependencies():
         sys.exit(1)
 
 def main():
-    """Punto de entrada principal."""
     optimize_python_settings()
     check_dependencies()
 
-    # Importar GUI después de verificar dependencias
     try:
         from gui.app import SoundviApp
     except ImportError as e:
@@ -135,9 +124,9 @@ def main():
         sys.exit(1)
 
     print("[*] Iniciando interfaz gráfica...")
-    
-    # Crear la ventana raíz de tkinter y pasarla a la aplicación
     root = tk.Tk()
+    # Forzar carga del paquete msgcat antes de usar ttkbootstrap
+    root.tk.call('package', 'require', 'msgcat')
     app = SoundviApp(root)
     app.run()
 

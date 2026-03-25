@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Build Script para Soundvi - Soporta PyInstaller y PyOxidizer (CORREGIDO)
-Versión final con sintaxis Starlark válida.
+Versión final con sintaxis Starlark válida y sin condicionales globales.
 """
 
 import os
@@ -191,7 +191,7 @@ exe = EXE(
 '''
     
     # --------------------------------------------------------------------------
-    # Builder: PyOxidizer (sin try/except)
+    # Builder: PyOxidizer (con Starlark válido)
     # --------------------------------------------------------------------------
     def build_with_pyoxidizer(self, target_platform):
         print(f"[PyOxidizer] Compilando para {target_platform}...")
@@ -220,12 +220,11 @@ exe = EXE(
         return False
     
     def _create_pyoxidizer_config(self, target_platform):
-        """Genera pyoxidizer.bzl con sintaxis Starlark válida (sin try/except)."""
-        icon_path = self.configs[target_platform]["icon"]
+        """Genera pyoxidizer.bzl con sintaxis Starlark válida (sin condicionales globales)."""
         ext = self.configs[target_platform]["ext"]
         exe_name = f"soundvi{ext}"
         
-        # Contenido sin espacios iniciales y sin try/except
+        # Contenido sin espacios iniciales y sin if global
         config = '''# pyoxidizer.bzl para Soundvi - Generador de Video con Visualizador
 # Configuración específica para el proyecto Soundvi de https://github.com/leriart/Soundvi
 
@@ -345,6 +344,7 @@ def make_install(exe):
     
     # Agregar archivos adicionales si es necesario
     for extra_file in ["README.md", "LICENSE"]:
+        # En Starlark, read_file devuelve el contenido o None si no existe
         if read_file(extra_file):
             files.add_file(extra_file)
     
@@ -377,23 +377,19 @@ def make_macos_app_bundle(exe):
     
     return bundle
 
-# Registrar targets
+# Registrar todos los targets (sin condicionales globales)
 register_target("exe", make_exe)
 register_target("resources", make_embedded_resources, depends=["exe"])
 register_target("install", make_install, depends=["exe"], default=True)
-
-# Registrar targets específicos de plataforma (opcional)
-if VARS.get("TARGET_TRIPLE", "").endswith("-windows-msvc"):
-    register_target("msi_installer", make_windows_installer, depends=["exe"])
-elif VARS.get("TARGET_TRIPLE", "").endswith("-darwin"):
-    register_target("macos_bundle", make_macos_app_bundle, depends=["exe"])
+register_target("msi_installer", make_windows_installer, depends=["exe"])
+register_target("macos_bundle", make_macos_app_bundle, depends=["exe"])
 
 resolve_targets()
 ''' % exe_name
         
         with open(self.project_dir / "pyoxidizer.bzl", "w") as f:
             f.write(config)
-        print("[PyOxidizer] Archivo de configuración pyoxidizer.bzl generado (sin try/except).")
+        print("[PyOxidizer] Archivo de configuración pyoxidizer.bzl generado (Starlark válido).")
     
     # --------------------------------------------------------------------------
     # Helper para encontrar el ejecutable

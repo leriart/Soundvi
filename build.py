@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Build Script for Soundvi - Supports PyInstaller and PyOxidizer
-Versión final: PyOxidizer funciona en Windows y Linux.
+Versión final: PyOxidizer con entorno limpio de solo Python.
 """
 
 import os
@@ -10,7 +10,6 @@ import shutil
 import argparse
 import subprocess
 import platform
-import tempfile
 from pathlib import Path
 import zipfile
 import tarfile
@@ -192,46 +191,68 @@ exe = EXE(
 '''
     
     # --------------------------------------------------------------------------
-    # Builder: PyOxidizer (con main.py movido a src)
+    # Builder: PyOxidizer (con entorno limpio de solo Python)
     # --------------------------------------------------------------------------
     def build_with_pyoxidizer(self, target_platform):
         print(f"[PyOxidizer] Compilando para {target_platform}...")
         
-        # Crear directorio src temporal con main.py y __init__.py
-        src_dir = self.project_dir / "src"
-        if not src_dir.exists():
-            src_dir.mkdir()
-            print("[PyOxidizer] Creado directorio src temporal.")
-        else:
-            # Si ya existe, lo respaldamos y luego restauramos
-            backup_src = None
-            if src_dir.exists():
-                backup_src = self.project_dir / "src_backup"
-                if backup_src.exists():
-                    shutil.rmtree(backup_src)
-                shutil.move(str(src_dir), str(backup_src))
-                print("[PyOxidizer] Movido src existente a src_backup.")
-                src_dir.mkdir()
+        # Directorio temporal para código Python limpio
+        temp_dir = self.project_dir / "pyoxidizer_temp"
+        if temp_dir.exists():
+            shutil.rmtree(temp_dir)
         
-        # Copiar main.py
-        shutil.copy(self.project_dir / "main.py", src_dir / "main.py")
-        # Crear __init__.py vacío
-        (src_dir / "__init__.py").touch()
+        # Función para copiar solo archivos .py
+        def ignore_non_py(dirname, files):
+            ignores = []
+            for f in files:
+                fp = os.path.join(dirname, f)
+                if os.path.isfile(fp) and not f.endswith('.py'):
+                    ignores.append(f)
+                # También ignoramos directorios que no queremos copiar
+                if os.path.isdir(fp) and f in ['build', 'dist', 'build_output', '__pycache__', '.git']:
+                    ignores.append(f)
+            return ignores
+        
+        # Copiar el proyecto completo, pero solo archivos .py
+        shutil.copytree(self.project_dir, temp_dir, ignore=ignore_non_py)
+        print("[PyOxidizer] Copiado proyecto a entorno limpio (solo archivos .py).")
+        
+        # Asegurar __init__.py en directorios que lo necesiten
+        for pkg in ["core", "gui", "modules", "utils"]:
+            pkg_dir = temp_dir / pkg
+            if pkg_dir.exists():
+                init_file = pkg_dir / "__init__.py"
+                if not init_file.exists():
+                    init_file.touch()
+        
+        # También asegurar __init__.py en la raíz
+        init_root = temp_dir / "__init__.py"
+        if not init_root.exists():
+            init_root.touch()
         
         try:
-            self._create_pyoxidizer_config(target_platform)
+            # Generar pyoxidizer.bzl dentro del temporal
+            self._create_pyoxidizer_config_temp(temp_dir, target_platform)
             
+            # Ejecutar pyoxidizer
             cmd = ["pyoxidizer", "build", "--release"]
-            result = subprocess.run(cmd, capture_output=True, text=True, cwd=self.project_dir)
+            result = subprocess.run(cmd, capture_output=True, text=True, cwd=temp_dir)
+            
             if result.returncode == 0:
-                output_path = self._find_executable(target_platform, builder="pyoxidizer")
-                if output_path:
-                    size_mb = output_path.stat().st_size / (1024 * 1024)
-                    print(f"[OK] Build exitoso: {output_path}")
-                    print(f"[Size] {size_mb:.2f} MB")
-                    return True
-                else:
-                    print("[ERROR] PyOxidizer generated executable not found.")
+                # Buscar el ejecutable generado
+                build_subdir = temp_dir / "build"
+                if build_subdir.exists():
+                    for root, dirs, files in os.walk(build_subdir):
+                        for file in files:
+                            if file == f"soundvi{self.configs[target_platform]['ext']}":
+                                src_exe = Path(root) / file
+                                dst_exe = self.dist_dir / file
+                                shutil.copy2(src_exe, dst_exe)
+                                size_mb = dst_exe.stat().st_size / (1024 * 1024)
+                                print(f"[OK] Build exitoso: {dst_exe}")
+                                print(f"[Size] {size_mb:.2f} MB")
+                                return True
+                print("[ERROR] PyOxidizer generated executable not found.")
             else:
                 print(f"[ERROR] PyOxidizer failed (code {result.returncode}):")
                 print("--- STDOUT ---")
@@ -240,19 +261,13 @@ exe = EXE(
                 print(result.stderr)
             return False
         finally:
-            # Limpiar directorio src temporal
-            if src_dir.exists():
-                shutil.rmtree(src_dir)
-                print("[PyOxidizer] Eliminado directorio src temporal.")
-            # Restaurar src original si existía
-            backup_src = self.project_dir / "src_backup"
-            if backup_src.exists():
-                shutil.move(str(backup_src), str(src_dir))
-                print("[PyOxidizer] Restaurado src original.")
+            # Limpiar temporal
+            shutil.rmtree(temp_dir)
+            print("[PyOxidizer] Limpiado directorio temporal.")
     
-    def _create_pyoxidizer_config(self, target_platform):
-        """Genera pyoxidizer.bzl incluyendo src y los subpaquetes."""
-        config = '''# pyoxidizer.bzl for Soundvi - Incluye src (con main.py) y subpaquetes
+    def _create_pyoxidizer_config_temp(self, temp_dir, target_platform):
+        """Genera pyoxidizer.bzl dentro del directorio temporal."""
+        config = f'''# pyoxidizer.bzl for Soundvi - Configuración para entorno limpio
 def make_exe():
     dist = default_python_distribution()
     policy = dist.make_python_packaging_policy()
@@ -262,7 +277,7 @@ def make_exe():
     policy.resources_location_fallback = "filesystem-relative:prefix"
 
     python_config = dist.make_python_interpreter_config()
-    python_config.run_module = "src.main"   # main.py está dentro del paquete src
+    python_config.run_module = "main"
 
     exe = dist.to_python_executable(
         name="soundvi",
@@ -273,12 +288,8 @@ def make_exe():
     # Instalar dependencias
     exe.add_python_resources(exe.pip_install(["-r", "requirements.txt"]))
 
-    # Incluir src (contiene main.py) como paquete
-    exe.add_python_resources(exe.read_package_root(path="src", packages=["src"]))
-
-    # Incluir subpaquetes del proyecto
-    for pkg in ["core", "gui", "modules", "utils"]:
-        exe.add_python_resources(exe.read_package_root(path=pkg, packages=[pkg]))
+    # Incluir el paquete raíz (todo el código Python)
+    exe.add_python_resources(exe.read_package_root(path=".", packages=["."]))
 
     # Configuración específica de plataforma
     target_triple = VARS.get("target_triple", "")
@@ -297,12 +308,12 @@ register_target("exe", make_exe)
 register_target("install", make_install, depends=["exe"], default=True)
 resolve_targets()
 '''
-        with open(self.project_dir / "pyoxidizer.bzl", "w") as f:
+        with open(temp_dir / "pyoxidizer.bzl", "w") as f:
             f.write(config)
-        print("[PyOxidizer] Archivo pyoxidizer.bzl generado (src y subpaquetes incluidos).")
+        print("[PyOxidizer] Archivo pyoxidizer.bzl generado en entorno temporal.")
     
     # --------------------------------------------------------------------------
-    # Helper para encontrar el ejecutable
+    # Helper para encontrar el ejecutable (solo para PyInstaller)
     # --------------------------------------------------------------------------
     def _find_executable(self, target_platform, builder="pyinstaller"):
         ext = self.configs[target_platform]["ext"]
@@ -316,12 +327,7 @@ resolve_targets()
             for cand in candidates:
                 if cand.exists():
                     return cand
-        elif builder == "pyoxidizer":
-            build_dir = self.project_dir / "build"
-            if build_dir.exists():
-                for root, dirs, files in os.walk(build_dir):
-                    if name in files:
-                        return Path(root) / name
+        # Para PyOxidizer ya copiamos el ejecutable directamente
         return None
     
     # --------------------------------------------------------------------------
@@ -331,8 +337,13 @@ resolve_targets()
         print(f"[Portable] Creando paquete portable para {target_platform}...")
         executable = self._find_executable(target_platform, builder)
         if not executable:
-            print(f"[ERROR] Ejecutable no encontrado para empaquetar.")
-            return False
+            # Para PyOxidizer, el ejecutable ya está en dist
+            ext = self.configs[target_platform]["ext"]
+            name = f"soundvi{ext}"
+            executable = self.dist_dir / name
+            if not executable.exists():
+                print(f"[ERROR] Ejecutable no encontrado en {executable}.")
+                return False
         
         portable_dir = self.dist_dir / f"Soundvi-Portable-{target_platform.capitalize()}"
         if portable_dir.exists():

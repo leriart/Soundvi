@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Build Script for Soundvi - Supports PyInstaller and PyOxidizer
-Versión final: PyOxidizer incluye main.py mediante el paquete raíz.
+Versión final: PyOxidizer funciona en Windows y Linux.
 """
 
 import os
@@ -10,6 +10,7 @@ import shutil
 import argparse
 import subprocess
 import platform
+import tempfile
 from pathlib import Path
 import zipfile
 import tarfile
@@ -191,14 +192,36 @@ exe = EXE(
 '''
     
     # --------------------------------------------------------------------------
-    # Builder: PyOxidizer (configuración con paquete raíz)
+    # Builder: PyOxidizer (con main.py movido a src)
     # --------------------------------------------------------------------------
     def build_with_pyoxidizer(self, target_platform):
         print(f"[PyOxidizer] Compilando para {target_platform}...")
-        self._create_pyoxidizer_config(target_platform)
         
-        cmd = ["pyoxidizer", "build", "--release"]
+        # Crear directorio src temporal con main.py y __init__.py
+        src_dir = self.project_dir / "src"
+        if not src_dir.exists():
+            src_dir.mkdir()
+            print("[PyOxidizer] Creado directorio src temporal.")
+        else:
+            # Si ya existe, lo respaldamos y luego restauramos
+            backup_src = None
+            if src_dir.exists():
+                backup_src = self.project_dir / "src_backup"
+                if backup_src.exists():
+                    shutil.rmtree(backup_src)
+                shutil.move(str(src_dir), str(backup_src))
+                print("[PyOxidizer] Movido src existente a src_backup.")
+                src_dir.mkdir()
+        
+        # Copiar main.py
+        shutil.copy(self.project_dir / "main.py", src_dir / "main.py")
+        # Crear __init__.py vacío
+        (src_dir / "__init__.py").touch()
+        
         try:
+            self._create_pyoxidizer_config(target_platform)
+            
+            cmd = ["pyoxidizer", "build", "--release"]
             result = subprocess.run(cmd, capture_output=True, text=True, cwd=self.project_dir)
             if result.returncode == 0:
                 output_path = self._find_executable(target_platform, builder="pyoxidizer")
@@ -215,19 +238,21 @@ exe = EXE(
                 print(result.stdout)
                 print("--- STDERR ---")
                 print(result.stderr)
-        except Exception as e:
-            print(f"[ERROR] Error ejecutando PyOxidizer: {e}")
-        return False
+            return False
+        finally:
+            # Limpiar directorio src temporal
+            if src_dir.exists():
+                shutil.rmtree(src_dir)
+                print("[PyOxidizer] Eliminado directorio src temporal.")
+            # Restaurar src original si existía
+            backup_src = self.project_dir / "src_backup"
+            if backup_src.exists():
+                shutil.move(str(backup_src), str(src_dir))
+                print("[PyOxidizer] Restaurado src original.")
     
     def _create_pyoxidizer_config(self, target_platform):
-        """Genera pyoxidizer.bzl incluyendo el paquete raíz y los subpaquetes."""
-        # Crear __init__.py en la raíz si no existe para que la raíz sea un paquete
-        init_file = self.project_dir / "__init__.py"
-        if not init_file.exists():
-            init_file.touch()
-            print("[PyOxidizer] Creado __init__.py vacío en la raíz para empaquetado completo.")
-        
-        config = '''# pyoxidizer.bzl for Soundvi - Incluye paquete raíz y subpaquetes
+        """Genera pyoxidizer.bzl incluyendo src y los subpaquetes."""
+        config = '''# pyoxidizer.bzl for Soundvi - Incluye src (con main.py) y subpaquetes
 def make_exe():
     dist = default_python_distribution()
     policy = dist.make_python_packaging_policy()
@@ -237,7 +262,7 @@ def make_exe():
     policy.resources_location_fallback = "filesystem-relative:prefix"
 
     python_config = dist.make_python_interpreter_config()
-    python_config.run_module = "main"
+    python_config.run_module = "src.main"   # main.py está dentro del paquete src
 
     exe = dist.to_python_executable(
         name="soundvi",
@@ -248,11 +273,12 @@ def make_exe():
     # Instalar dependencias
     exe.add_python_resources(exe.pip_install(["-r", "requirements.txt"]))
 
-    # Incluir el paquete raíz (con main.py y __init__.py) y los subpaquetes
-    exe.add_python_resources(exe.read_package_root(
-        path=".",
-        packages=["."] + ["core", "gui", "modules", "utils"],
-    ))
+    # Incluir src (contiene main.py) como paquete
+    exe.add_python_resources(exe.read_package_root(path="src", packages=["src"]))
+
+    # Incluir subpaquetes del proyecto
+    for pkg in ["core", "gui", "modules", "utils"]:
+        exe.add_python_resources(exe.read_package_root(path=pkg, packages=[pkg]))
 
     # Configuración específica de plataforma
     target_triple = VARS.get("target_triple", "")
@@ -273,7 +299,7 @@ resolve_targets()
 '''
         with open(self.project_dir / "pyoxidizer.bzl", "w") as f:
             f.write(config)
-        print("[PyOxidizer] Archivo pyoxidizer.bzl generado (paquete raíz incluido).")
+        print("[PyOxidizer] Archivo pyoxidizer.bzl generado (src y subpaquetes incluidos).")
     
     # --------------------------------------------------------------------------
     # Helper para encontrar el ejecutable

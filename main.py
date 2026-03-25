@@ -48,18 +48,19 @@ if not is_frozen():
 # Parche para ttkbootstrap en entornos empaquetados (evita error msgcat)
 # -----------------------------------------------------------------------------
 def patch_ttkbootstrap_msgcat():
-    """Sobrescribe la función set_many de ttkbootstrap para que no intente usar msgcat."""
+    """Sobrescribe el método set_many de MessageCatalog para evitar errores de msgcat."""
     if not is_frozen():
         return
     try:
         import ttkbootstrap.localization.msgcat as msgcat_module
-        # Reemplazar el método set_many con una función vacía
-        original = msgcat_module.MsgCatalog.set_many
-        def noop_set_many(self, mapping):
-            pass
-        msgcat_module.MsgCatalog.set_many = noop_set_many
-        print("[*] ttkbootstrap patcheado (msgcat desactivado)")
-    except ImportError:
+        # La clase se llama MessageCatalog (con mayúscula M)
+        if hasattr(msgcat_module, 'MessageCatalog'):
+            original = msgcat_module.MessageCatalog.set_many
+            def noop_set_many(self, mapping):
+                pass
+            msgcat_module.MessageCatalog.set_many = noop_set_many
+            print("[*] ttkbootstrap patcheado (msgcat desactivado)")
+    except (ImportError, AttributeError):
         pass
 
 # -----------------------------------------------------------------------------
@@ -146,19 +147,6 @@ def main():
     
     # Crear ventana raíz de tkinter
     root = tk.Tk()
-    
-    # Intentar cargar msgcat manualmente si está disponible (opcional)
-    # Esto puede ayudar en algunos sistemas, pero no es crítico
-    if is_frozen():
-        try:
-            # Buscar msgcat.tcl en el directorio del ejecutable
-            msgcat_path = resource_path('msgcat.tcl')
-            if os.path.exists(msgcat_path):
-                root.tk.call('source', msgcat_path)
-                print("[*] msgcat cargado desde el ejecutable")
-        except:
-            pass
-    
     app = SoundviApp(root)
     app.run()
 

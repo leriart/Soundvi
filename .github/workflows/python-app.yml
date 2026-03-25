@@ -74,7 +74,7 @@ jobs:
         run: echo "PYTHONIOENCODING=utf-8" >> $env:GITHUB_ENV
 
       - name: Ejecutar build.py
-        run: python build.py --platform ${{ matrix.platform }} ${{ matrix.build-args }}
+        run: python build.py --platform ${{ matrix.platform }} ${{ matrix.build-args }} --clean
 
       - name: Subir artefactos (para depuración)
         uses: actions/upload-artifact@v4

@@ -5,25 +5,75 @@ Soundvi - Generador de Video con Visualizador Modular
 ------------------------------------------------------
 Aplicación de escritorio para generar videos reactivos al audio.
 Diseñado con arquitectura de módulos "Plug and Play".
-
-Uso:
-    python main.py
-
-Requisitos:
-    - Python 3.10+
-    - FFmpeg (en el sistema o provisto en la UI)
 """
 
 import sys
 import os
 import multiprocessing as mp
-import threading
+import atexit
+import platform
+import tempfile
+import fcntl
+import time
+import logging
 
 # -- Asegurar ruta del proyecto -----------------------------------------------
 _RAIZ_PROYECTO = os.path.dirname(os.path.abspath(__file__))
 if _RAIZ_PROYECTO not in sys.path:
     sys.path.insert(0, _RAIZ_PROYECTO)
 
+# -----------------------------------------------------------------------------
+# Instancia única robusta (funciona en desarrollo y empaquetado)
+# -----------------------------------------------------------------------------
+_LOCK_FILE = None
+_LOCK_FD = -1
+
+def single_instance_lock():
+    """
+    Evita múltiples instancias del programa usando un archivo de bloqueo.
+    Funciona en Linux/macOS con fcntl.flock y en Windows con archivo exclusivo.
+    Solo se ejecuta en el proceso principal y una sola vez.
+    """
+    # Solo ejecutar en el proceso principal
+    if mp.current_process().name != 'MainProcess':
+        return
+
+    # Evitar ejecución repetida dentro del mismo proceso
+    if hasattr(single_instance_lock, '_done') and single_instance_lock._done:
+        return
+    single_instance_lock._done = True
+
+    global _LOCK_FILE, _LOCK_FD
+
+    system = platform.system()
+    lock_path = os.path.join(tempfile.gettempdir(), f"soundvi_{os.getenv('USER', 'user')}.lock")
+
+    if system == "Windows":
+        # Windows: usar archivo con O_EXCL
+        try:
+            _LOCK_FD = os.open(lock_path, os.O_CREAT | os.O_EXCL | os.O_RDWR)
+            os.close(_LOCK_FD)   # Solo necesitamos que el archivo exista
+            # Marcar como no heredable (opcional)
+            os.set_inheritable(_LOCK_FD, False) if _LOCK_FD != -1 else None
+        except FileExistsError:
+            print("[!] Ya hay una instancia de Soundvi ejecutándose.")
+            sys.exit(1)
+        atexit.register(lambda: os.unlink(lock_path) if os.path.exists(lock_path) else None)
+    else:
+        # Linux/macOS: usar fcntl.flock (bloqueo exclusivo)
+        try:
+            _LOCK_FD = os.open(lock_path, os.O_CREAT | os.O_RDWR)
+            fcntl.flock(_LOCK_FD, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            # Marcar descriptor como no heredable para que los hijos no lo retengan
+            os.set_inheritable(_LOCK_FD, False)
+        except (IOError, OSError):
+            print("[!] Ya hay una instancia de Soundvi ejecutándose.")
+            sys.exit(1)
+        atexit.register(lambda: (fcntl.flock(_LOCK_FD, fcntl.LOCK_UN), os.close(_LOCK_FD)) if _LOCK_FD != -1 else None)
+
+# -----------------------------------------------------------------------------
+# Optimización y dependencias
+# -----------------------------------------------------------------------------
 def optimize_python_settings():
     """Optimiza configuraciones de Python para mejor rendimiento."""
     print("=== INICIANDO SOUNDVI (MODO OPTIMIZADO) ===")
@@ -83,9 +133,12 @@ def run_app():
     app.mainloop()
 
 def main():
+    # Evitar múltiples instancias
+    single_instance_lock()
+    # Optimizar y comprobar dependencias
     optimize_python_settings()
     check_dependencies()
-    # Ejecutamos la app de manera segura, el hilo principal en GUI
+    # Ejecutar la GUI
     run_app()
 
 if __name__ == "__main__":

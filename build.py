@@ -221,8 +221,8 @@ exe = EXE(
     
     def _create_pyoxidizer_config(self, target_platform):
         """Genera pyoxidizer.bzl funcional para PyOxidizer 0.24."""
-        config = '''# pyoxidizer.bzl para Soundvi - Configuración funcional final
-# Evita errores de módulos de extensión en memoria
+        config = '''# pyoxidizer.bzl para Soundvi - Configuración corregida basada en ejemplos reales
+# Versión compatible con PyOxidizer 0.24+
 
 def make_exe():
     # Distribución de Python
@@ -231,9 +231,11 @@ def make_exe():
     # Política de empaquetado
     policy = dist.make_python_packaging_policy()
     
-    # Configuración crítica para módulos de extensión
-    policy.extension_module_filter = "all"                     # Incluir todos los módulos de extensión
-    policy.allow_in_memory_shared_library_loading = False      # Forzar carga desde archivos
+    # Configuración para módulos de extensión
+    policy.extension_module_filter = "all"
+    policy.allow_in_memory_shared_library_loading = True
+    policy.resources_location = "in-memory"
+    policy.resources_location_fallback = "filesystem-relative:prefix"
     
     # Configuración del intérprete
     python_config = dist.make_python_interpreter_config()
@@ -246,35 +248,26 @@ def make_exe():
         config=python_config,
     )
     
-    # Instalar dependencias desde requirements.txt (sin parámetros extra)
+    # Instalar dependencias desde requirements.txt
     exe.add_python_resources(exe.pip_install(["-r", "requirements.txt"]))
     
     # Incluir código fuente del proyecto
-    for pkg in ["core", "gui", "modules", "utils"]:
-        exe.add_python_resources(exe.read_package_root(
-            path=pkg,
-            packages=[pkg],
-            excludes=["**/__pycache__", "**/*.pyc"],
-        ))
+    # Usamos el directorio actual y especificamos los paquetes
+    exe.add_python_resources(exe.read_package_root(
+        path=".",
+        packages=["core", "gui", "modules", "utils"],
+    ))
     
-    # Archivos individuales
-    exe.add_python_resources(exe.read_file("main.py", dest="main.py"))
-    exe.add_python_resources(exe.read_file("config.json", dest="config.json"))
-    exe.add_python_resources(exe.read_file("README.md", dest="README.md"))
+    # También incluir archivos en el directorio raíz (como main.py)
+    # PyOxidizer debería detectar automáticamente los módulos Python
     
-    # Directorios de recursos
-    exe.add_python_resources(exe.read_directory("fonts", dest="fonts"))
-    exe.add_python_resources(exe.read_directory("logos", dest="logos"))
-    exe.add_python_resources(exe.read_directory("modules_config", dest="modules_config"))
-    
-    # Configuración específica de plataforma (icono)
-    if VARS.get("TARGET_TRIPLE", "").endswith("-windows-msvc"):
+    # Configuración específica de plataforma
+    # Usamos VARS en lugar de BUILD_CONFIG
+    target_triple = VARS.get("target_triple", "")
+    if "windows" in target_triple:
         exe.windows_subsystem = "windows"
-        exe.icon = "logos/logo.ico"
-    elif VARS.get("TARGET_TRIPLE", "").endswith("-linux-"):
-        exe.icon = "logos/logo.png"
-    elif VARS.get("TARGET_TRIPLE", "").endswith("-darwin"):
-        exe.icon = "logos/logo.icns"
+        # Para Windows, podemos copiar DLLs del runtime
+        exe.windows_runtime_dlls_mode = "when-present"
     
     return exe
 

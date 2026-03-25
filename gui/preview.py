@@ -185,15 +185,16 @@ class PreviewPanel:
                     # =============================================================
                     # FIN DEL PARCHE
                     # =============================================================
-                    
+                else:
+                    self.preview_label.config(text="Soundvi", font=(get_default_font(), 16, "bold"))
+                
                 self.app.root.after(100, load_logo)
             except Exception as e:
                 print(f"Error cargando logo en preview: {e}")
                 self.preview_label.config(text="Soundvi", font=(get_default_font(), 16, "bold"))
-        else:
-            self.preview_label.config(text="Soundvi", font=(get_default_font(), 16, "bold"))
-
-        self.app.root.after(100, load_logo)
+        
+        # Iniciar la carga del logo
+        load_logo()
     
     def _load_modules(self):
         """Cargar lista de módulos disponibles."""

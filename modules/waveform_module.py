@@ -366,7 +366,7 @@ class WaveformModule(Module):
                             orient=tk.HORIZONTAL, length=120,
                             command=lambda v: self._update_config("response", float(v), _as))
         sens_scale.pack(side=tk.LEFT, padx=2)
-        sens_label = tb.Label(sens_frame, text=f"{self._config.get("response", 0.5):.1f}")
+        sens_label = tb.Label(sens_frame, text=f"{self._config.get('response', 0.5):.1f}")
         sens_label.pack(side=tk.LEFT)
         sens_scale.configure(command=lambda v: (
             self._update_config("response", float(v), _as),

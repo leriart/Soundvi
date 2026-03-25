@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Build Script for Soundvi - Supports PyInstaller and PyOxidizer
-Versión final: PyOxidizer con main.py en src/.
+Versión final: PyOxidizer con main.py en src/ y recursos en sistema de archivos.
 """
 
 import os
@@ -191,7 +191,7 @@ exe = EXE(
 '''
     
     # --------------------------------------------------------------------------
-    # Builder: PyOxidizer (entorno limpio con main.py en src/)
+    # Builder: PyOxidizer (entorno limpio con main.py en src/ y recursos en disco)
     # --------------------------------------------------------------------------
     def build_with_pyoxidizer(self, target_platform):
         print(f"[PyOxidizer] Compilando para {target_platform}...")
@@ -287,13 +287,14 @@ exe = EXE(
         """Genera pyoxidizer.bzl dentro del directorio temporal."""
         # Lista de paquetes para read_package_root
         pkg_list = ", ".join(f'"{pkg}"' for pkg in ["src"] + packages)
-        config = f'''# pyoxidizer.bzl for Soundvi - main.py en src/
+        config = f'''# pyoxidizer.bzl for Soundvi - main.py en src/, recursos en disco
 def make_exe():
     dist = default_python_distribution()
     policy = dist.make_python_packaging_policy()
     policy.extension_module_filter = "all"
     policy.allow_in_memory_shared_library_loading = True
-    policy.resources_location = "in-memory"
+    # Cambiamos a filesystem para que __file__ funcione
+    policy.resources_location = "filesystem-relative:prefix"
     policy.resources_location_fallback = "filesystem-relative:prefix"
 
     python_config = dist.make_python_interpreter_config()

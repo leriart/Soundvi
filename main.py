@@ -21,6 +21,7 @@ import threading
 import signal
 import socket
 import atexit
+import tkinter as tk
 
 # -----------------------------------------------------------------------------
 # Detección de entorno empaquetado (PyInstaller, PyOxidizer)
@@ -44,11 +45,8 @@ def resource_path(relative_path):
         base_path = os.path.dirname(os.path.abspath(__file__))
     return os.path.join(base_path, relative_path)
 
-# -----------------------------------------------------------------------------
-# Ajuste de sys.path para desarrollo (en empaquetado ya está todo en PYTHONPATH)
-# -----------------------------------------------------------------------------
+# -- Asegurar ruta del proyecto -----------------------------------------------
 if not is_frozen():
-    # En desarrollo, añadir la raíz del proyecto al path
     _RAIZ_PROYECTO = os.path.dirname(os.path.abspath(__file__))
     if _RAIZ_PROYECTO not in sys.path:
         sys.path.insert(0, _RAIZ_PROYECTO)
@@ -56,6 +54,7 @@ if not is_frozen():
 # =============================================================================
 # PARCHE: Instancia única y manejo de señales
 # =============================================================================
+
 def setup_single_instance():
     """Asegurar que solo haya una instancia ejecutándose."""
     try:
@@ -136,7 +135,10 @@ def main():
         sys.exit(1)
 
     print("[*] Iniciando interfaz gráfica...")
-    app = SoundviApp()
+    
+    # Crear la ventana raíz de tkinter y pasarla a la aplicación
+    root = tk.Tk()
+    app = SoundviApp(root)
     app.run()
 
 if __name__ == "__main__":

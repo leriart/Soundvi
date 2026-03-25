@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Build Script for Soundvi - Supports PyInstaller and PyOxidizer
-Versión final con PyOxidizer funcional (solo código Python incluido, datos externos).
+Versión final con PyOxidizer funcional (incluye main.py mediante exe.read_file).
 """
 
 import os
@@ -191,7 +191,7 @@ exe = EXE(
 '''
     
     # --------------------------------------------------------------------------
-    # Builder: PyOxidizer (versión corregida: solo código Python, datos externos)
+    # Builder: PyOxidizer (versión corregida)
     # --------------------------------------------------------------------------
     def build_with_pyoxidizer(self, target_platform):
         print(f"[PyOxidizer] Compilando para {target_platform}...")
@@ -220,8 +220,8 @@ exe = EXE(
         return False
     
     def _create_pyoxidizer_config(self, target_platform):
-        """Genera pyoxidizer.bzl incluyendo solo el código Python (paquetes + main.py)."""
-        config = '''# pyoxidizer.bzl for Soundvi - Solo código Python, datos externos
+        """Genera pyoxidizer.bzl funcional con inclusión de main.py mediante exe.read_file."""
+        config = '''# pyoxidizer.bzl for Soundvi - Incluye main.py como recurso
 def make_exe():
     dist = default_python_distribution()
     policy = dist.make_python_packaging_policy()
@@ -242,12 +242,12 @@ def make_exe():
     # Instalar dependencias
     exe.add_python_resources(exe.pip_install(["-r", "requirements.txt"]))
 
-    # Incluir main.py como módulo
-    exe.add_python_resources(dist.read_file("main.py", "main.py"))
+    # Incluir main.py como módulo principal
+    exe.add_python_resources(exe.read_file("main.py"))
 
     # Incluir paquetes del proyecto
     for pkg in ["core", "gui", "modules", "utils"]:
-        exe.add_python_resources(dist.read_package_root(path=pkg, packages=[pkg]))
+        exe.add_python_resources(exe.read_package_root(path=pkg, packages=[pkg]))
 
     # Configuración de plataforma
     target_triple = VARS.get("target_triple", "")
@@ -268,7 +268,7 @@ resolve_targets()
 '''
         with open(self.project_dir / "pyoxidizer.bzl", "w") as f:
             f.write(config)
-        print("[PyOxidizer] Archivo pyoxidizer.bzl generado (solo código Python).")
+        print("[PyOxidizer] Archivo pyoxidizer.bzl generado (main.py incluido).")
     
     # --------------------------------------------------------------------------
     # Helper para encontrar el ejecutable

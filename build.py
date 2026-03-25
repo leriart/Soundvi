@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Build Script para Soundvi - Soporta PyInstaller y PyOxidizer (CORREGIDO)
-Versión final con sintaxis Starlark válida y sin condicionales globales.
+Versión final con sintaxis PyOxidizer 0.24 compatible.
 """
 
 import os
@@ -191,7 +191,7 @@ exe = EXE(
 '''
     
     # --------------------------------------------------------------------------
-    # Builder: PyOxidizer (con Starlark válido)
+    # Builder: PyOxidizer (compatible 0.24)
     # --------------------------------------------------------------------------
     def build_with_pyoxidizer(self, target_platform):
         print(f"[PyOxidizer] Compilando para {target_platform}...")
@@ -220,13 +220,12 @@ exe = EXE(
         return False
     
     def _create_pyoxidizer_config(self, target_platform):
-        """Genera pyoxidizer.bzl con sintaxis Starlark válida (sin condicionales globales)."""
-        ext = self.configs[target_platform]["ext"]
-        exe_name = f"soundvi{ext}"
+        """Genera pyoxidizer.bzl con sintaxis compatible con PyOxidizer 0.24."""
+        # Nombre del ejecutable sin extensión (PyOxidizer añade la correcta)
+        exe_name = "soundvi"
         
-        # Contenido sin espacios iniciales y sin if global
         config = '''# pyoxidizer.bzl para Soundvi - Generador de Video con Visualizador
-# Configuración específica para el proyecto Soundvi de https://github.com/leriart/Soundvi
+# Configuración compatible con PyOxidizer 0.24
 
 def make_exe():
     """Crea un ejecutable para Soundvi."""
@@ -237,15 +236,13 @@ def make_exe():
     # Configurar política de empaquetado
     policy = dist.make_python_packaging_policy()
     
-    # Configurar ubicación de recursos (en memoria para mejor rendimiento)
-    policy.resources_location_fallback = "in-memory"
-    
     # Excluir módulos pesados que no son necesarios
-    policy.excluded_module_names.update([
+    for mod in [
         "matplotlib", "sklearn", "scikit-learn", "imageio_ffmpeg",
         "PyQt5", "PySide2", "PyQt6", "IPython", "jupyter",
         "tensorflow", "torch", "pandas", "notebook",
-    ])
+    ]:
+        policy.exclude_module(mod)
     
     # Configuración del intérprete Python
     python_config = dist.make_python_interpreter_config()
@@ -258,7 +255,7 @@ def make_exe():
     
     # Crear ejecutable
     exe = dist.to_python_executable(
-        name="%s",
+        name="soundvi",
         packaging_policy=policy,
         config=python_config,
     )
@@ -317,17 +314,14 @@ def make_exe():
         # Configuración para Windows
         exe.windows_runtime_dlls_mode = "always"
         exe.windows_subsystem = "windows"  # O "console" para aplicaciones de consola
-        # Configurar icono (se asume que el archivo existe)
         exe.icon = "logos/logo.ico"
         print("[PyOxidizer] Icono configurado: logos/logo.ico")
             
     elif VARS.get("TARGET_TRIPLE", "").endswith("-linux-"):
-        # Configuración para Linux
         exe.icon = "logos/logo.png"
         print("[PyOxidizer] Icono configurado: logos/logo.png")
             
     elif VARS.get("TARGET_TRIPLE", "").endswith("-darwin"):
-        # Configuración para macOS
         exe.icon = "logos/logo.icns"
         print("[PyOxidizer] Icono configurado: logos/logo.icns")
     
@@ -341,13 +335,10 @@ def make_install(exe):
     """Crea un manifiesto de instalación."""
     files = FileManifest()
     files.add_python_resource(".", exe)
-    
     # Agregar archivos adicionales si es necesario
     for extra_file in ["README.md", "LICENSE"]:
-        # En Starlark, read_file devuelve el contenido o None si no existe
         if read_file(extra_file):
             files.add_file(extra_file)
-    
     return files
 
 def make_windows_installer(exe):
@@ -367,17 +358,15 @@ def make_macos_app_bundle(exe):
         display_name="Soundvi",
         identifier="com.leriart.soundvi",
         version="1.0.0",
-        signature="????",  # Necesita un código de firma real
+        signature="????",
         executable="soundvi",
     )
-    
     m = FileManifest()
     m.add_python_resource(".", exe)
     bundle.add_macos_manifest(m)
-    
     return bundle
 
-# Registrar todos los targets (sin condicionales globales)
+# Registrar targets (todos, sin condicionales globales)
 register_target("exe", make_exe)
 register_target("resources", make_embedded_resources, depends=["exe"])
 register_target("install", make_install, depends=["exe"], default=True)
@@ -385,11 +374,10 @@ register_target("msi_installer", make_windows_installer, depends=["exe"])
 register_target("macos_bundle", make_macos_app_bundle, depends=["exe"])
 
 resolve_targets()
-''' % exe_name
-        
+'''
         with open(self.project_dir / "pyoxidizer.bzl", "w") as f:
             f.write(config)
-        print("[PyOxidizer] Archivo de configuración pyoxidizer.bzl generado (Starlark válido).")
+        print("[PyOxidizer] Archivo de configuración pyoxidizer.bzl generado (compatible PyOxidizer 0.24).")
     
     # --------------------------------------------------------------------------
     # Helper para encontrar el ejecutable

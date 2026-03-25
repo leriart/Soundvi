@@ -5,13 +5,6 @@ Soundvi - Generador de Video con Visualizador Modular
 ------------------------------------------------------
 Aplicación de escritorio para generar videos reactivos al audio.
 Diseñado con arquitectura de módulos "Plug and Play".
-
-Uso:
-    python main.py
-
-Requisitos:
-    - Python 3.10+
-    - FFmpeg (en el sistema o provisto en la UI)
 """
 
 import sys
@@ -27,10 +20,16 @@ import tkinter as tk
 # Detección de entorno empaquetado (PyInstaller, PyOxidizer)
 # -----------------------------------------------------------------------------
 def is_frozen():
+    """Retorna True si el código se ejecuta dentro de un ejecutable empaquetado."""
     return getattr(sys, 'frozen', False) or hasattr(sys, '_MEIPASS') or hasattr(sys, 'oxidized')
 
 def resource_path(relative_path):
+    """
+    Obtiene la ruta absoluta a un recurso, funcionando en desarrollo y en ejecutable.
+    En modo empaquetado, busca en el directorio del ejecutable.
+    """
     if is_frozen():
+        # Para PyInstaller usa sys._MEIPASS; para PyOxidizer usamos sys.executable
         if hasattr(sys, '_MEIPASS'):
             base_path = sys._MEIPASS
         else:
@@ -45,10 +44,27 @@ if not is_frozen():
     if _RAIZ_PROYECTO not in sys.path:
         sys.path.insert(0, _RAIZ_PROYECTO)
 
-# =============================================================================
-# PARCHE: Instancia única y manejo de señales
-# =============================================================================
+# -----------------------------------------------------------------------------
+# Parche para ttkbootstrap en entornos empaquetados (evita error msgcat)
+# -----------------------------------------------------------------------------
+def patch_ttkbootstrap_msgcat():
+    """Sobrescribe la función set_many de ttkbootstrap para que no intente usar msgcat."""
+    if not is_frozen():
+        return
+    try:
+        import ttkbootstrap.localization.msgcat as msgcat_module
+        # Reemplazar el método set_many con una función vacía
+        original = msgcat_module.MsgCatalog.set_many
+        def noop_set_many(self, mapping):
+            pass
+        msgcat_module.MsgCatalog.set_many = noop_set_many
+        print("[*] ttkbootstrap patcheado (msgcat desactivado)")
+    except ImportError:
+        pass
 
+# -----------------------------------------------------------------------------
+# Instancia única y manejo de señales
+# -----------------------------------------------------------------------------
 def setup_single_instance():
     try:
         lock_socket = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
@@ -77,10 +93,9 @@ signal.signal(signal.SIGTERM, signal_handler)
 lock_socket = setup_single_instance()
 atexit.register(lambda: cleanup_single_instance(lock_socket))
 
-# =============================================================================
-# FIN DEL PARCHE
-# =============================================================================
-
+# -----------------------------------------------------------------------------
+# Optimización y dependencias
+# -----------------------------------------------------------------------------
 def optimize_python_settings():
     print("=== INICIANDO SOUNDVI (MODO OPTIMIZADO) ===")
     num_cores = max(1, mp.cpu_count() - 1)
@@ -115,7 +130,11 @@ def check_dependencies():
 def main():
     optimize_python_settings()
     check_dependencies()
-
+    
+    # Parche para msgcat ANTES de importar cualquier parte de la GUI que use ttkbootstrap
+    patch_ttkbootstrap_msgcat()
+    
+    # Importar GUI después del parche
     try:
         from gui.app import SoundviApp
     except ImportError as e:
@@ -124,9 +143,22 @@ def main():
         sys.exit(1)
 
     print("[*] Iniciando interfaz gráfica...")
+    
+    # Crear ventana raíz de tkinter
     root = tk.Tk()
-    # Forzar carga del paquete msgcat antes de usar ttkbootstrap
-    root.tk.call('package', 'require', 'msgcat')
+    
+    # Intentar cargar msgcat manualmente si está disponible (opcional)
+    # Esto puede ayudar en algunos sistemas, pero no es crítico
+    if is_frozen():
+        try:
+            # Buscar msgcat.tcl en el directorio del ejecutable
+            msgcat_path = resource_path('msgcat.tcl')
+            if os.path.exists(msgcat_path):
+                root.tk.call('source', msgcat_path)
+                print("[*] msgcat cargado desde el ejecutable")
+        except:
+            pass
+    
     app = SoundviApp(root)
     app.run()
 

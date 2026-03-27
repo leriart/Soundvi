@@ -3,17 +3,19 @@
 """
 Soundvi -- Script de empaquetado multiplataforma mejorado.
 
-Genera ejecutables standalone para Windows y Linux usando PyInstaller.
-Incluye optimizaciones para reducir tamaño y dependencias externas.
+Genera ejecutables standalone para Windows, Linux y macOS usando PyInstaller.
+Soporta construccion de multiples plataformas en una sola ejecucion.
 
 Uso:
-    python build.py                       # Build para la plataforma actual
-    python build.py --platform windows    # Build para Windows
-    python build.py --platform linux      # Build para Linux
-    python build.py --version 4.8.0       # Con version custom
-    python build.py --onefile             # Ejecutable unico
-    python build.py --clean               # Limpiar build previos
-    python build.py --appimage            # (Linux) Generar AppImage
+    python build.py                                # Build para la plataforma actual
+    python build.py --platform windows             # Build para Windows
+    python build.py --platform linux               # Build para Linux
+    python build.py --platform windows linux macos # Build para todas las indicadas
+    python build.py --platform all                 # Build para TODAS las plataformas
+    python build.py --version 4.8.0                # Con version custom
+    python build.py --onefile                      # Ejecutable unico
+    python build.py --clean                        # Limpiar build previos
+    python build.py --appimage                     # (Linux) Generar AppImage
 """
 
 import os
@@ -83,6 +85,7 @@ _BUILD = os.path.join(_RAIZ, "build")
 
 VERSION_DEFECTO = "4.8.0"
 NOMBRE_APP = "Soundvi"
+PLATAFORMAS_VALIDAS = ["windows", "linux", "macos"]
 
 # ---------------------------------------------------------------------------
 #  Utilidades
@@ -237,15 +240,33 @@ def obtener_excludes() -> list:
 # ---------------------------------------------------------------------------
 
 def construir(plataforma: str, version: str, modo_debug: bool = False,
-              onefile: bool = False):
-    """Ejecuta PyInstaller para construir el ejecutable."""
+              onefile: bool = False, dist_dir: str = None):
+    """Ejecuta PyInstaller para construir el ejecutable.
+    
+    Args:
+        plataforma: Plataforma objetivo (windows, linux, macos).
+        version: Version del build.
+        modo_debug: Si True, build en modo debug.
+        onefile: Si True, genera ejecutable unico.
+        dist_dir: Directorio de salida. Si None, usa dist/<plataforma>/.
+    
+    Returns:
+        True si el build fue exitoso, False en caso contrario.
+    """
+    # Directorio de salida por plataforma
+    if dist_dir is None:
+        dist_dir = os.path.join(_DIST, plataforma)
+    
+    build_dir = os.path.join(_BUILD, plataforma)
+    
     print(f"\n{'='*60}")
-    print(f"  Soundvi Build System v2.0")
+    print(f"  Soundvi Build System v3.0 (Multi-Platform)")
     print(f"{'='*60}")
     print(f"  App:        {NOMBRE_APP} v{version}")
     print(f"  Plataforma: {plataforma}")
     print(f"  Modo:       {'onefile' if onefile else 'onedir'}")
     print(f"  Debug:      {'Si' if modo_debug else 'No'}")
+    print(f"  Salida:     {dist_dir}")
     print(f"  Fecha:      {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
     print(f"  Python:     {sys.version.split()[0]}")
     print(f"  OS:         {platform.platform()}")
@@ -254,8 +275,15 @@ def construir(plataforma: str, version: str, modo_debug: bool = False,
     print("[1/5] Verificando dependencias...")
     verificar_pyinstaller()
 
-    print("\n[2/5] Limpiando builds previos...")
-    limpiar_build()
+    print("\n[2/5] Limpiando builds previos de esta plataforma...")
+    for d in [dist_dir, build_dir]:
+        if os.path.isdir(d):
+            shutil.rmtree(d)
+            print(f"  {OK} Limpiado: {d}")
+    # Limpiar .spec files de esta plataforma
+    for spec in Path(_RAIZ).glob("*.spec"):
+        spec.unlink()
+        print(f"  {OK} Limpiado: {spec.name}")
 
     print("\n[3/5] Preparando configuracion...")
 
@@ -284,6 +312,8 @@ def construir(plataforma: str, version: str, modo_debug: bool = False,
         "--windowed",
         "--noconfirm",
         "--clean",
+        "--distpath", dist_dir,
+        "--workpath", build_dir,
         "--log-level", "WARN" if not modo_debug else "DEBUG",
     ]
     
@@ -341,24 +371,24 @@ def construir(plataforma: str, version: str, modo_debug: bool = False,
     duracion = (datetime.now() - inicio).total_seconds()
 
     if resultado.returncode != 0:
-        print(f"\n  {FAIL} Build fallido con codigo {resultado.returncode}")
+        print(f"\n  {FAIL} Build fallido para '{plataforma}' con codigo {resultado.returncode}")
         print("  Sugerencias:")
         print("    - Ejecuta con --debug para mas informacion")
         print("    - Verifica que todas las dependencias esten instaladas")
         print("    - Revisa que no haya errores de importacion")
-        sys.exit(1)
+        return False
 
-    print(f"\n[5/5] Finalizando build...")
+    print(f"\n[5/5] Finalizando build ({plataforma})...")
 
     # Buscar ejecutable generado
     if onefile:
-        exe_path = os.path.join(_DIST, nombre_exe_full)
+        exe_path = os.path.join(dist_dir, nombre_exe_full)
     else:
-        exe_dir = os.path.join(_DIST, nombre_exe)
+        exe_dir_path = os.path.join(dist_dir, nombre_exe)
         if plataforma == "windows":
-            exe_path = os.path.join(exe_dir, f"{nombre_exe}.exe")
+            exe_path = os.path.join(exe_dir_path, f"{nombre_exe}.exe")
         else:
-            exe_path = os.path.join(exe_dir, nombre_exe)
+            exe_path = os.path.join(exe_dir_path, nombre_exe)
 
     # Crear archivo de version/info
     info = {
@@ -372,13 +402,13 @@ def construir(plataforma: str, version: str, modo_debug: bool = False,
         "os": platform.platform(),
     }
 
-    # Generar checksums para todos los archivos en dist/
+    # Generar checksums para todos los archivos en dist_dir
     checksums = {}
-    if os.path.isdir(_DIST):
-        for root, dirs, files in os.walk(_DIST):
+    if os.path.isdir(dist_dir):
+        for root, dirs, files in os.walk(dist_dir):
             for file in files:
                 file_path = os.path.join(root, file)
-                rel_path = os.path.relpath(file_path, _DIST)
+                rel_path = os.path.relpath(file_path, dist_dir)
                 if not file.endswith(('.json', '.txt')):  # No checksum para metadata
                     checksums[rel_path] = calcular_hash(file_path)
     
@@ -388,13 +418,14 @@ def construir(plataforma: str, version: str, modo_debug: bool = False,
         info["sha256"] = calcular_hash(exe_path)
         info["tamano"] = obtener_tamano_legible(exe_path)
 
-    info_path = os.path.join(_DIST, "build_info.json")
+    info_path = os.path.join(dist_dir, "build_info.json")
+    os.makedirs(dist_dir, exist_ok=True)
     with open(info_path, "w", encoding="utf-8") as f:
         json.dump(info, f, indent=2, ensure_ascii=False)
     
     # Crear archivo de checksums para releases (SHA256SUMS)
     if checksums:
-        checksums_path = os.path.join(_DIST, "SHA256SUMS")
+        checksums_path = os.path.join(dist_dir, "SHA256SUMS")
         with open(checksums_path, "w", encoding="utf-8") as f:
             for file_path_rel, hash_value in checksums.items():
                 f.write(f"{hash_value}  {file_path_rel}\n")
@@ -402,15 +433,96 @@ def construir(plataforma: str, version: str, modo_debug: bool = False,
 
     # Resumen
     print(f"\n{'='*60}")
-    print(f"  {OK} BUILD EXITOSO")
+    print(f"  {OK} BUILD EXITOSO -- {plataforma}")
     print(f"{'='*60}")
-    print(f"  Ejecutable: {_DIST}")
+    print(f"  Ejecutable: {dist_dir}")
     if os.path.isfile(exe_path):
         print(f"  Tamano:     {info.get('tamano', 'N/A')}")
         print(f"  SHA256:     {info.get('sha256', 'N/A')[:16]}...")
     print(f"  Duracion:   {duracion:.1f}s")
     print(f"  Info:       {info_path}")
     print(f"{'='*60}\n")
+    return True
+
+
+# ---------------------------------------------------------------------------
+#  Multi-platform builder
+# ---------------------------------------------------------------------------
+
+def construir_multiple(plataformas: list, version: str, modo_debug: bool = False,
+                       onefile: bool = False):
+    """Construye para multiples plataformas secuencialmente.
+    
+    Si una plataforma falla, continua con las siguientes y reporta
+    un resumen al final.
+    
+    Args:
+        plataformas: Lista de plataformas a construir.
+        version: Version del build.
+        modo_debug: Si True, build en modo debug.
+        onefile: Si True, genera ejecutable unico.
+    """
+    total = len(plataformas)
+    resultados = {}  # plataforma -> True/False
+    
+    print(f"\n{'#'*60}")
+    print(f"  MULTI-PLATFORM BUILD")
+    print(f"  Plataformas: {', '.join(plataformas)} ({total} total)")
+    print(f"  Version:     {version}")
+    print(f"  Modo:        {'onefile' if onefile else 'onedir'}")
+    print(f"{'#'*60}")
+    
+    for idx, plat in enumerate(plataformas, 1):
+        print(f"\n{'#'*60}")
+        print(f"  [{idx}/{total}] Construyendo para: {plat.upper()}")
+        print(f"{'#'*60}")
+        
+        try:
+            exito = construir(plat, version, modo_debug, onefile)
+            resultados[plat] = exito
+        except Exception as e:
+            print(f"\n  {FAIL} Excepcion durante build de '{plat}': {e}")
+            resultados[plat] = False
+    
+    # ---------------------------------------------------------------------------
+    #  Reporte final multi-plataforma
+    # ---------------------------------------------------------------------------
+    exitosos = [p for p, ok in resultados.items() if ok]
+    fallidos = [p for p, ok in resultados.items() if not ok]
+    
+    print(f"\n{'#'*60}")
+    print(f"  RESUMEN MULTI-PLATFORM BUILD")
+    print(f"{'#'*60}")
+    print(f"  Total:    {total}")
+    print(f"  Exitosos: {len(exitosos)}")
+    print(f"  Fallidos: {len(fallidos)}")
+    print()
+    
+    for plat, ok in resultados.items():
+        estado = f"{OK}" if ok else f"{FAIL}"
+        dist_plat = os.path.join(_DIST, plat)
+        print(f"  {estado} {plat:10s}  ->  {dist_plat}")
+    
+    if fallidos:
+        print(f"\n  {WARN} Plataformas fallidas: {', '.join(fallidos)}")
+        print(f"  {INFO} Ejecuta con --debug para mas informacion sobre los errores.")
+    
+    print(f"\n  Directorio de salida: {_DIST}/")
+    print(f"  Estructura:")
+    if os.path.isdir(_DIST):
+        for plat in plataformas:
+            plat_dir = os.path.join(_DIST, plat)
+            if os.path.isdir(plat_dir):
+                n_files = sum(len(files) for _, _, files in os.walk(plat_dir))
+                print(f"    dist/{plat}/  ({n_files} archivos)")
+            else:
+                print(f"    dist/{plat}/  (no generado)")
+    
+    print(f"{'#'*60}\n")
+    
+    # Codigo de salida: falla si TODAS las plataformas fallaron
+    if not exitosos:
+        sys.exit(1)
 
 
 # ---------------------------------------------------------------------------
@@ -539,23 +651,55 @@ MimeType=video/mp4;video/avi;video/mkv;video/mov;
 #  CLI
 # ---------------------------------------------------------------------------
 
+def _resolver_plataformas(valores: list) -> list:
+    """Resuelve la lista de plataformas a partir de los valores del CLI.
+    
+    Soporta:
+      - Un solo valor: ['windows'] -> ['windows']
+      - Varios valores: ['windows', 'linux'] -> ['windows', 'linux']
+      - 'all': ['all'] -> ['windows', 'linux', 'macos']
+    
+    Elimina duplicados manteniendo orden.
+    """
+    if not valores:
+        return [detectar_plataforma()]
+    
+    # Si alguno de los valores es 'all', devolver todas las plataformas
+    if "all" in valores:
+        return list(PLATAFORMAS_VALIDAS)
+    
+    # Eliminar duplicados preservando orden
+    vistos = set()
+    resultado = []
+    for v in valores:
+        if v not in vistos:
+            vistos.add(v)
+            resultado.append(v)
+    return resultado
+
+
 def main():
     parser = argparse.ArgumentParser(
         description=f"{NOMBRE_APP} -- Script de empaquetado multiplataforma",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Ejemplos:
-  python build.py                         # Build para tu plataforma
-  python build.py --platform windows      # Build para Windows
-  python build.py --platform linux        # Build para Linux
-  python build.py --onefile               # Ejecutable unico
-  python build.py --appimage              # Generar AppImage (Linux)
-  python build.py --version 4.8.0         # Con version especifica
-  python build.py --clean                 # Solo limpiar
+  python build.py                                  # Build para tu plataforma
+  python build.py --platform windows               # Build para Windows
+  python build.py --platform linux                 # Build para Linux
+  python build.py --platform windows linux macos   # Build para las 3 plataformas
+  python build.py --platform all                   # Build para TODAS las plataformas
+  python build.py --onefile                        # Ejecutable unico
+  python build.py --appimage                       # Generar AppImage (Linux)
+  python build.py --version 4.8.0                  # Con version especifica
+  python build.py --clean                          # Solo limpiar
         """
     )
-    parser.add_argument("--platform", choices=["windows", "linux", "macos"],
-                        default=None, help="Plataforma objetivo")
+    parser.add_argument("--platform", nargs="+",
+                        choices=["windows", "linux", "macos", "all"],
+                        default=None,
+                        help="Plataforma(s) objetivo. Usa 'all' para todas. "
+                             "Ejemplo: --platform windows linux")
     parser.add_argument("--version", default=VERSION_DEFECTO,
                         help=f"Version del build (default: {VERSION_DEFECTO})")
     parser.add_argument("--debug", action="store_true",
@@ -579,8 +723,16 @@ Ejemplos:
         construir_appimage(args.version)
         return
 
-    plataforma = args.platform or detectar_plataforma()
-    construir(plataforma, args.version, args.debug, args.onefile)
+    plataformas = _resolver_plataformas(args.platform)
+    
+    if len(plataformas) == 1:
+        # Build de una sola plataforma (comportamiento clasico)
+        exito = construir(plataformas[0], args.version, args.debug, args.onefile)
+        if not exito:
+            sys.exit(1)
+    else:
+        # Build multi-plataforma con reporte
+        construir_multiple(plataformas, args.version, args.debug, args.onefile)
 
 
 if __name__ == "__main__":

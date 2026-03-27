@@ -13,7 +13,7 @@ on:
           - build-and-release
           - test
       platform:
-        description: 'Platform to build for'
+        description: 'Platform to build for (all = windows + linux + macos)'
         required: true
         default: 'linux'
         type: choice
@@ -21,6 +21,7 @@ on:
           - linux
           - windows
           - macos
+          - all
       version:
         description: 'Version number (e.g., 4.8.0)'
         required: true
@@ -60,11 +61,20 @@ jobs:
 
   # -----------------------------------------------------------------------
   #  Build para Linux y macOS (shell bash nativo)
+  #  Se usa matrix strategy cuando platform == 'all' para Linux + macOS
   # -----------------------------------------------------------------------
   build-unix:
     needs: setup
-    if: needs.setup.outputs.should_build == 'true' && inputs.platform != 'windows'
-    runs-on: ${{ inputs.platform == 'macos' && 'macos-latest' || 'ubuntu-latest' }}
+    if: >-
+      needs.setup.outputs.should_build == 'true' &&
+      (inputs.platform == 'linux' || inputs.platform == 'macos' || inputs.platform == 'all')
+    runs-on: ${{ matrix.target_platform == 'macos' && 'macos-latest' || 'ubuntu-latest' }}
+    strategy:
+      fail-fast: false
+      matrix:
+        target_platform: ${{ inputs.platform == 'all' && fromJSON('["linux","macos"]') || fromJSON(format('["{0}"]', inputs.platform)) }}
+        exclude:
+          - target_platform: windows
     
     steps:
     - name: Checkout code
@@ -107,11 +117,11 @@ jobs:
       run: |
         source $VENV_ACTIVATE
         echo "=== Building Soundvi ==="
-        echo "Platform: ${{ inputs.platform }}"
+        echo "Platform: ${{ matrix.target_platform }}"
         echo "Version: ${{ inputs.version }}"
         echo "Mode: ${{ inputs.mode }}"
         
-        CMD="python build.py --platform ${{ inputs.platform }} --version ${{ inputs.version }} --clean"
+        CMD="python build.py --platform ${{ matrix.target_platform }} --version ${{ inputs.version }} --clean"
         if [ "${{ inputs.mode }}" = "onefile" ]; then
           CMD="$CMD --onefile"
         fi
@@ -122,15 +132,18 @@ jobs:
     - name: Verify build output
       run: |
         echo "=== Build verification ==="
-        if [ -d "dist" ]; then
-          echo "[OK] dist/ directory created successfully"
-          echo "Files in dist/:"
-          find dist -type f | while read f; do
+        DIST_DIR="dist/${{ matrix.target_platform }}"
+        if [ -d "$DIST_DIR" ]; then
+          echo "[OK] $DIST_DIR directory created successfully"
+          echo "Files in $DIST_DIR:"
+          find "$DIST_DIR" -type f | while read f; do
             size=$(du -h "$f" 2>/dev/null | cut -f1 || echo "N/A")
             echo "  - $f ($size)"
           done
-          (cd dist && sha256sum * > SHA256SUMS 2>/dev/null || true)
-          echo "[OK] Checksums generated"
+          echo "[OK] Build verified"
+        elif [ -d "dist" ]; then
+          echo "[OK] dist/ directory found (legacy layout)"
+          find dist -type f | head -20
         else
           echo "[FAIL] dist/ directory not found!"
           pwd
@@ -141,7 +154,7 @@ jobs:
     - name: Upload artifact
       uses: actions/upload-artifact@v4
       with:
-        name: soundvi-${{ inputs.platform }}-${{ inputs.version }}-${{ inputs.mode }}
+        name: soundvi-${{ matrix.target_platform }}-${{ inputs.version }}-${{ inputs.mode }}
         path: dist/
         if-no-files-found: error
 
@@ -150,7 +163,9 @@ jobs:
   # -----------------------------------------------------------------------
   build-windows:
     needs: setup
-    if: needs.setup.outputs.should_build == 'true' && inputs.platform == 'windows'
+    if: >-
+      needs.setup.outputs.should_build == 'true' &&
+      (inputs.platform == 'windows' || inputs.platform == 'all')
     runs-on: windows-latest
     
     steps:
@@ -214,14 +229,18 @@ jobs:
       shell: pwsh
       run: |
         Write-Host "=== Build verification ==="
-        if (Test-Path "dist") {
-          Write-Host "[OK] dist/ directory created successfully"
-          Write-Host "Files in dist/:"
-          Get-ChildItem -Path dist -Recurse -File | ForEach-Object {
+        $distDir = "dist\windows"
+        if (Test-Path $distDir) {
+          Write-Host "[OK] $distDir directory created successfully"
+          Write-Host "Files in ${distDir}:"
+          Get-ChildItem -Path $distDir -Recurse -File | ForEach-Object {
             $size = "{0:N2} MB" -f ($_.Length / 1MB)
             Write-Host "  - $($_.FullName) ($size)"
           }
           Write-Host "[OK] Build verified"
+        } elseif (Test-Path "dist") {
+          Write-Host "[OK] dist/ directory found (legacy layout)"
+          Get-ChildItem -Path dist -Recurse -File | Select-Object -First 20
         } else {
           Write-Host "[FAIL] dist/ directory not found!"
           Get-Location
@@ -232,7 +251,7 @@ jobs:
     - name: Upload artifact
       uses: actions/upload-artifact@v4
       with:
-        name: soundvi-${{ inputs.platform }}-${{ inputs.version }}-${{ inputs.mode }}
+        name: soundvi-windows-${{ inputs.version }}-${{ inputs.mode }}
         path: dist/
         if-no-files-found: error
 
@@ -314,11 +333,17 @@ jobs:
     - name: Checkout code
       uses: actions/checkout@v4
     
-    - name: Download build artifacts
+    - name: Download all build artifacts
       uses: actions/download-artifact@v4
       with:
-        name: soundvi-${{ inputs.platform }}-${{ inputs.version }}-${{ inputs.mode }}
+        pattern: soundvi-*-${{ inputs.version }}-${{ inputs.mode }}
         path: release_files
+        merge-multiple: true
+    
+    - name: List release files
+      run: |
+        echo "=== Release files ==="
+        find release_files -type f | sort
     
     - name: Create GitHub Release
       uses: softprops/action-gh-release@v2

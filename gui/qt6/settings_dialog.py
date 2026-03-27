@@ -109,10 +109,10 @@ class SettingsDialog(QDialog):
 
         # Tabs
         self._tabs = QTabWidget()
-        self._tabs.addTab(self._crear_tab_general(), "\u2302  General")
-        self._tabs.addTab(self._crear_tab_performance(), "\u26A1  Rendimiento")
-        self._tabs.addTab(self._crear_tab_timeline(), "\u2261  Timeline")
-        self._tabs.addTab(self._crear_tab_shortcuts(), "\u2328  Atajos")
+        self._tabs.addTab(self._crear_tab_general(), "🏠  General")
+        self._tabs.addTab(self._crear_tab_performance(), "⚡  Rendimiento")
+        self._tabs.addTab(self._crear_tab_timeline(), "≡  Timeline")
+        self._tabs.addTab(self._crear_tab_shortcuts(), "⌨  Atajos")
         layout.addWidget(self._tabs)
 
         # Botones

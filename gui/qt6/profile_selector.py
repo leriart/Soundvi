@@ -103,7 +103,7 @@ PERFILES_UI_INFO: Dict[str, Dict[str, Any]] = {
         "recomendado_para": "Creadores de contenido y YouTubers",
     },
     "profesional": {
-        "icono": "26A1",
+        "icono": "⚡",
         "titulo": "Profesional",
         "subtitulo": "Todas las opciones",
         "descripcion": "Sin restricciones. Keyframes, audio reactivo,\nGPU, todo desbloqueado.",

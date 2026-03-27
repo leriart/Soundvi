@@ -177,7 +177,7 @@ class ScriptingPanel(QWidget):
         header_layout = QHBoxLayout(header)
         header_layout.setContentsMargins(8, 4, 8, 4)
 
-        titulo = QLabel("27A1 Consola Python")
+        titulo = QLabel("➡ Consola Python")
         titulo.setFont(QFont("Segoe UI", 11, QFont.Weight.Bold))
         titulo.setStyleSheet("color: #E74C3C;")
         header_layout.addWidget(titulo)
@@ -336,7 +336,7 @@ class ScriptingPanel(QWidget):
             if errores:
                 self._agregar_salida(errores, "#F39C12")
             if not salida and not errores:
-                self._agregar_salida("2713 Ejecutado sin errores.", "#6C757D")
+                self._agregar_salida("✓ Ejecutado sin errores.", "#6C757D")
 
         except Exception as e:
             tb = traceback.format_exc()

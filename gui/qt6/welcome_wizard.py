@@ -89,20 +89,20 @@ PASOS_WIZARD = [
     },
     {
         "titulo": "Paso 4: Exportar tu video 25B6",
-        "icono": "25B6",
+        "icono": "▶",
         "descripcion": (
             "Cuando estés listo, exporta tu creación:\n\n"
             "  1. Ve a File > Exportar video (Ctrl+E)\n"
             "  2. Elige la calidad y formato\n"
             "  3. Selecciona dónde guardar\n"
             "  4. ¡Presiona Exportar!\n\n"
-            "Soundvi se encarga del resto. 27A1"
+            "Soundvi se encarga del resto. ➡"
         ),
         "tip": "2022 Para empezar, usa '1080p H.264' — es compatible con casi todo.",
     },
     {
         "titulo": "¡Listo para crear! 2605",
-        "icono": "27A1",
+        "icono": "➡",
         "descripcion": (
             "Ya conoces lo básico de Soundvi.\n\n"
             "Recuerda:\n"
@@ -314,7 +314,7 @@ class WelcomeWizard(QDialog):
         self._btn_anterior.setEnabled(self._paso_actual > 0)
 
         if self._paso_actual == self._total_pasos - 1:
-            self._btn_siguiente.setText("¡Empezar! 27A1")
+            self._btn_siguiente.setText("¡Empezar! ➡")
         else:
             self._btn_siguiente.setText("Siguiente →")
 
@@ -365,7 +365,7 @@ class PanelPrimerosPasos(QFrame):
         layout.setSpacing(8)
 
         # Titulo
-        titulo = QLabel("27A1 Primeros Pasos")
+        titulo = QLabel("➡ Primeros Pasos")
         titulo.setFont(QFont("Segoe UI", 14, QFont.Weight.Bold))
         titulo.setStyleSheet("color: #00BC8C; border: none;")
         titulo.setAlignment(Qt.AlignmentFlag.AlignCenter)

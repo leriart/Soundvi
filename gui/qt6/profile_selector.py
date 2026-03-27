@@ -73,32 +73,32 @@ def obtener_perfil_guardado() -> str:
 
 PERFILES_UI_INFO: Dict[str, Dict[str, Any]] = {
     "basico": {
-        "icono": "25B6",
+        "icono": "▶",  # 25B6 es ▶ (play/triangle right)
         "titulo": "Novato",
         "subtitulo": "Interfaz simplificada",
         "descripcion": "Ideal para comenzar. Solo las herramientas\nesenciales con guías paso a paso.",
         "color_acento": "#00BC8C",
         "color_fondo": "#1a3a2a",
         "caracteristicas": [
-            "2713 Cortar y recortar video",
-            "2713 Preview en tiempo real",
-            "2713 Exportación rápida",
-            "2713 Asistente guiado",
+            "✓ Cortar y recortar video",
+            "✓ Preview en tiempo real",
+            "✓ Exportación rápida",
+            "✓ Asistente guiado",
         ],
         "recomendado_para": "Usuarios que nunca han editado video",
     },
     "creador": {
-        "icono": "2726",
+        "icono": "✦",  # 2726 es ✦ (black four pointed star)
         "titulo": "Intermedio",
         "subtitulo": "Balance perfecto",
         "descripcion": "Para creadores de contenido. Transiciones,\nefectos, audio y subtítulos.",
         "color_acento": "#3498DB",
         "color_fondo": "#1a2a3a",
         "caracteristicas": [
-            "2713 Transiciones y efectos",
-            "2713 Color grading básico",
-            "2713 Subtítulos con IA",
-            "2713 Inspector de propiedades",
+            "✓ Transiciones y efectos",
+            "✓ Color grading básico",
+            "✓ Subtítulos con IA",
+            "✓ Inspector de propiedades",
         ],
         "recomendado_para": "Creadores de contenido y YouTubers",
     },
@@ -110,10 +110,10 @@ PERFILES_UI_INFO: Dict[str, Dict[str, Any]] = {
         "color_acento": "#E74C3C",
         "color_fondo": "#3a1a1a",
         "caracteristicas": [
-            "2713 Audio reactivo avanzado",
-            "2713 Keyframes y animación",
-            "2713 Aceleración GPU",
-            "2713 Consola Python",
+            "✓ Audio reactivo avanzado",
+            "✓ Keyframes y animación",
+            "✓ Aceleración GPU",
+            "✓ Consola Python",
         ],
         "recomendado_para": "Editores experimentados y profesionales",
     },
@@ -125,10 +125,10 @@ PERFILES_UI_INFO: Dict[str, Dict[str, Any]] = {
         "color_acento": "#F39C12",
         "color_fondo": "#3a2a1a",
         "caracteristicas": [
-            "2713 Módulos a la carta",
-            "2713 Paneles configurables",
-            "2713 Sin límites predefinidos",
-            "2713 Control total",
+            "✓ Módulos a la carta",
+            "✓ Paneles configurables",
+            "✓ Sin límites predefinidos",
+            "✓ Control total",
         ],
         "recomendado_para": "Usuarios que saben lo que quieren",
     },
@@ -286,7 +286,7 @@ class SelectorTema(QFrame):
         layout.setSpacing(8)
 
         # Título
-        lbl = QLabel("🎨 Tema visual:")
+        lbl = QLabel("✎ Tema visual:")
         lbl.setFont(QFont("Segoe UI", 11, QFont.Weight.Bold))
         lbl.setStyleSheet("color: #ADB5BD; background: transparent;")
         layout.addWidget(lbl)
@@ -539,7 +539,7 @@ class MenuQueQuieresHacer(QDialog):
         layout.addStretch()
 
         # Boton continuar
-        btn = QPushButton("27A1  Comenzar configuracion")
+        btn = QPushButton("➡  Comenzar configuracion")
         btn.setFixedSize(280, 48)
         btn.setCursor(Qt.CursorShape.PointingHandCursor)
         btn.setFont(QFont("Segoe UI", 13, QFont.Weight.Bold))
@@ -718,7 +718,7 @@ class MenuQueQuieresHacer(QDialog):
         # Tarjeta tema oscuro
         self._tema_cards: Dict[str, QFrame] = {}
         self._card_oscuro = self._crear_tarjeta_tema(
-            "darkly", "\u25CB  Tema Oscuro",
+            "darkly", "○  Tema Oscuro",
             "Colores oscuros refinados.\nIdeal para sesiones largas.",
             "#1a1d23", "#e6edf3", "#2f81f7"
         )
@@ -727,7 +727,7 @@ class MenuQueQuieresHacer(QDialog):
 
         # Tarjeta tema claro
         self._card_claro = self._crear_tarjeta_tema(
-            "claro", "\u25CF  Tema Claro",
+            "claro", "●  Tema Claro",
             "Colores claros para ambientes\nbien iluminados.",
             "#ffffff", "#1f2328", "#0969da"
         )
@@ -793,7 +793,7 @@ class MenuQueQuieresHacer(QDialog):
 
         btn_layout.addSpacing(12)
 
-        self._btn_finalizar = QPushButton("27A1  Empezar a editar!")
+        self._btn_finalizar = QPushButton("➡  Empezar a editar!")
         self._btn_finalizar.setFixedSize(220, 48)
         self._btn_finalizar.setFont(QFont("Segoe UI", 13, QFont.Weight.Bold))
         self._btn_finalizar.setStyleSheet("""
@@ -1036,7 +1036,7 @@ class MenuQueQuieresHacer(QDialog):
 
         btn_layout.addSpacing(12)
 
-        self._btn_aceptar = QPushButton("2713  Aplicar")
+        self._btn_aceptar = QPushButton("✓  Aplicar")
         self._btn_aceptar.setFixedSize(160, 40)
         self._btn_aceptar.setEnabled(False)
         self._btn_aceptar.setStyleSheet("""

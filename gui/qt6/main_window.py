@@ -170,7 +170,7 @@ class VentanaPrincipalQt6(QMainWindow):
         self._acciones_view = {}
         
         # Submenú de temas
-        self._menu_temas = self._menu_view.addMenu("🎨 Cambiar tema")
+        self._menu_temas = self._menu_view.addMenu("✎ Cambiar tema")
         self._crear_menu_temas()
 
         # Modules
@@ -203,7 +203,7 @@ class VentanaPrincipalQt6(QMainWindow):
         
         tema_manager = AdministradorTemas()
         temas = tema_manager.listar_temas_nombres()
-        tema_actual = tema_manager.tema_actual()
+        tema_actual = tema_manager.tema_actual
         
         # Grupo de acciones para selección exclusiva
         self._grupo_temas = QActionGroup(self)
@@ -222,7 +222,7 @@ class VentanaPrincipalQt6(QMainWindow):
         self._menu_temas.addSeparator()
         
         # Acción para abrir selector avanzado
-        accion_avanzado = QAction("🎨 Selector avanzado...", self)
+        accion_avanzado = QAction("✎ Selector avanzado...", self)
         accion_avanzado.triggered.connect(self._abrir_selector_temas_avanzado)
         self._menu_temas.addAction(accion_avanzado)
     
@@ -269,10 +269,10 @@ class VentanaPrincipalQt6(QMainWindow):
         
         tema_manager = AdministradorTemas()
         temas = tema_manager.listar_temas_nombres()
-        tema_actual = tema_manager.tema_actual()
+        tema_actual = tema_manager.tema_actual
         
         dialog = QDialog(self)
-        dialog.setWindowTitle("🎨 Cambiar tema")
+        dialog.setWindowTitle("✎ Cambiar tema")
         dialog.setFixedSize(400, 300)
         
         layout = QVBoxLayout(dialog)

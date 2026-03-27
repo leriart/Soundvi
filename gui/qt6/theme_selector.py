@@ -146,7 +146,7 @@ class ThemeSelectorWidget(QWidget):
     def __init__(self, parent: Optional[QWidget] = None):
         super().__init__(parent)
         self.tema_manager = AdministradorTemas()
-        self.tema_actual = self.tema_manager.tema_actual()
+        self.tema_actual = self.tema_manager.tema_actual
         self.previews: Dict[str, ThemePreviewWidget] = {}
         
         self._construir_ui()
@@ -157,7 +157,7 @@ class ThemeSelectorWidget(QWidget):
         layout.setSpacing(12)
         
         # Título
-        titulo = QLabel("🎨 Tema visual")
+        titulo = QLabel("✎ Tema visual")
         titulo.setFont(QFont("Segoe UI", 12, QFont.Weight.Bold))
         layout.addWidget(titulo)
         
@@ -196,7 +196,7 @@ class ThemeSelectorWidget(QWidget):
         layout.addWidget(grid_widget)
         
         # Información adicional
-        info = QLabel("💡 El tema se guarda automáticamente y se usará en el próximo inicio.")
+        info = QLabel("ℹ El tema se guarda automáticamente y se usará en el próximo inicio.")
         info.setWordWrap(True)
         info.setFont(QFont("Segoe UI", 8))
         info.setStyleSheet("color: #6C757D;")

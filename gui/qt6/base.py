@@ -34,36 +34,36 @@ log = logging.getLogger("soundvi.qt6.base")
 _RAIZ = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 ICONOS_UNICODE: Dict[str, str] = {
-    "play":       "\u25B6",
-    "pause":      "\u23F8",
-    "stop":       "\u23F9",
-    "forward":    "\u23E9",
-    "backward":   "\u23EA",
-    "record":     "\u23FA",
-    "cut":        "\u2702",
-    "copy":       "\u2398",
-    "paste":      "\u2399",
-    "undo":       "\u21B6",
-    "redo":       "\u21B7",
-    "save":       "\u2B07",
-    "open":       "\u2B06",
-    "settings":   "\u2699",
-    "module":     "\u29C9",
-    "audio":      "\u266B",
-    "video":      "\u25A3",
-    "text":       "\u2141",
-    "effect":     "\u2728",
-    "filter":     "\u29D6",
-    "export":     "\u27A1",
-    "trash":      "\u2717",
-    "check":      "\u2713",
-    "warning":    "\u26A0",
-    "info":       "\u2139",
-    "profile":    "\u2630",
-    "layers":     "\u25A6",
-    "zoom_in":    "\u2295",
-    "zoom_out":   "\u2296",
-    "fullscreen": "\u26F6",
+    "play":       "▶",      # U+25B6 Black right-pointing triangle
+    "pause":      "‖",      # U+2016 Double vertical line (mejor que ⏸)
+    "stop":       "■",      # U+25A0 Black square (mejor que ⏹)
+    "forward":    "»",      # U+00BB Right-pointing double angle quotation mark
+    "backward":   "«",      # U+00AB Left-pointing double angle quotation mark
+    "record":     "●",      # U+25CF Black circle (mejor que ⏺)
+    "cut":        "✂",      # U+2702 Black scissors
+    "copy":       "⎘",      # U+2398 Copy symbol
+    "paste":      "⎗",      # U+2397 Paste symbol
+    "undo":       "↶",      # U+21B6 Anticlockwise open circle arrow
+    "redo":       "↷",      # U+21B7 Clockwise open circle arrow
+    "save":       "↓",      # U+2193 Downwards arrow
+    "open":       "↑",      # U+2191 Upwards arrow
+    "settings":   "⚙",      # U+2699 Gear
+    "module":     "⧉",      # U+29C9 Two intersecting squares
+    "audio":      "♫",      # U+266B Beamed eighth notes
+    "video":      "▣",      # U+25A3 White square containing black small square
+    "text":       "℻",      # U+213B Facsimile sign
+    "effect":     "✨",      # U+2728 Sparkles (mantener, es aceptable)
+    "filter":     "⧉",      # U+29D6 Bowtie with left half black
+    "export":     "➡",      # U+27A1 Rightwards arrow
+    "trash":      "✗",      # U+2717 Ballot X
+    "check":      "✓",      # U+2713 Check mark
+    "warning":    "⚠",      # U+26A0 Warning sign
+    "info":       "ℹ",      # U+2139 Information source
+    "profile":    "☰",      # U+2630 Trigram for heaven
+    "layers":     "▦",      # U+25A6 Square with orthogonal crosshatch fill
+    "zoom_in":    "+",      # U+002B Plus sign
+    "zoom_out":   "−",      # U+2212 Minus sign
+    "fullscreen": "⛶",      # U+26F6 Square four corners
 }
 
 
@@ -422,7 +422,7 @@ AYUDA_CONTEXTUAL: Dict[str, str] = {
                  "puntos clave.",
     "transitions": "\u2728 Transiciones: Arrastra una transici\u00f3n entre dos clips "
                    "para aplicarla.",
-    "preview": "\u25B6 Preview: Aqu\u00ed se muestra el resultado de tu edici\u00f3n en "
+    "preview": "▶ Preview: Aqu\u00ed se muestra el resultado de tu edici\u00f3n en "
                "tiempo real.",
 }
 

@@ -40,7 +40,7 @@ HERRAMIENTAS: List[tuple] = [
 
     # -- Grupo: Import/Export --
     ("\u2912",  "Importar",  "Importar medios (Ctrl+I)",   "Ctrl+I",       "import_media",  "Import"),
-    ("\u27A1",  "Exportar",  "Exportar video (Ctrl+E)",    "Ctrl+E",       "export_video",  "Export"),
+    ("\u➡",  "Exportar",  "Exportar video (Ctrl+E)",    "Ctrl+E",       "export_video",  "Export"),
     (None, None, None, None, None, None),  # Separador
 
     # -- Grupo: Edit --
@@ -54,9 +54,9 @@ HERRAMIENTAS: List[tuple] = [
     (None, None, None, None, None, None),  # Separador
 
     # -- Grupo: Playback --
-    ("\u25B6",  "Play",      "Reproducir (Espacio)",       "Space",        "play",          "Playback"),
-    ("\u23F8",  "Pausa",     "Pausar (Espacio)",           "",             "pause",         "Playback"),
-    ("\u23F9",  "Stop",      "Detener (S)",                "S",            "stop",          "Playback"),
+    ("▶",  "Play",      "Reproducir (Espacio)",       "Space",        "play",          "Playback"),
+    ("‖",  "Pausa",     "Pausar (Espacio)",           "",             "pause",         "Playback"),
+    ("■",  "Stop",      "Detener (S)",                "S",            "stop",          "Playback"),
     (None, None, None, None, None, None),  # Separador
 
     # -- Grupo: View --

@@ -32,30 +32,30 @@ log = logging.getLogger("soundvi.qt6.sidebar")
 
 # Iconos Unicode para tipos de modulo (sin emojis)
 _ICONOS_TIPO: Dict[str, str] = {
-    "video":   "\u25A3",   # cuadrado con punto
-    "audio":   "\u266B",   # notas musicales
-    "text":    "\u2141",   # texto
-    "utility": "\u2699",   # engranaje
-    "export":  "\u27A1",   # flecha derecha
+    "video":   "▣",   # U+25A3 White square containing black small square
+    "audio":   "♫",   # U+266B Beamed eighth notes
+    "text":    "℻",   # U+213B Facsimile sign
+    "utility": "⚙",   # U+2699 Gear
+    "export":  "➡",   # U+27A1 Rightwards arrow
 }
 
 _ICONOS_CATEGORIA: Dict[str, str] = {
-    "effects":        "\u2728",
-    "filters":        "\u29D6",
-    "generators":     "\u25A6",
-    "transitions":    "\u21C4",
-    "visualization":  "\u2261",
-    "analysis":       "\u2234",
-    "enhancement":    "\u2191",
-    "subtitles":      "\u2263",
+    "effects":        "✨",   # U+2728 Sparkles (aceptable)
+    "filters":        "⧉",   # U+29D6 Bowtie with left half black
+    "generators":     "▦",   # U+25A6 Square with orthogonal crosshatch fill
+    "transitions":    "⇄",   # U+21C4 Left right arrow
+    "visualization":  "≡",   # U+2261 Identical to
+    "analysis":       "∴",   # U+2234 Therefore
+    "enhancement":    "↑",   # U+2191 Upwards arrow
+    "subtitles":      "≣",   # U+2263 Strictly equivalent to
     "titles":         "\u2160",
     "captions":       "\u275D",
     "lower-thirds":   "\u2581",
     "watermark":      "\u2756",
     "timestamp":      "\u231A",
-    "metadata":       "\u2139",
+    "metadata":       "ℹ",
     "social":         "\u2302",
-    "streaming":      "\u25B6",
+    "streaming":      "▶",
     "archive":        "\u2B07",
     "optimization":   "\u21BB",
 }
@@ -299,7 +299,7 @@ class SidebarWidget(QFrame):
         menu = QMenu(self)
 
         # Accion: Aplicar a clip
-        act_aplicar = QAction("\u25B6  Aplicar a clip seleccionado", self)
+        act_aplicar = QAction("▶  Aplicar a clip seleccionado", self)
         act_aplicar.triggered.connect(lambda: self.modulo_doble_click.emit(clave))
         menu.addAction(act_aplicar)
 
@@ -315,7 +315,7 @@ class SidebarWidget(QFrame):
         menu.addSeparator()
 
         # Accion: Informacion
-        act_info = QAction("\u2139  Informacion del modulo", self)
+        act_info = QAction("ℹ  Informacion del modulo", self)
         act_info.triggered.connect(lambda: self._mostrar_info(clave))
         menu.addAction(act_info)
 

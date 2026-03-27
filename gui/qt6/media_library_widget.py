@@ -381,19 +381,19 @@ class MediaLibraryWidget(QFrame):
         menu = QMenu(self)
 
         # Agregar al timeline
-        act_agregar = QAction("\u25B6  Agregar al timeline", self)
+        act_agregar = QAction("▶  Agregar al timeline", self)
         act_agregar.triggered.connect(lambda: self.archivo_drag_started.emit(ruta))
         menu.addAction(act_agregar)
 
         menu.addSeparator()
 
         # Renombrar (solo visual)
-        act_rename = QAction("\u270E  Renombrar", self)
+        act_rename = QAction("✎  Renombrar", self)
         act_rename.triggered.connect(lambda: self._renombrar_item(item))
         menu.addAction(act_rename)
 
         # Propiedades
-        act_props = QAction("\u2139  Propiedades", self)
+        act_props = QAction("ℹ  Propiedades", self)
         act_props.triggered.connect(lambda: self._mostrar_propiedades(ruta))
         menu.addAction(act_props)
 

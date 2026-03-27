@@ -36,8 +36,17 @@ def setup_basic_encoding():
     if 'LC_ALL' not in os.environ:
         os.environ['LC_ALL'] = 'C.UTF-8'
     
-    # 4. NO tocar sys.stdout/sys.stderr aquí - puede causar segmentation faults
-    # PyInstaller ya los configura correctamente
+    # 4. Forzar encoding UTF-8 en stdout/stderr (seguro)
+    # Esto es necesario para que los caracteres Unicode se muestren correctamente
+    try:
+        # Reabrir stdout/stderr con encoding UTF-8
+        if sys.stdout and hasattr(sys.stdout, 'buffer'):
+            sys.stdout = open(sys.stdout.fileno(), mode='w', encoding='utf-8', buffering=1)
+        if sys.stderr and hasattr(sys.stderr, 'buffer'):
+            sys.stderr = open(sys.stderr.fileno(), mode='w', encoding='utf-8', buffering=1)
+    except Exception:
+        # Si falla, continuar sin cambios (no es crítico)
+        pass
     
     # 5. Debug info (solo si variable está definida)
     if os.environ.get('SOUNDVI_DEBUG_RUNTIME'):

@@ -59,7 +59,7 @@ ICONOS_TRANSICION: Dict[str, str] = {
     TransitionType.CROSSFADE:      "\u25A3",
     TransitionType.DISSOLVE:       "\u2591",
     TransitionType.WIPE_LEFT:      "\u25C0",
-    TransitionType.WIPE_RIGHT:     "\u25B6",
+    TransitionType.WIPE_RIGHT:     "▶",
     TransitionType.WIPE_UP:        "\u25B2",
     TransitionType.WIPE_DOWN:      "\u25BC",
     TransitionType.WIPE_DIAGONAL:  "\u25E2",

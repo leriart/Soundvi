@@ -206,7 +206,7 @@ class ExportDialog(QDialog):
         layout.addWidget(grp_rango)
 
         # -- Archivo de salida --
-        grp_salida = QGroupBox("\u27A1  Archivo de Salida")
+        grp_salida = QGroupBox("\u➡  Archivo de Salida")
         lay_salida = QHBoxLayout(grp_salida)
 
         self._txt_salida = QLineEdit()
@@ -445,7 +445,7 @@ class ExportDialog(QDialog):
                 "FFmpeg hizo su magia. Todos aplaudan. ",
                 "Ni tu RAM sabe cómo sobrevivió a esto.",
                 "Plot twist: funcionó a la primera. (Mentira, fue al 3er intento)",
-                "Speedrun Any% - Video Exported: 2713",
+                "Speedrun Any% - Video Exported: ✓",
                 "Tu GPU te odia, pero lo lograste.",
             ]
             

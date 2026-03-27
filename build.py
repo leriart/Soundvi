@@ -253,6 +253,12 @@ def construir(plataforma: str, version: str, modo_debug: bool = False,
     for h in hidden:
         cmd.extend(["--hidden-import", h])
     print(f"  [2713] Hidden imports: {len(hidden)} módulos")
+    
+    # FORZAR inclusión de módulos críticos (solución agresiva)
+    # Esto asegura que PyInstaller incluya los módulos aunque no los detecte
+    cmd.extend(["--collect-all", "gui.qt6"])
+    cmd.extend(["--collect-all", "modules"])
+    cmd.extend(["--collect-all", "core"])
 
     # Exclusiones para reducir tamaño
     excludes = obtener_excludes()

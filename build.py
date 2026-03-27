@@ -18,6 +18,7 @@ Uso:
 
 import os
 import sys
+import io
 import shutil
 import platform
 import subprocess
@@ -26,6 +27,55 @@ import json
 import hashlib
 from datetime import datetime
 from pathlib import Path
+
+# ---------------------------------------------------------------------------
+#  Configuracion de codificacion multiplataforma
+# ---------------------------------------------------------------------------
+# En Windows, la consola usa cp1252 por defecto, lo cual no soporta
+# caracteres Unicode como U+2713 (checkmark). Forzamos UTF-8 en stdout/stderr
+# para evitar UnicodeEncodeError en cualquier plataforma.
+
+def _configurar_codificacion():
+    """Configura stdout/stderr para usar UTF-8 con fallback seguro."""
+    if sys.stdout.encoding and sys.stdout.encoding.lower().replace('-', '') != 'utf8':
+        try:
+            sys.stdout = io.TextIOWrapper(
+                sys.stdout.buffer, encoding='utf-8', errors='replace', line_buffering=True
+            )
+        except Exception:
+            pass
+    if sys.stderr.encoding and sys.stderr.encoding.lower().replace('-', '') != 'utf8':
+        try:
+            sys.stderr = io.TextIOWrapper(
+                sys.stderr.buffer, encoding='utf-8', errors='replace', line_buffering=True
+            )
+        except Exception:
+            pass
+    # Variable de entorno para subprocesos Python
+    os.environ.setdefault('PYTHONIOENCODING', 'utf-8')
+    # En Windows 10+, habilitar UTF-8 en la consola si es posible
+    if platform.system() == 'Windows':
+        os.environ.setdefault('PYTHONUTF8', '1')
+        try:
+            import ctypes
+            kernel32 = ctypes.windll.kernel32
+            kernel32.SetConsoleOutputCP(65001)
+            kernel32.SetConsoleCP(65001)
+        except Exception:
+            pass
+
+_configurar_codificacion()
+
+# ---------------------------------------------------------------------------
+#  Simbolos seguros multiplataforma (ASCII puro)
+# ---------------------------------------------------------------------------
+# Usamos alternativas ASCII para garantizar compatibilidad con cualquier
+# codificacion de consola (cp1252 en Windows, UTF-8 en Linux/macOS).
+
+OK = "[OK]"       # En lugar de U+2713 (checkmark)
+FAIL = "[FAIL]"   # En lugar de U+2717 (cross mark)
+INFO = "[*]"       # En lugar de asteriscos u otros simbolos
+WARN = "[!]"       # Advertencia
 
 _RAIZ = os.path.dirname(os.path.abspath(__file__))
 _DIST = os.path.join(_RAIZ, "dist")
@@ -52,15 +102,15 @@ def verificar_pyinstaller() -> bool:
     """Verifica que PyInstaller esta instalado."""
     try:
         import PyInstaller
-        print(f"  [✓] PyInstaller {PyInstaller.__version__} encontrado.")
+        print(f"  {OK} PyInstaller {PyInstaller.__version__} encontrado.")
         return True
     except ImportError:
-        print("  [!] PyInstaller no instalado. Instalando...")
+        print(f"  {WARN} PyInstaller no instalado. Instalando...")
         subprocess.check_call(
             [sys.executable, "-m", "pip", "install", "pyinstaller>=6.0"],
             stdout=subprocess.DEVNULL
         )
-        print("  [✓] PyInstaller instalado correctamente.")
+        print(f"  {OK} PyInstaller instalado correctamente.")
         return True
 
 
@@ -69,11 +119,11 @@ def limpiar_build():
     for d in [_DIST, _BUILD]:
         if os.path.isdir(d):
             shutil.rmtree(d)
-            print(f"  [✓] Limpiado: {d}")
+            print(f"  {OK} Limpiado: {d}")
     # Limpiar .spec files
     for spec in Path(_RAIZ).glob("*.spec"):
         spec.unlink()
-        print(f"  [✓] Limpiado: {spec.name}")
+        print(f"  {OK} Limpiado: {spec.name}")
 
 
 def calcular_hash(ruta: str) -> str:
@@ -86,7 +136,7 @@ def calcular_hash(ruta: str) -> str:
 
 
 def obtener_tamano_legible(ruta: str) -> str:
-    """Retorna el tamaño del archivo en formato legible."""
+    """Retorna el tamano del archivo en formato legible."""
     size = os.path.getsize(ruta)
     for unidad in ["B", "KB", "MB", "GB"]:
         if size < 1024:
@@ -125,10 +175,10 @@ def obtener_datos_adicionales() -> list:
 def obtener_hidden_imports() -> list:
     """Retorna la lista de hidden imports para PyInstaller."""
     return [
-        # Qt6 (todos los módulos necesarios)
+        # Qt6 (todos los modulos necesarios)
         "PyQt6", "PyQt6.QtWidgets", "PyQt6.QtCore", "PyQt6.QtGui",
         "PyQt6.QtPrintSupport", "PyQt6.sip",
-        # Componentes específicos de Qt que PyInstaller puede perder
+        # Componentes especificos de Qt que PyInstaller puede perder
         "PyQt6.QtGui.QAction", "PyQt6.QtGui.QActionGroup",
         "PyQt6.QtWidgets.QMenu", "PyQt6.QtWidgets.QMenuBar",
         "PyQt6.QtWidgets.QToolBar", "PyQt6.QtWidgets.QStatusBar",
@@ -142,7 +192,7 @@ def obtener_hidden_imports() -> list:
         "modules.core.base", "modules.core.registry", "modules.core.manager",
         "modules.video", "modules.audio", "modules.text",
         "modules.utility", "modules.export",
-        # Audio (todos los módulos necesarios)
+        # Audio (todos los modulos necesarios)
         "scipy", "scipy.signal", "scipy.fft", "scipy.io", "scipy.ndimage",
         "pydub", "soundfile", "librosa", "librosa.feature", "librosa.effects",
         # Procesamiento
@@ -170,7 +220,7 @@ def obtener_hidden_imports() -> list:
 
 
 def obtener_excludes() -> list:
-    """Modulos a excluir para reducir tamaño."""
+    """Modulos a excluir para reducir tamano."""
     return [
         "tkinter", "_tkinter", "tcl", "tk",
         "unittest", "test", "tests",
@@ -195,7 +245,7 @@ def construir(plataforma: str, version: str, modo_debug: bool = False,
     print(f"  App:        {NOMBRE_APP} v{version}")
     print(f"  Plataforma: {plataforma}")
     print(f"  Modo:       {'onefile' if onefile else 'onedir'}")
-    print(f"  Debug:      {'Sí' if modo_debug else 'No'}")
+    print(f"  Debug:      {'Si' if modo_debug else 'No'}")
     print(f"  Fecha:      {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
     print(f"  Python:     {sys.version.split()[0]}")
     print(f"  OS:         {platform.platform()}")
@@ -207,11 +257,15 @@ def construir(plataforma: str, version: str, modo_debug: bool = False,
     print("\n[2/5] Limpiando builds previos...")
     limpiar_build()
 
-    print("\n[3/5] Preparando configuración...")
+    print("\n[3/5] Preparando configuracion...")
 
     # Icono segun plataforma
     if plataforma == "windows":
         icono = os.path.join(_RAIZ, "logos", "logo.ico")
+    elif plataforma == "macos":
+        icono = os.path.join(_RAIZ, "logos", "logo.icns")
+        if not os.path.isfile(icono):
+            icono = os.path.join(_RAIZ, "logos", "logo.png")
     else:
         icono = os.path.join(_RAIZ, "logos", "logo.png")
 
@@ -234,42 +288,44 @@ def construir(plataforma: str, version: str, modo_debug: bool = False,
     ]
     
     # Forzar UTF-8 para Unicode (importante para caracteres especiales)
-    cmd.extend(["--runtime-hook", "runtime_hook_simple.py"])
+    runtime_hook_path = os.path.join(_RAIZ, "runtime_hook_simple.py")
+    if os.path.isfile(runtime_hook_path):
+        cmd.extend(["--runtime-hook", runtime_hook_path])
 
     # Icono
     if os.path.isfile(icono):
         cmd.extend(["--icon", icono])
-        print(f"  [✓] Icono: {os.path.basename(icono)}")
+        print(f"  {OK} Icono: {os.path.basename(icono)}")
 
     # Datos adicionales
     datos = obtener_datos_adicionales()
     for src, dst in datos:
         separador = ";" if plataforma == "windows" else ":"
         cmd.extend(["--add-data", f"{src}{separador}{dst}"])
-    print(f"  [✓] Datos adicionales: {len(datos)} entradas")
+    print(f"  {OK} Datos adicionales: {len(datos)} entradas")
 
     # Hidden imports
     hidden = obtener_hidden_imports()
     for h in hidden:
         cmd.extend(["--hidden-import", h])
-    print(f"  [✓] Hidden imports: {len(hidden)} módulos")
+    print(f"  {OK} Hidden imports: {len(hidden)} modulos")
     
-    # FORZAR inclusión de módulos críticos (solución agresiva)
-    # Esto asegura que PyInstaller incluya los módulos aunque no los detecte
+    # FORZAR inclusion de modulos criticos (solucion agresiva)
+    # Esto asegura que PyInstaller incluya los modulos aunque no los detecte
     cmd.extend(["--collect-all", "gui.qt6"])
     cmd.extend(["--collect-all", "modules"])
     cmd.extend(["--collect-all", "core"])
 
-    # Exclusiones para reducir tamaño
+    # Exclusiones para reducir tamano
     excludes = obtener_excludes()
     for ex in excludes:
         cmd.extend(["--exclude-module", ex])
-    print(f"  [✓] Exclusiones: {len(excludes)} módulos")
+    print(f"  {OK} Exclusiones: {len(excludes)} modulos")
 
     # Opciones especificas por plataforma
     if plataforma == "linux":
         cmd.extend(["--strip"])  # Strip symbols en Linux
-        print("  [✓] Strip symbols habilitado (Linux)")
+        print(f"  {OK} Strip symbols habilitado (Linux)")
 
     if modo_debug:
         cmd.append("--debug=all")
@@ -285,11 +341,11 @@ def construir(plataforma: str, version: str, modo_debug: bool = False,
     duracion = (datetime.now() - inicio).total_seconds()
 
     if resultado.returncode != 0:
-        print(f"\n  [✗] Build fallido con codigo {resultado.returncode}")
+        print(f"\n  {FAIL} Build fallido con codigo {resultado.returncode}")
         print("  Sugerencias:")
-        print("    - Ejecuta con --debug para más información")
-        print("    - Verifica que todas las dependencias estén instaladas")
-        print("    - Revisa que no haya errores de importación")
+        print("    - Ejecuta con --debug para mas informacion")
+        print("    - Verifica que todas las dependencias esten instaladas")
+        print("    - Revisa que no haya errores de importacion")
         sys.exit(1)
 
     print(f"\n[5/5] Finalizando build...")
@@ -340,19 +396,19 @@ def construir(plataforma: str, version: str, modo_debug: bool = False,
     if checksums:
         checksums_path = os.path.join(_DIST, "SHA256SUMS")
         with open(checksums_path, "w", encoding="utf-8") as f:
-            for file_path, hash_value in checksums.items():
-                f.write(f"{hash_value}  {file_path}\n")
-        print(f"  [✓] Checksums generados: {checksums_path}")
+            for file_path_rel, hash_value in checksums.items():
+                f.write(f"{hash_value}  {file_path_rel}\n")
+        print(f"  {OK} Checksums generados: {checksums_path}")
 
     # Resumen
     print(f"\n{'='*60}")
-    print(f"  ✓ BUILD EXITOSO")
+    print(f"  {OK} BUILD EXITOSO")
     print(f"{'='*60}")
     print(f"  Ejecutable: {_DIST}")
     if os.path.isfile(exe_path):
-        print(f"  Tamaño:     {info.get('tamano', 'N/A')}")
+        print(f"  Tamano:     {info.get('tamano', 'N/A')}")
         print(f"  SHA256:     {info.get('sha256', 'N/A')[:16]}...")
-    print(f"  Duración:   {duracion:.1f}s")
+    print(f"  Duracion:   {duracion:.1f}s")
     print(f"  Info:       {info_path}")
     print(f"{'='*60}\n")
 
@@ -362,14 +418,14 @@ def construir(plataforma: str, version: str, modo_debug: bool = False,
 # ---------------------------------------------------------------------------
 
 def construir_appimage(version: str):
-    """Genera un AppImage para Linux después del build onedir."""
+    """Genera un AppImage para Linux despues del build onedir."""
     print("\n[+] Generando AppImage para Linux...")
 
     appdir = os.path.join(_DIST, f"{NOMBRE_APP}.AppDir")
     exe_dir = os.path.join(_DIST, f"{NOMBRE_APP}-{version}")
 
     if not os.path.isdir(exe_dir):
-        print("[!] Primero ejecuta el build onedir antes de generar AppImage.")
+        print(f"{WARN} Primero ejecuta el build onedir antes de generar AppImage.")
         print("    Uso: python build.py --platform linux && python build.py --appimage")
         return
 
@@ -383,13 +439,13 @@ def construir_appimage(version: str):
     os.makedirs(os.path.join(appdir, "usr", "share", "applications"), exist_ok=True)
 
     # Copiar ejecutable y dependencias
-    print(f"  [*] Copiando {exe_dir} a AppDir...")
+    print(f"  {INFO} Copiando {exe_dir} a AppDir...")
     shutil.copytree(exe_dir, os.path.join(appdir, "usr", "bin", NOMBRE_APP),
                     dirs_exist_ok=True)
 
     # Crear AppRun
     apprun = os.path.join(appdir, "AppRun")
-    with open(apprun, "w") as f:
+    with open(apprun, "w", newline='\n') as f:
         f.write(f"""#!/bin/bash
 HERE="$(dirname "$(readlink -f "$0")")"
 export PATH="$HERE/usr/bin/{NOMBRE_APP}:$PATH"
@@ -401,7 +457,7 @@ exec "$HERE/usr/bin/{NOMBRE_APP}/{NOMBRE_APP}-{version}" "$@"
 
     # Crear .desktop
     desktop = os.path.join(appdir, f"{NOMBRE_APP}.desktop")
-    with open(desktop, "w") as f:
+    with open(desktop, "w", newline='\n') as f:
         f.write(f"""[Desktop Entry]
 Type=Application
 Name={NOMBRE_APP}
@@ -421,15 +477,15 @@ MimeType=video/mp4;video/avi;video/mkv;video/mov;
         icon_dest = os.path.join(appdir, "soundvi.png")
         shutil.copy2(icon_src, icon_dest)
         
-        # También copiar a la estructura estándar
+        # Tambien copiar a la estructura estandar
         hicolor_icon = os.path.join(appdir, "usr", "share", "icons", "hicolor", "256x256", "apps", "soundvi.png")
         shutil.copy2(icon_src, hicolor_icon)
-        print(f"  [✓] Icono copiado: {os.path.basename(icon_src)}")
+        print(f"  {OK} Icono copiado: {os.path.basename(icon_src)}")
 
-    # Descargar appimagetool si no está disponible
+    # Descargar appimagetool si no esta disponible
     appimagetool = shutil.which("appimagetool")
     if not appimagetool:
-        print("  [*] Descargando appimagetool...")
+        print(f"  {INFO} Descargando appimagetool...")
         appimagetool_url = "https://github.com/AppImage/AppImageKit/releases/download/continuous/appimagetool-x86_64.AppImage"
         appimagetool_path = os.path.join(_DIST, "appimagetool-x86_64.AppImage")
         
@@ -438,19 +494,19 @@ MimeType=video/mp4;video/avi;video/mkv;video/mov;
             urllib.request.urlretrieve(appimagetool_url, appimagetool_path)
             os.chmod(appimagetool_path, 0o755)
             appimagetool = appimagetool_path
-            print("  [✓] appimagetool descargado")
+            print(f"  {OK} appimagetool descargado")
         except Exception as e:
-            print(f"  [!] Error descargando appimagetool: {e}")
-            print("  [*] Intentando con curl...")
+            print(f"  {WARN} Error descargando appimagetool: {e}")
+            print(f"  {INFO} Intentando con curl...")
             subprocess.run(["curl", "-L", appimagetool_url, "-o", appimagetool_path], check=False)
             if os.path.isfile(appimagetool_path):
                 os.chmod(appimagetool_path, 0o755)
                 appimagetool = appimagetool_path
-                print("  [✓] appimagetool descargado via curl")
+                print(f"  {OK} appimagetool descargado via curl")
 
     if appimagetool:
         output = os.path.join(_DIST, f"{NOMBRE_APP}-{version}-x86_64.AppImage")
-        print(f"  [*] Generando AppImage: {os.path.basename(output)}")
+        print(f"  {INFO} Generando AppImage: {os.path.basename(output)}")
         
         # Ejecutar appimagetool
         cmd = [appimagetool, "--appimage-extract-and-run", appdir, output]
@@ -458,24 +514,24 @@ MimeType=video/mp4;video/avi;video/mkv;video/mov;
         
         if result.returncode == 0 and os.path.isfile(output):
             os.chmod(output, 0o755)
-            print(f"  [✓] AppImage generado: {output}")
-            print(f"  [✓] Tamaño: {obtener_tamano_legible(output)}")
+            print(f"  {OK} AppImage generado: {output}")
+            print(f"  {OK} Tamano: {obtener_tamano_legible(output)}")
             
-            # Crear symlink sin versión
+            # Crear symlink sin version
             symlink = os.path.join(_DIST, f"{NOMBRE_APP}.AppImage")
             if os.path.exists(symlink):
                 os.remove(symlink)
             os.symlink(os.path.basename(output), symlink)
-            print(f"  [✓] Symlink creado: {NOMBRE_APP}.AppImage")
+            print(f"  {OK} Symlink creado: {NOMBRE_APP}.AppImage")
         else:
-            print(f"  [!] Error generando AppImage:")
+            print(f"  {WARN} Error generando AppImage:")
             print(f"      Exit code: {result.returncode}")
             print(f"      stderr: {result.stderr[:200]}")
     else:
-        print("  [!] appimagetool no encontrado.")
-        print("  [*] La estructura AppDir está lista en:")
+        print(f"  {WARN} appimagetool no encontrado.")
+        print(f"  {INFO} La estructura AppDir esta lista en:")
         print(f"      {appdir}")
-        print("  [*] Puedes generar el AppImage manualmente con:")
+        print(f"  {INFO} Puedes generar el AppImage manualmente con:")
         print(f"      appimagetool {appdir} {NOMBRE_APP}-{version}.AppImage")
 
 
@@ -492,20 +548,20 @@ Ejemplos:
   python build.py                         # Build para tu plataforma
   python build.py --platform windows      # Build para Windows
   python build.py --platform linux        # Build para Linux
-  python build.py --onefile               # Ejecutable único
+  python build.py --onefile               # Ejecutable unico
   python build.py --appimage              # Generar AppImage (Linux)
-  python build.py --version 4.8.0         # Con versión específica
+  python build.py --version 4.8.0         # Con version especifica
   python build.py --clean                 # Solo limpiar
         """
     )
     parser.add_argument("--platform", choices=["windows", "linux", "macos"],
                         default=None, help="Plataforma objetivo")
     parser.add_argument("--version", default=VERSION_DEFECTO,
-                        help=f"Versión del build (default: {VERSION_DEFECTO})")
+                        help=f"Version del build (default: {VERSION_DEFECTO})")
     parser.add_argument("--debug", action="store_true",
                         help="Build en modo debug")
     parser.add_argument("--onefile", action="store_true",
-                        help="Generar ejecutable único (--onefile)")
+                        help="Generar ejecutable unico (--onefile)")
     parser.add_argument("--clean", action="store_true",
                         help="Solo limpiar directorios de build")
     parser.add_argument("--appimage", action="store_true",
@@ -514,10 +570,10 @@ Ejemplos:
     args = parser.parse_args()
 
     if args.clean:
-        print("[*] Limpiando directorios de build...")
+        print(f"{INFO} Limpiando directorios de build...")
         limpiar_build()
-        print("[✓] Limpieza completada.")
-        # NO return aquí - continuar con el build después de limpiar
+        print(f"{OK} Limpieza completada.")
+        # NO return aqui - continuar con el build despues de limpiar
 
     if args.appimage:
         construir_appimage(args.version)

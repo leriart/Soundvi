@@ -148,9 +148,17 @@ def obtener_hidden_imports() -> list:
         # Procesamiento
         "threadpoolctl", "joblib", "moviepy", "moviepy.editor", "moviepy.video", "moviepy.audio",
         "numba", "sklearn", "sklearn.cluster", "sklearn.preprocessing",
-        # Gui internos
+        # Gui internos (TODOS los widgets)
         "gui.qt6", "gui.qt6.main_window", "gui.qt6.theme",
         "gui.qt6.profile_selector", "gui.qt6.base",
+        "gui.qt6.toolbar_widget", "gui.qt6.sidebar_widget",
+        "gui.qt6.preview_widget", "gui.qt6.timeline_widget",
+        "gui.qt6.media_library_widget", "gui.qt6.inspector_widget",
+        "gui.qt6.audio_mixer_widget", "gui.qt6.transitions_panel",
+        "gui.qt6.theme_selector", "gui.qt6.welcome_wizard",
+        "gui.qt6.scripting_panel", "gui.qt6.export_dialog",
+        "gui.qt6.about_dialog", "gui.qt6.splash_screen",
+        "gui.loading",
         # Encoding/Unicode
         "encodings", "encodings.utf_8", "encodings.latin_1",
         "codecs", "locale", "json",

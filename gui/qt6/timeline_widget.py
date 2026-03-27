@@ -1258,7 +1258,7 @@ class TimelineWidget(QWidget):
             # Avanzar tiempo para el siguiente clip droppeado a la vez
             tiempo += clip.duration
             
-        self._actualizar_clips()
+        self._refrescar_completo()
 
     def dividir_clip_en_playhead(self):
         """Divide el clip seleccionado en la posicion del playhead."""

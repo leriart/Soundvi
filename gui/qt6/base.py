@@ -47,17 +47,17 @@ ICONOS_UNICODE: Dict[str, str] = {
     "redo":       "↷",      # U+21B7 Clockwise open circle arrow
     "save":       "↓",      # U+2193 Downwards arrow
     "open":       "↑",      # U+2191 Upwards arrow
-    "settings":   "⚙",      # U+2699 Gear
+    "settings":   "≡",      # U+2699 Gear
     "module":     "⧉",      # U+29C9 Two intersecting squares
     "audio":      "♫",      # U+266B Beamed eighth notes
     "video":      "▣",      # U+25A3 White square containing black small square
     "text":       "℻",      # U+213B Facsimile sign
-    "effect":     "✨",      # U+2728 Sparkles (mantener, es aceptable)
+    "effect":     "★",      # U+2728 Sparkles (mantener, es aceptable)
     "filter":     "⧉",      # U+29D6 Bowtie with left half black
     "export":     "➡",      # U+27A1 Rightwards arrow
     "trash":      "✗",      # U+2717 Ballot X
     "check":      "✓",      # U+2713 Check mark
-    "warning":    "⚠",      # U+26A0 Warning sign
+    "warning":    "!",      # U+26A0 Warning sign
     "info":       "ℹ",      # U+2139 Information source
     "profile":    "☰",      # U+2630 Trigram for heaven
     "layers":     "▦",      # U+25A6 Square with orthogonal crosshatch fill

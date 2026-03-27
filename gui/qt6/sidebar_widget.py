@@ -35,12 +35,12 @@ _ICONOS_TIPO: Dict[str, str] = {
     "video":   "▣",   # U+25A3 White square containing black small square
     "audio":   "♫",   # U+266B Beamed eighth notes
     "text":    "℻",   # U+213B Facsimile sign
-    "utility": "⚙",   # U+2699 Gear
+    "utility": "≡",   # U+2699 Gear
     "export":  "➡",   # U+27A1 Rightwards arrow
 }
 
 _ICONOS_CATEGORIA: Dict[str, str] = {
-    "effects":        "✨",   # U+2728 Sparkles (aceptable)
+    "effects":        "★",   # U+2728 Sparkles (aceptable)
     "filters":        "⧉",   # U+29D6 Bowtie with left half black
     "generators":     "▦",   # U+25A6 Square with orthogonal crosshatch fill
     "transitions":    "⇄",   # U+21C4 Left right arrow

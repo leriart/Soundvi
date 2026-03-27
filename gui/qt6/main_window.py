@@ -22,6 +22,9 @@ import logging
 from typing import Optional
 
 from PyQt6.QtWidgets import (
+from core.logger import get_logger
+logger = get_logger(__name__)
+logger = get_logger(__name__)
     QMainWindow, QApplication, QWidget, QVBoxLayout, QHBoxLayout,
     QLabel, QPushButton, QToolBar, QStatusBar, QDockWidget,
     QMenuBar, QMenu, QFileDialog, QMessageBox, QSplitter,
@@ -893,20 +896,54 @@ class VentanaPrincipalQt6(QMainWindow):
                     cv2.putText(frame_composito, "♪", (10, 30), 
                                cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
             else:
-                # Mostrar mensaje de timeline vacio
-                cv2.putText(frame_composito, "Soundvi Preview", (preview_width//2 - 200, preview_height//2 - 50), 
-                           cv2.FONT_HERSHEY_SIMPLEX, 2, (100, 100, 255), 3)
-                cv2.putText(frame_composito, "Arrastra archivos de video o audio al timeline", 
-                           (preview_width//2 - 300, preview_height//2 + 20), 
-                           cv2.FONT_HERSHEY_SIMPLEX, 0.8, (200, 200, 200), 2)
-                cv2.putText(frame_composito, f"Tiempo: {tiempo:.1f}s", 
-                           (preview_width//2 - 100, preview_height//2 + 80), 
-                           cv2.FONT_HERSHEY_SIMPLEX, 1, (150, 150, 150), 2)
+                # Mostrar mensaje de timeline vacio con texto centrado
+                # Título principal
+                title = "Soundvi Preview"
+                title_font_scale = 2
+                title_thickness = 3
+                title_color = (100, 100, 255)
+                
+                # Calcular tamaño del texto para centrarlo
+                (title_width, title_height), baseline = cv2.getTextSize(
+                    title, cv2.FONT_HERSHEY_SIMPLEX, title_font_scale, title_thickness
+                )
+                title_x = (preview_width - title_width) // 2
+                title_y = preview_height // 2 - 50
+                cv2.putText(frame_composito, title, (title_x, title_y), 
+                           cv2.FONT_HERSHEY_SIMPLEX, title_font_scale, title_color, title_thickness)
+                
+                # Instrucción
+                instruction = "Arrastra archivos de video o audio al timeline"
+                instr_font_scale = 0.8
+                instr_thickness = 2
+                instr_color = (200, 200, 200)
+                
+                (instr_width, instr_height), _ = cv2.getTextSize(
+                    instruction, cv2.FONT_HERSHEY_SIMPLEX, instr_font_scale, instr_thickness
+                )
+                instr_x = (preview_width - instr_width) // 2
+                instr_y = preview_height // 2 + 20
+                cv2.putText(frame_composito, instruction, (instr_x, instr_y), 
+                           cv2.FONT_HERSHEY_SIMPLEX, instr_font_scale, instr_color, instr_thickness)
+                
+                # Tiempo actual
+                time_text = f"Tiempo: {tiempo:.1f}s"
+                time_font_scale = 1
+                time_thickness = 2
+                time_color = (150, 150, 150)
+                
+                (time_width, time_height), _ = cv2.getTextSize(
+                    time_text, cv2.FONT_HERSHEY_SIMPLEX, time_font_scale, time_thickness
+                )
+                time_x = (preview_width - time_width) // 2
+                time_y = preview_height // 2 + 80
+                cv2.putText(frame_composito, time_text, (time_x, time_y), 
+                           cv2.FONT_HERSHEY_SIMPLEX, time_font_scale, time_color, time_thickness)
             
             return frame_composito
             
         except Exception as e:
-            print(f"Error renderizando frame: {e}")
+            logger.error(f"Error renderizando frame: {e}")
             # Crear frame de error
             error_frame = np.zeros((720, 1280, 3), dtype=np.uint8)
             cv2.putText(error_frame, f"Preview: {e}", (50, 360), 

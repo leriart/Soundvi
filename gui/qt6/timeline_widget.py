@@ -25,6 +25,9 @@ import numpy as np
 from typing import Optional, Dict, List, Any
 
 from PyQt6.QtWidgets import (
+from core.logger import get_logger
+logger = get_logger(__name__)
+logger = get_logger(__name__)
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
     QGraphicsView, QGraphicsScene, QGraphicsRectItem, QGraphicsLineItem,
     QGraphicsTextItem, QGraphicsItem, QMenu, QFrame, QSizePolicy,
@@ -758,7 +761,7 @@ class TimelineWidget(QWidget):
         toolbar.addStretch()
 
         # Boton agregar track
-        self._btn_add_track = QPushButton(f"⊕ Pista")
+        self._btn_add_track = QPushButton("+ Pista")
         self._btn_add_track.setToolTip("Agregar nueva pista")
         self._btn_add_track.setFixedHeight(24)
         self._btn_add_track.setStyleSheet("""
@@ -766,6 +769,7 @@ class TimelineWidget(QWidget):
                 background-color: #343A40; color: #DEE2E6;
                 border: 1px solid #495057; border-radius: 3px;
                 padding: 2px 8px; font-size: 11px;
+                font-weight: bold;
             }
             QPushButton:hover { border-color: #00BC8C; }
         """)
@@ -809,10 +813,17 @@ class TimelineWidget(QWidget):
         toolbar.addWidget(self._btn_alignment)
 
         # Zoom
-        btn_zoom_out = QPushButton(ICONOS_UNICODE["zoom_out"])
+        btn_zoom_out = QPushButton("−")
         btn_zoom_out.setFixedSize(24, 24)
         btn_zoom_out.setToolTip("Alejar")
-        btn_zoom_out.setStyleSheet("QPushButton { background-color: #343A40; border: 1px solid #495057; border-radius: 3px; } QPushButton:hover { border-color: #00BC8C; }")
+        btn_zoom_out.setStyleSheet("""
+            QPushButton {
+                background-color: #343A40; color: #DEE2E6;
+                border: 1px solid #495057; border-radius: 3px;
+                font-size: 14px; font-weight: bold;
+            }
+            QPushButton:hover { border-color: #00BC8C; }
+        """)
         btn_zoom_out.clicked.connect(self._zoom_out)
         toolbar.addWidget(btn_zoom_out)
 
@@ -822,10 +833,17 @@ class TimelineWidget(QWidget):
         self._lbl_zoom.setAlignment(Qt.AlignmentFlag.AlignCenter)
         toolbar.addWidget(self._lbl_zoom)
 
-        btn_zoom_in = QPushButton(ICONOS_UNICODE["zoom_in"])
+        btn_zoom_in = QPushButton("+")
         btn_zoom_in.setFixedSize(24, 24)
         btn_zoom_in.setToolTip("Acercar")
-        btn_zoom_in.setStyleSheet("QPushButton { background-color: #343A40; border: 1px solid #495057; border-radius: 3px; } QPushButton:hover { border-color: #00BC8C; }")
+        btn_zoom_in.setStyleSheet("""
+            QPushButton {
+                background-color: #343A40; color: #DEE2E6;
+                border: 1px solid #495057; border-radius: 3px;
+                font-size: 14px; font-weight: bold;
+            }
+            QPushButton:hover { border-color: #00BC8C; }
+        """)
         btn_zoom_in.clicked.connect(self._zoom_in)
         toolbar.addWidget(btn_zoom_in)
 
@@ -1045,11 +1063,11 @@ class TimelineWidget(QWidget):
         
         if alignment_enabled:
             # Activar modo alineación
-            print("[Asistente] Modo alineación activado")
+            logger.info("[Asistente] Modo alineación activado")
             self._mostrar_guia_alineacion()
         else:
             # Desactivar modo alineación
-            print("[Asistente] Modo alineación desactivado")
+            logger.info("[Asistente] Modo alineación desactivado")
             self._ocultar_guia_alineacion()
         
         # Actualizar estado en el timeline si es necesario

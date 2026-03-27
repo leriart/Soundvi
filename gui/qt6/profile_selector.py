@@ -118,7 +118,7 @@ PERFILES_UI_INFO: Dict[str, Dict[str, Any]] = {
         "recomendado_para": "Editores experimentados y profesionales",
     },
     "personalizado": {
-        "icono": "⚙",
+        "icono": "≡",
         "titulo": "Personalizado",
         "subtitulo": "Tú decides",
         "descripcion": "Selecciona exactamente los módulos y\npaneles que necesitas.",

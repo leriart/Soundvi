@@ -88,7 +88,7 @@ eval $BUILD_CMD
 
 # Verificar resultados
 if [ -d "dist" ]; then
-    echo -e "\n${GREEN}✅ Build exitoso!${NC}"
+    echo -e "\n${GREEN}✓ Build exitoso!${NC}"
     echo -e "${YELLOW}Archivos generados:${NC}"
     
     # Listar archivos con tamaño
@@ -116,7 +116,7 @@ if [ -d "dist" ]; then
     
     exit 0
 else
-    echo -e "\n${RED}❌ Error: No se creó el directorio dist/${NC}"
+    echo -e "\n${RED}✗ Error: No se creó el directorio dist/${NC}"
     echo "Directorio actual:"
     pwd
     ls -la

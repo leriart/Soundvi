@@ -220,7 +220,7 @@ class AboutDialog(QDialog):
             "★ A Stack Overflow: MVP del año, todos los años<br>"
             "☕ Al café: Sin ti, esto sería Visual Basic<br>"
             "⚗ A los beta testers: Gracias por no demandar (todavía)<br>"
-            "⚙ A Git: Por dejarme hacer 'git revert' cada 5 minutos<br>"
+            "* A Git: Por dejarme hacer 'git revert' cada 5 minutos<br>"
             "☹ A mi RAM: Sorry por los memory leaks, bro<br>"
             "♫ A Spotify: Por la playlist 'Coding in the Dark'<br>"
             "• A la pizza fría de las 4 AM: Real one<br><br>"

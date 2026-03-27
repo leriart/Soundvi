@@ -12,11 +12,15 @@ import os
 import uuid
 import threading
 from typing import Optional, Dict, Any, List, Tuple
+from functools import lru_cache
 
 import numpy as np
 import cv2
 
+from core.logger import get_logger
+logger = get_logger(__name__)
 
+logger = get_logger(__name__)
 class VideoClip:
     """
     Representa un clip de video/imagen/GIF en el timeline.
@@ -166,7 +170,7 @@ class VideoClip:
                     self.duration = 5.0
                     
         except Exception as e:
-            print(f"[VideoClip] Error cargando info de {self.source_path}: {e}")
+            logger.error(f"Error cargando info de {self.source_path}: {e}")
 
     def load_frames(self, target_width: int = 0, target_height: int = 0):
         """
@@ -204,11 +208,12 @@ class VideoClip:
                     pass
                     
             except Exception as e:
-                print(f"[VideoClip] Error cargando frames: {e}")
+                logger.error(f"Error cargando frames: {e}")
 
     def get_frame_at_time(self, time_in_clip: float, width: int = 0, height: int = 0) -> Optional[np.ndarray]:
         """
         Obtiene el frame correspondiente a un tiempo dentro del clip.
+        Usa cache global LRU para mejorar rendimiento de scrubbing/preview.
         
         Args:
             time_in_clip: Tiempo relativo dentro del clip (0.0 = inicio del clip)
@@ -221,15 +226,17 @@ class VideoClip:
         if not self.enabled:
             return None
             
-        # Calcular tiempo en el archivo fuente considerando trim y velocidad
-        source_time = self.trim_start + (time_in_clip * self.speed)
-        
-        # Verificar limites
-        effective_end = self.trim_end if self.trim_end > 0 else self._source_duration
-        if source_time < self.trim_start or source_time > effective_end:
-            return None
-            
+        # Import local para evitar dependencias circulares
+        from core.video_cache import cached_get_frame
+        return cached_get_frame(self, time_in_clip, width, height)
+    
+    def _get_frame_at_time_impl(self, time_in_clip: float, width: int = 0, height: int = 0) -> Optional[np.ndarray]:
+        """
+        Implementacion real para obtener un frame.
+        Llamado por el sistema de cache si el frame no esta cacheado.
+        """
         frame = None
+        source_time = (time_in_clip * self.speed) + self.trim_start
         
         try:
             if self.source_type == 'color':
@@ -238,17 +245,36 @@ class VideoClip:
                 frame = np.full((h, w, 3), self.color[::-1], dtype=np.uint8)
                 
             elif self.source_type == 'image':
+                # Las imagenes se muestran estaticas durante toda la duracion del clip
+                if not self._frames_cache:
+                    # Cargar imagen una vez y cachearla
+                    img = cv2.imread(self.source_path)
+                    if img is not None:
+                        self._frames_cache = [img]
+                
                 if self._frames_cache:
                     frame = self._frames_cache[0].copy()
-                else:
-                    frame = cv2.imread(self.source_path)
                     
             elif self.source_type == 'gif':
                 if not self._frames_cache:
                     self.load_frames(width, height)
                 if self._frames_cache:
                     fps = self._source_fps if self._source_fps > 0 else 10
-                    idx = int(source_time * fps) % len(self._frames_cache)
+                    gif_duration = len(self._frames_cache) / fps
+                    
+                    # Si el clip es mas largo que el GIF, hacer loop
+                    if self.duration > gif_duration and gif_duration > 0:
+                        # Calcular tiempo loopado
+                        looped_time = source_time % gif_duration
+                        idx = int(looped_time * fps) % len(self._frames_cache)
+                    else:
+                        # Si el clip es mas corto, escalar tiempo
+                        if self.duration > 0:
+                            scaled_time = source_time * (gif_duration / self.duration)
+                            idx = min(int(scaled_time * fps), len(self._frames_cache) - 1)
+                        else:
+                            idx = 0
+                    
                     frame = self._frames_cache[idx].copy()
                     
             elif self.source_type == 'video':
@@ -262,7 +288,7 @@ class VideoClip:
                         frame = None
                         
         except Exception as e:
-            print(f"[VideoClip] Error obteniendo frame en t={time_in_clip:.2f}: {e}")
+            logger.error(f"Error obteniendo frame en t={time_in_clip:.2f}: {e}")
             return None
             
         # Redimensionar si es necesario
@@ -274,7 +300,6 @@ class VideoClip:
             frame = (frame.astype(np.float32) * self.opacity).astype(np.uint8)
             
         return frame
-
     def get_thumbnail(self, width: int = 160, height: int = 90) -> Optional[np.ndarray]:
         """Obtiene un thumbnail del clip para la interfaz."""
         if self._thumbnail is not None:

@@ -74,8 +74,8 @@ PASOS_WIZARD = [
         "tip": "• Puedes mover clips arrastrándolos y redimensionarlos desde los bordes.",
     },
     {
-        "titulo": "Paso 3: Aplicar un efecto ✨",
-        "icono": "✨",
+        "titulo": "Paso 3: Aplicar un efecto ★",
+        "icono": "★",
         "descripcion": (
             "En el panel de Módulos (izquierda) encontrarás\n"
             "efectos para aplicar a tus clips.\n\n"

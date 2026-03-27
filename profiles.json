@@ -89,7 +89,7 @@
     "profesional": {
       "nombre": "Profesional",
       "descripcion": "Todo desbloqueado. Keyframes, audio reactivo, GPU, sin restricciones.",
-      "icono": "⚡",
+      "icono": "+",
       "modulos_permitidos": {
         "tipos": ["video", "audio", "text", "utility", "export"],
         "categorias": ["*"],
@@ -129,7 +129,7 @@
     "personalizado": {
       "nombre": "Personalizado",
       "descripcion": "Tú decides qué módulos y paneles usar. Control total.",
-      "icono": "⚙",
+      "icono": "≡",
       "modulos_permitidos": {
         "tipos": ["video", "audio", "text", "utility", "export"],
         "categorias": ["*"],

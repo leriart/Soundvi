@@ -20,7 +20,7 @@ import numpy as np
 
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
-    QSlider, QFrame, QSizePolicy, QStyle
+    QSlider, QFrame, QSizePolicy, QStyle, QComboBox
 )
 from PyQt6.QtCore import Qt, QTimer, QSize, pyqtSignal
 from PyQt6.QtGui import QImage, QPixmap, QFont, QPainter, QColor
@@ -267,14 +267,68 @@ class PreviewWidget(QWidget):
         controles.addStretch()
 
         # Info de frame
-        self._lbl_frame_info = QLabel("Frame: 0 / 0  |  30 fps")
+        self._lbl_frame_info = QLabel("Frame: 0 / 0")
         self._lbl_frame_info.setFont(QFont("Consolas", 9))
         self._lbl_frame_info.setStyleSheet("color: #6C757D;")
         controles.addWidget(self._lbl_frame_info)
+        
+        # Separador
+        controles.addSpacing(10)
+        
+        # Control de FPS
+        fps_label = QLabel("FPS:")
+        fps_label.setFont(QFont("Consolas", 9))
+        fps_label.setStyleSheet("color: #6C757D;")
+        controles.addWidget(fps_label)
+        
+        self._fps_combo = QComboBox()
+        self._fps_combo.addItems(["15", "24", "30", "60", "120"])
+        self._fps_combo.setCurrentText("30")
+        self._fps_combo.setFixedWidth(60)
+        self._fps_combo.setStyleSheet("""
+            QComboBox {
+                background-color: #343A40;
+                color: #DEE2E6;
+                border: 1px solid #495057;
+                border-radius: 3px;
+                padding: 2px 8px;
+                font-size: 11px;
+            }
+            QComboBox:hover {
+                border-color: #00BC8C;
+            }
+            QComboBox::drop-down {
+                border: none;
+            }
+            QComboBox::down-arrow {
+                image: none;
+                border-left: 4px solid transparent;
+                border-right: 4px solid transparent;
+                border-top: 6px solid #DEE2E6;
+            }
+        """)
+        self._fps_combo.currentTextChanged.connect(self._on_fps_changed)
+        controles.addWidget(self._fps_combo)
 
         layout.addLayout(controles)
 
     # -- Control de reproduccion -----------------------------------------------
+    def _on_fps_changed(self, fps_text: str):
+        """Cambia el FPS de reproduccion."""
+        try:
+            new_fps = int(fps_text)
+            if new_fps != self._fps:
+                self._fps = new_fps
+                # Si esta reproduciendo, actualizar el timer
+                if self._reproduciendo:
+                    self._timer.stop()
+                    intervalo = max(1, int(1000 / self._fps))
+                    self._timer.start(intervalo)
+                # Actualizar informacion de frames
+                self._actualizar_info_frames()
+        except ValueError:
+            pass  # Ignorar valores no numericos
+
     def _toggle_play(self):
         if self._reproduciendo:
             self._pausar()
@@ -340,17 +394,23 @@ class PreviewWidget(QWidget):
             self._scrubber.setValue(pos)
             self._scrubber.blockSignals(False)
 
+        self._actualizar_info_frames()
+
+    def _actualizar_info_frames(self):
+        """Actualiza la informacion de frames en la UI."""
         frame_num = int(self._tiempo_actual * self._fps)
         total_frames = int(self._duracion_total * self._fps) if self._duracion_total > 0 else 0
         self._lbl_frame_info.setText(
-            f"Frame: {frame_num} / {total_frames}  |  {self._fps} fps"
+            f"Frame: {frame_num} / {total_frames}"
         )
 
     # -- API publica -----------------------------------------------------------
     def set_duracion(self, duracion: float, fps: int = 30):
         """Establece la duracion total del video."""
         self._duracion_total = duracion
-        self._fps = fps
+        # Solo actualizar FPS si no se ha seleccionado uno manualmente
+        if not hasattr(self, '_fps_combo') or self._fps_combo.currentText() == "30":
+            self._fps = fps
         self._lbl_duracion.setText(_formatear_tiempo(duracion))
         self._actualizar_ui_tiempo()
 

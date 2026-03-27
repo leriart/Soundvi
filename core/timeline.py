@@ -176,6 +176,7 @@ class Timeline:
         self.scroll_offset: float = 0.0   # Offset de scroll horizontal
         self.snap_enabled: bool = True     # Snap a otros clips
         self.snap_threshold: float = 0.1   # Umbral de snap en segundos
+        self.alignment_assistant_enabled: bool = False  # Asistente de alineación
         self.selection: List[str] = []     # IDs de clips seleccionados
         self.loop_start: float = 0.0       # Inicio de region de loop
         self.loop_end: float = 0.0         # Fin de region de loop

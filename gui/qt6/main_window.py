@@ -126,6 +126,9 @@ class VentanaPrincipalQt6(QMainWindow):
         # Mostrar wizard de bienvenida si es novato y primer inicio
         self._mostrar_wizard_si_necesario()
 
+        # Actualizar preview inicial
+        QTimer.singleShot(100, self._actualizar_preview)
+
         log.info("Ventana principal Qt6 FINAL inicializada (perfil: %s, nivel: %s)",
                  self._pm.perfil_activo.nombre if self._pm.perfil_activo else "ninguno",
                  self._adapter.nivel)
@@ -453,6 +456,8 @@ class VentanaPrincipalQt6(QMainWindow):
         # Preview -> Timeline: sincronizar playhead desde preview
         self._preview.tiempo_cambiado.connect(self._panel_timeline.set_playhead)
         self._preview.tiempo_cambiado.connect(self._panel_keyframes.set_playhead)
+        # Preview tiempo cambiado -> actualizar frame
+        self._preview.tiempo_cambiado.connect(self._actualizar_preview)
 
         # Inspector -> Preview: actualizar preview al cambiar propiedades
         self._panel_inspector.preview_requested.connect(self._actualizar_preview)
@@ -470,6 +475,9 @@ class VentanaPrincipalQt6(QMainWindow):
         # Track cambiado -> refrescar inspector
         self._panel_timeline.track_changed.connect(
             lambda t: self._panel_inspector.mostrar_track(t) if t else None)
+        
+        # Clips cambiados -> actualizar duracion de preview
+        self._panel_timeline.clips_changed.connect(self._actualizar_duracion_preview)
 
         # Sidebar -> aplicar modulo a clip seleccionado
         self._panel_sidebar.modulo_doble_click.connect(self._on_modulo_aplicado)
@@ -762,6 +770,8 @@ class VentanaPrincipalQt6(QMainWindow):
             name=os.path.basename(ruta)
         )
         self._panel_timeline.agregar_clip(clip, track_index)
+        # Actualizar duracion de la preview
+        self._actualizar_duracion_preview()
         
         # Avanzar el playhead para evitar encimar clips
         duracion = max(1.0, clip.duration)
@@ -800,8 +810,108 @@ class VentanaPrincipalQt6(QMainWindow):
 
     def _actualizar_preview(self):
         """Actualiza el frame del preview con el estado actual."""
-        # Placeholder - en implementacion completa renderizaria el frame compuesto
-        pass
+        if not hasattr(self, '_preview') or not self._preview:
+            return
+            
+        # Obtener el tiempo actual de la preview
+        tiempo_actual = 0.0
+        if hasattr(self._preview, 'get_tiempo_actual'):
+            tiempo_actual = self._preview.get_tiempo_actual()
+        
+        # Renderizar el frame compuesto para este tiempo
+        frame = self._render_frame_composito(tiempo_actual)
+        
+        if frame is not None and hasattr(self._preview, 'mostrar_frame'):
+            self._preview.mostrar_frame(frame)
+    
+    def _render_frame_composito(self, tiempo: float) -> Optional[np.ndarray]:
+        """
+        Renderiza un frame compuesto del timeline para un tiempo dado.
+        
+        Args:
+            tiempo: Tiempo en segundos desde el inicio del timeline
+            
+        Returns:
+            Frame numpy BGR o None si no hay contenido
+        """
+        try:
+            import numpy as np
+            import cv2
+            
+            # Tamaño de preview por defecto
+            preview_width = 1280
+            preview_height = 720
+            
+            # Crear frame negro por defecto
+            frame_composito = np.zeros((preview_height, preview_width, 3), dtype=np.uint8)
+            
+            # Verificar si hay algun clip en el timeline
+            has_content = False
+            frame_content = None
+            
+            # Renderizar tracks de video en orden (de fondo a frente)
+            for track in self._timeline.tracks:
+                if not track.visible or track.muted:
+                    continue
+                    
+                if track.track_type == 'video':
+                    # Buscar clips activos en este tiempo
+                    for clip in track.clips:
+                        if clip.start_time <= tiempo <= (clip.start_time + clip.duration):
+                            # Obtener frame del clip
+                            tiempo_en_clip = tiempo - clip.start_time
+                            clip_frame = clip.get_frame_at_time(tiempo_en_clip, preview_width, preview_height)
+                            
+                            if clip_frame is not None:
+                                has_content = True
+                                # Asegurar tamaño correcto
+                                if clip_frame.shape[:2] != (preview_height, preview_width):
+                                    clip_frame = cv2.resize(clip_frame, (preview_width, preview_height))
+                                
+                                # Mezclar con frame composito (por ahora simple overlay)
+                                # En una implementacion completa se usarian modos de mezcla
+                                frame_content = clip_frame
+                                break
+                    if has_content:
+                        break
+            
+            # Si hay al menos un clip de audio, mostrar indicador
+            has_audio = False
+            for track in self._timeline.tracks:
+                if track.track_type == 'audio':
+                    for clip in track.clips:
+                        if clip.start_time <= tiempo <= (clip.start_time + clip.duration):
+                            has_audio = True
+                            break
+                    if has_audio:
+                        break
+            
+            if has_content and frame_content is not None:
+                frame_composito = frame_content
+                if has_audio:
+                    # Dibujar indicador de audio en esquina
+                    cv2.putText(frame_composito, "♪", (10, 30), 
+                               cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
+            else:
+                # Mostrar mensaje de timeline vacio
+                cv2.putText(frame_composito, "Soundvi Preview", (preview_width//2 - 200, preview_height//2 - 50), 
+                           cv2.FONT_HERSHEY_SIMPLEX, 2, (100, 100, 255), 3)
+                cv2.putText(frame_composito, "Arrastra archivos de video o audio al timeline", 
+                           (preview_width//2 - 300, preview_height//2 + 20), 
+                           cv2.FONT_HERSHEY_SIMPLEX, 0.8, (200, 200, 200), 2)
+                cv2.putText(frame_composito, f"Tiempo: {tiempo:.1f}s", 
+                           (preview_width//2 - 100, preview_height//2 + 80), 
+                           cv2.FONT_HERSHEY_SIMPLEX, 1, (150, 150, 150), 2)
+            
+            return frame_composito
+            
+        except Exception as e:
+            print(f"Error renderizando frame: {e}")
+            # Crear frame de error
+            error_frame = np.zeros((720, 1280, 3), dtype=np.uint8)
+            cv2.putText(error_frame, f"Preview: {e}", (50, 360), 
+                       cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 255), 2)
+            return error_frame
 
     # -- Callbacks de menu / toolbar -------------------------------------------
     def _nuevo_proyecto(self):
@@ -937,21 +1047,47 @@ class VentanaPrincipalQt6(QMainWindow):
 
     def _play(self):
         """Inicia la reproduccion."""
-        self._preview.play()
+        if hasattr(self._preview, 'play'):
+            self._preview.play()
+        elif hasattr(self._preview, '_reproducir'):
+            self._preview._reproducir()
         self._panel_mixer.iniciar_monitoreo()
         self._status.showMessage("Reproduciendo...", 2000)
 
     def _pause(self):
         """Pausa la reproduccion."""
-        self._preview.pause()
+        if hasattr(self._preview, 'pause'):
+            self._preview.pause()
+        elif hasattr(self._preview, '_pausar'):
+            self._preview._pausar()
         self._panel_mixer.detener_monitoreo()
         self._status.showMessage("Pausado.", 2000)
 
     def _stop(self):
         """Detiene la reproduccion."""
-        self._preview.stop()
+        if hasattr(self._preview, 'stop'):
+            self._preview.stop()
+        elif hasattr(self._preview, '_detener'):
+            self._preview._detener()
         self._panel_mixer.detener_monitoreo()
         self._status.showMessage("Detenido.", 2000)
+
+    def _actualizar_duracion_preview(self):
+        """Actualiza la duracion de la preview basada en el timeline."""
+        if hasattr(self._preview, 'set_duracion') and hasattr(self._timeline, 'duration'):
+            # Obtener la duracion maxima de todos los tracks
+            max_duration = 0.0
+            for track in self._timeline.tracks:
+                track_duration = track.total_duration if hasattr(track, 'total_duration') else 0.0
+                if track_duration > max_duration:
+                    max_duration = track_duration
+            
+            # Si no hay clips, usar una duracion minima
+            if max_duration <= 0:
+                max_duration = 10.0  # 10 segundos por defecto
+            
+            # Establecer la duracion en la preview
+            self._preview.set_duracion(max_duration, fps=30)
 
     def _zoom_in(self):
         """Acerca el zoom del timeline."""

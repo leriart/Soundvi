@@ -368,3 +368,24 @@ class PreviewWidget(QWidget):
     @property
     def display(self) -> DisplayFrame:
         return self._display
+
+    # Metodos publicos para control de reproduccion
+    def play(self):
+        """Inicia la reproduccion."""
+        self._reproducir()
+
+    def pause(self):
+        """Pausa la reproduccion."""
+        self._pausar()
+
+    def stop(self):
+        """Detiene la reproduccion."""
+        self._detener()
+
+    def toggle_play(self):
+        """Alterna entre reproducir y pausar."""
+        self._toggle_play()
+
+    def is_playing(self) -> bool:
+        """Retorna True si esta reproduciendo."""
+        return self._reproduciendo

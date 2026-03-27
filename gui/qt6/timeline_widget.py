@@ -247,16 +247,32 @@ class ClipItem(QGraphicsRectItem):
             if self._resize_edge == "left":
                 new_start = self._drag_start_time + delta_time
                 new_duration = self._drag_start_duration - delta_time
+                
+                # Aplicar snap a guías de alineación si está activo
+                new_start = self._apply_alignment_snap(new_start, event.scenePos().x())
+                # Recalcular duración basada en el nuevo inicio
+                new_duration = self._drag_start_duration - (new_start - self._drag_start_time)
+                
                 if new_duration >= 0.1 and new_start >= 0.0:
                     self.clip.start_time = new_start
                     self.clip.duration = new_duration
                     # Ajustar trim del clip (comportamiento opcional, permite loop en GIF/audio)
                     if self.clip.source_type not in ["gif", "audio"]:
-                        self.clip.trim_start = max(0.0, self.clip.trim_start + delta_time)
+                        self.clip.trim_start = max(0.0, self.clip.trim_start + (new_start - self._drag_start_time))
                     self._actualizar_geometria()
                     
             elif self._resize_edge == "right":
                 new_duration = self._drag_start_duration + delta_time
+                
+                # Para el borde derecho, podemos snap el final del clip
+                # Calcular posición X del final del clip
+                clip_end_x = HEADER_WIDTH + (self.clip.start_time + new_duration) * self._pps
+                # Aplicar snap basado en la posición del mouse (que está en el borde derecho)
+                snapped_end_x = self._apply_alignment_snap_edge(clip_end_x, event.scenePos().x())
+                # Convertir de vuelta a duración
+                if snapped_end_x != clip_end_x:
+                    new_duration = (snapped_end_x - HEADER_WIDTH) / self._pps - self.clip.start_time
+                
                 if new_duration >= 0.1:
                     self.clip.duration = new_duration
                     self._actualizar_geometria()
@@ -266,9 +282,126 @@ class ClipItem(QGraphicsRectItem):
             delta_x = event.scenePos().x() - self._drag_start_pos.x()
             delta_time = delta_x / self._pps
             new_start = max(0.0, self._drag_start_time + delta_time)
+            
+            # Aplicar snap a guías de alineación si está activo
+            new_start = self._apply_alignment_snap(new_start, event.scenePos().x())
+            
             self.clip.start_time = new_start
             self._actualizar_geometria()
         super().mouseMoveEvent(event)
+    
+    def _apply_alignment_snap(self, proposed_start: float, mouse_x: float) -> float:
+        """
+        Aplica snap a las guías de alineación si el asistente está activo.
+        
+        Args:
+            proposed_start: Tiempo de inicio propuesto
+            mouse_x: Posición X del mouse en la escena
+            
+        Returns:
+            Tiempo de inicio ajustado con snap
+        """
+        # Obtener referencia al widget principal del timeline
+        scene = self.scene()
+        if not scene:
+            return proposed_start
+            
+        # Buscar el widget TimelineWidget en la jerarquía
+        timeline_widget = None
+        view = scene.views()[0] if scene.views() else None
+        if view:
+            timeline_widget = view.parent()
+        
+        # Verificar si el asistente está activo
+        if not timeline_widget or not hasattr(timeline_widget, '_btn_alignment'):
+            return proposed_start
+            
+        if not timeline_widget._btn_alignment.isChecked():
+            return proposed_start
+        
+        # Umbral de snap (en píxeles)
+        SNAP_THRESHOLD = 8
+        
+        # Convertir tiempo a posición X
+        proposed_x = HEADER_WIDTH + proposed_start * self._pps
+        
+        # Buscar la guía más cercana
+        if hasattr(timeline_widget, '_alignment_guides'):
+            closest_guide = None
+            min_distance = float('inf')
+            
+            # Solo verificar guías verticales (primeras 9)
+            for i, guide in enumerate(timeline_widget._alignment_guides[:9]):
+                if guide.isVisible():
+                    guide_line = guide.line()
+                    guide_x = guide_line.x1()
+                    distance = abs(mouse_x - guide_x)
+                    
+                    if distance < min_distance and distance < SNAP_THRESHOLD:
+                        min_distance = distance
+                        closest_guide = guide_x
+            
+            # Si encontramos una guía cercana, ajustar
+            if closest_guide is not None:
+                # Convertir posición X de vuelta a tiempo
+                snapped_start = (closest_guide - HEADER_WIDTH) / self._pps
+                return max(0.0, snapped_start)
+        
+        return proposed_start
+    
+    def _apply_alignment_snap_edge(self, proposed_x: float, mouse_x: float) -> float:
+        """
+        Aplica snap a las guías de alineación para bordes de clips.
+        
+        Args:
+            proposed_x: Posición X propuesta
+            mouse_x: Posición X del mouse en la escena
+            
+        Returns:
+            Posición X ajustada con snap
+        """
+        # Obtener referencia al widget principal del timeline
+        scene = self.scene()
+        if not scene:
+            return proposed_x
+            
+        # Buscar el widget TimelineWidget en la jerarquía
+        timeline_widget = None
+        view = scene.views()[0] if scene.views() else None
+        if view:
+            timeline_widget = view.parent()
+        
+        # Verificar si el asistente está activo
+        if not timeline_widget or not hasattr(timeline_widget, '_btn_alignment'):
+            return proposed_x
+            
+        if not timeline_widget._btn_alignment.isChecked():
+            return proposed_x
+        
+        # Umbral de snap (en píxeles)
+        SNAP_THRESHOLD = 8
+        
+        # Buscar la guía más cercana
+        if hasattr(timeline_widget, '_alignment_guides'):
+            closest_guide = None
+            min_distance = float('inf')
+            
+            # Solo verificar guías verticales (primeras 9)
+            for i, guide in enumerate(timeline_widget._alignment_guides[:9]):
+                if guide.isVisible():
+                    guide_line = guide.line()
+                    guide_x = guide_line.x1()
+                    distance = abs(mouse_x - guide_x)
+                    
+                    if distance < min_distance and distance < SNAP_THRESHOLD:
+                        min_distance = distance
+                        closest_guide = guide_x
+            
+            # Si encontramos una guía cercana, ajustar
+            if closest_guide is not None:
+                return closest_guide
+        
+        return proposed_x
 
     def mouseReleaseEvent(self, event):
         """Fin de arrastre o redimensionado."""
@@ -625,7 +758,7 @@ class TimelineWidget(QWidget):
         toolbar.addStretch()
 
         # Boton agregar track
-        self._btn_add_track = QPushButton(f"+ Pista")
+        self._btn_add_track = QPushButton(f"⊕ Pista")
         self._btn_add_track.setToolTip("Agregar nueva pista")
         self._btn_add_track.setFixedHeight(24)
         self._btn_add_track.setStyleSheet("""
@@ -640,7 +773,7 @@ class TimelineWidget(QWidget):
         toolbar.addWidget(self._btn_add_track)
 
         # Snap toggle
-        self._btn_snap = QPushButton("Snap")
+        self._btn_snap = QPushButton("⇅ Snap")
         self._btn_snap.setToolTip("Activar/desactivar snap")
         self._btn_snap.setCheckable(True)
         self._btn_snap.setChecked(self._timeline.snap_enabled)
@@ -656,6 +789,24 @@ class TimelineWidget(QWidget):
         """)
         self._btn_snap.clicked.connect(self._toggle_snap)
         toolbar.addWidget(self._btn_snap)
+
+        # Asistente de alineacion
+        self._btn_alignment = QPushButton("⧉ Alinear")
+        self._btn_alignment.setToolTip("Asistente de alineación - Ayuda a alinear objetos con precisión")
+        self._btn_alignment.setCheckable(True)
+        self._btn_alignment.setChecked(False)
+        self._btn_alignment.setFixedHeight(24)
+        self._btn_alignment.setStyleSheet("""
+            QPushButton {
+                background-color: #343A40; color: #DEE2E6;
+                border: 1px solid #495057; border-radius: 3px;
+                padding: 2px 8px; font-size: 11px;
+            }
+            QPushButton:checked { background-color: #F39C12; color: #FFFFFF; }
+            QPushButton:hover { border-color: #F39C12; }
+        """)
+        self._btn_alignment.clicked.connect(self._toggle_alignment_assistant)
+        toolbar.addWidget(self._btn_alignment)
 
         # Zoom
         btn_zoom_out = QPushButton(ICONOS_UNICODE["zoom_out"])
@@ -718,9 +869,26 @@ class TimelineWidget(QWidget):
     # -- Gestion de tracks -----------------------------------------------------
     def _refrescar_completo(self):
         """Reconstruye toda la representacion visual del timeline."""
-        # Limpiar escena
+        # Guardar estado del asistente de alineación antes de limpiar
+        alignment_enabled = False
+        if hasattr(self, '_btn_alignment') and self._btn_alignment:
+            alignment_enabled = self._btn_alignment.isChecked()
+        
+        # Limpiar escena pero preservar guías de alineación si están activas
+        if hasattr(self, '_alignment_guides') and alignment_enabled:
+            # Remover guías temporalmente de la escena
+            for guide in self._alignment_guides:
+                if guide.scene() == self._scene:
+                    self._scene.removeItem(guide)
+        
         self._scene.clear()
         self._scene._clip_items.clear()
+
+        # Restaurar guías si estaban activas
+        if hasattr(self, '_alignment_guides') and alignment_enabled:
+            for guide in self._alignment_guides:
+                self._scene.addItem(guide)
+                guide.setVisible(True)
 
         # Limpiar headers
         for h in self._track_headers:
@@ -786,6 +954,10 @@ class TimelineWidget(QWidget):
         self._scene._total_height = total_h
 
         self._actualizar_lbl_zoom()
+        
+        # Actualizar guías de alineación si están activas
+        if hasattr(self, '_btn_alignment') and self._btn_alignment.isChecked():
+            self._actualizar_guias_alineacion()
 
     def _dibujar_regla(self):
         """Dibuja la regla temporal en la parte superior."""
@@ -856,9 +1028,100 @@ class TimelineWidget(QWidget):
         porcentaje = int(self._pps)
         self._lbl_zoom.setText(f"{porcentaje}%")
 
+    def resizeEvent(self, event):
+        """Maneja el cambio de tamaño de la ventana."""
+        super().resizeEvent(event)
+        # Actualizar guías de alineación si están activas
+        if hasattr(self, '_btn_alignment') and self._btn_alignment.isChecked():
+            self._actualizar_guias_alineacion()
+
     # -- Snap ------------------------------------------------------------------
     def _toggle_snap(self):
         self._timeline.snap_enabled = self._btn_snap.isChecked()
+
+    def _toggle_alignment_assistant(self):
+        """Activa/desactiva el asistente de alineación."""
+        alignment_enabled = self._btn_alignment.isChecked()
+        
+        if alignment_enabled:
+            # Activar modo alineación
+            print("[Asistente] Modo alineación activado")
+            self._mostrar_guia_alineacion()
+        else:
+            # Desactivar modo alineación
+            print("[Asistente] Modo alineación desactivado")
+            self._ocultar_guia_alineacion()
+        
+        # Actualizar estado en el timeline si es necesario
+        if hasattr(self._timeline, 'alignment_assistant_enabled'):
+            self._timeline.alignment_assistant_enabled = alignment_enabled
+
+    def _mostrar_guia_alineacion(self):
+        """Muestra guías de alineación en el timeline."""
+        # Crear o mostrar guías visuales
+        if not hasattr(self, '_alignment_guides'):
+            self._alignment_guides = []
+            
+            # Guías verticales (para alinear en tiempo)
+            for i in range(1, 10):  # 9 guías verticales
+                guide = QGraphicsLineItem()
+                guide.setPen(QPen(QColor("#F39C12"), 1, Qt.PenStyle.DashLine))
+                guide.setZValue(1000)  # Alto z-value para estar sobre todo
+                guide.setVisible(False)
+                self._scene.addItem(guide)
+                self._alignment_guides.append(guide)
+            
+            # Guías horizontales (para alinear entre tracks)
+            for i in range(1, 6):  # 5 guías horizontales
+                guide = QGraphicsLineItem()
+                guide.setPen(QPen(QColor("#F39C12"), 1, Qt.PenStyle.DashLine))
+                guide.setZValue(1000)
+                guide.setVisible(False)
+                self._scene.addItem(guide)
+                self._alignment_guides.append(guide)
+        
+        # Mostrar todas las guías
+        for guide in self._alignment_guides:
+            guide.setVisible(True)
+        
+        # Actualizar posición de las guías
+        self._actualizar_guias_alineacion()
+
+    def _ocultar_guia_alineacion(self):
+        """Oculta las guías de alineación."""
+        if hasattr(self, '_alignment_guides'):
+            for guide in self._alignment_guides:
+                guide.setVisible(False)
+
+    def _actualizar_guias_alineacion(self):
+        """Actualiza la posición de las guías de alineación."""
+        if not hasattr(self, '_alignment_guides') or not self._btn_alignment.isChecked():
+            return
+        
+        scene_rect = self._scene.sceneRect()
+        scene_width = scene_rect.width()
+        scene_height = scene_rect.height()
+        
+        # Actualizar guías verticales (divisiones temporales)
+        vertical_guides = self._alignment_guides[:9]
+        for i, guide in enumerate(vertical_guides):
+            x_pos = HEADER_WIDTH + (scene_width - HEADER_WIDTH) * (i + 1) / 10
+            guide.setLine(x_pos, RULER_HEIGHT, x_pos, scene_height)
+        
+        # Actualizar guías horizontales (entre tracks)
+        horizontal_guides = self._alignment_guides[9:]
+        track_count = len(self._timeline.tracks)
+        if track_count > 1:
+            track_height = (scene_height - RULER_HEIGHT) / track_count
+            for i, guide in enumerate(horizontal_guides):
+                if i < track_count - 1:
+                    y_pos = RULER_HEIGHT + track_height * (i + 1)
+                    guide.setLine(HEADER_WIDTH, y_pos, scene_width, y_pos)
+                else:
+                    guide.setVisible(False)
+        else:
+            for guide in horizontal_guides:
+                guide.setVisible(False)
 
     # -- Agregar track ---------------------------------------------------------
     def _menu_agregar_track(self):

@@ -240,8 +240,16 @@ def save_config(config: dict) -> bool:
 
         cleaned = {}
         for key, value in config.items():
-            if hasattr(value, "get") and callable(value.get):
-                cleaned[key] = value.get()
+            if isinstance(value, dict):
+                # Para diccionarios, guardar el diccionario completo
+                cleaned[key] = value
+            elif hasattr(value, "get") and callable(value.get):
+                # Para objetos con método get() (como defaultdict)
+                try:
+                    cleaned[key] = value.get()
+                except TypeError:
+                    # Si get() necesita argumentos, guardar el objeto tal cual
+                    cleaned[key] = value
             else:
                 cleaned[key] = value
 

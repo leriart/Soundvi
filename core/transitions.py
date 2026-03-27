@@ -54,6 +54,12 @@ class TransitionType:
     ]
     
     # Nombres legibles para la UI
+    FADE_IN = "fade_in"
+    FADE_OUT = "fade_out"
+    FADE_TO_COLOR = "fade_to_color"
+    FADE_FROM_COLOR = "fade_from_color"
+    AUDIO_FADE_IN = "audio_fade_in"
+    AUDIO_FADE_OUT = "audio_fade_out"
     DISPLAY_NAMES = {
         FADE: "Fundido a negro",
         CROSSFADE: "Fundido cruzado",
@@ -74,6 +80,12 @@ class TransitionType:
         IRIS_OPEN: "Iris abrir",
         IRIS_CLOSE: "Iris cerrar",
         BLUR_TRANSITION: "Transicion desenfoque",
+        FADE_IN: "Fade in",
+        FADE_OUT: "Fade out",
+        FADE_TO_COLOR: "Fade a color",
+        FADE_FROM_COLOR: "Fade desde color",
+        AUDIO_FADE_IN: "Fade audio in",
+        AUDIO_FADE_OUT: "Fade audio out",
     }
 
 
@@ -160,10 +172,91 @@ class Transition:
             TransitionType.IRIS_OPEN: self._iris_open,
             TransitionType.IRIS_CLOSE: self._iris_close,
             TransitionType.BLUR_TRANSITION: self._blur_transition,
+                    TransitionType.FADE_IN: self._fade_in,
+            TransitionType.FADE_OUT: self._fade_out,
+            TransitionType.FADE_TO_COLOR: self._fade_to_color,
+            TransitionType.FADE_FROM_COLOR: self._fade_from_color,
+            TransitionType.AUDIO_FADE_IN: self._audio_fade_in,
+            TransitionType.AUDIO_FADE_OUT: self._audio_fade_out,
         }
         return methods.get(self.transition_type, self._crossfade)
 
-    # -- Implementaciones de transiciones --
+    
+    # -- Transiciones para clips individuales --
+
+    def _fade_in(self, out_f, in_f, p, w, h):
+        """Fade in desde color (negro por defecto)."""
+        # Para fade in, out_f es ignorado, in_f es el clip que aparece
+        color_frame = np.full_like(in_f, self.color[::-1])  # BGR
+        # p: 0.0 = color completo, 1.0 = clip completo
+        return cv2.addWeighted(color_frame, 1.0 - p, in_f, p, 0)
+
+    def _fade_out(self, out_f, in_f, p, w, h):
+        """Fade out a color (negro por defecto)."""
+        # Para fade out, in_f es ignorado, out_f es el clip que desaparece
+        color_frame = np.full_like(out_f, self.color[::-1])  # BGR
+        # p: 0.0 = clip completo, 1.0 = color completo
+        return cv2.addWeighted(out_f, 1.0 - p, color_frame, p, 0)
+
+    def _fade_to_color(self, out_f, in_f, p, w, h):
+        """Fade del clip a un color especifico."""
+        # Alias para fade_out con color personalizable
+        return self._fade_out(out_f, in_f, p, w, h)
+
+    def _fade_from_color(self, out_f, in_f, p, w, h):
+        """Fade desde un color especifico al clip."""
+        # Alias para fade_in con color personalizable
+        return self._fade_in(out_f, in_f, p, w, h)
+
+    def _audio_fade_in(self, out_f, in_f, p, w, h):
+        """Fade in de audio (solo para clips de audio)."""
+        # Para video, simplemente hacer crossfade normal
+        # La logica de audio se maneja en otro lugar
+        return self._crossfade(out_f, in_f, p, w, h)
+
+    def _audio_fade_out(self, out_f, in_f, p, w, h):
+        """Fade out de audio (solo para clips de audio)."""
+        # Para video, simplemente hacer crossfade normal
+        # La logica de audio se maneja en otro lugar
+        return self._crossfade(out_f, in_f, p, w, h)
+
+    # -- Metodo para aplicar transicion a un solo clip --
+    def apply_to_single_clip(self, frame: np.ndarray, progress: float, 
+                            clip_type: str = "video") -> np.ndarray:
+        """
+        Aplica una transicion a un solo clip (fade in/out).
+        
+        Args:
+            frame: Frame del clip
+            progress: Progreso de la transicion (0.0 - 1.0)
+            clip_type: Tipo de clip ("video" o "audio")
+            
+        Returns:
+            Frame con la transicion aplicada
+        """
+        progress = max(0.0, min(1.0, progress))
+        progress = self._apply_easing(progress)
+        
+        h, w = frame.shape[:2]
+        
+        # Crear frame dummy para el metodo que espera dos frames
+        dummy_frame = np.zeros_like(frame)
+        
+        method = self._get_transition_method()
+        
+        # Para transiciones de un solo clip, el orden importa:
+        if self.transition_type in [TransitionType.FADE_IN, TransitionType.FADE_FROM_COLOR, 
+                                   TransitionType.AUDIO_FADE_IN]:
+            # Fade in: dummy -> frame
+            return method(dummy_frame, frame, progress, w, h)
+        elif self.transition_type in [TransitionType.FADE_OUT, TransitionType.FADE_TO_COLOR,
+                                     TransitionType.AUDIO_FADE_OUT]:
+            # Fade out: frame -> dummy
+            return method(frame, dummy_frame, progress, w, h)
+        else:
+            # Para transiciones normales, usar ambos frames
+            return method(frame, dummy_frame, progress, w, h)
+# -- Implementaciones de transiciones --
 
     def _fade(self, out_f, in_f, p, w, h):
         """Fundido a color (negro por defecto)."""

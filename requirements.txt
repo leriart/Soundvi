@@ -10,6 +10,7 @@ numpy>=1.24.0
 pillow>=10.0.0
 
 # Audio
+pygame-ce>=2.4.0        # Reproducción de audio
 scipy>=1.11.0
 pydub>=0.25.1
 soundfile>=0.12.0
@@ -24,4 +25,3 @@ joblib>=1.3.0
 # moviepy>=1.0.3          # Edición de video avanzada
 # numba>=0.58.0           # Aceleración JIT
 # matplotlib>=3.7.0       # Visualizaciones (espectrogramas)
-# pygame-ce>=2.4.0        # Reproducción de audio

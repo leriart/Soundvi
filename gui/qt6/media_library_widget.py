@@ -142,7 +142,7 @@ def _generar_icono_audio(ancho: int, alto: int) -> QPixmap:
     # Icono central
     painter.setFont(QFont("Segoe UI", 20))
     painter.setPen(QColor("#DEE2E6"))
-    painter.drawText(pixmap.rect(), Qt.AlignmentFlag.AlignCenter, "\u266B")
+    painter.drawText(pixmap.rect(), Qt.AlignmentFlag.AlignCenter, "AUD")
     painter.end()
     return pixmap
 
@@ -153,9 +153,9 @@ def _generar_placeholder(ancho: int, alto: int, tipo: str) -> QPixmap:
     pixmap.fill(QColor("#343A40"))
     painter = QPainter(pixmap)
     painter.setPen(QColor("#6C757D"))
-    iconos = {"video": "\u25A3", "audio": "\u266B", "imagen": "\u25A8", "otro": "\u2753"}
+    iconos = {"video": "VID", "audio": "AUD", "imagen": "IMG", "otro": "???"}
     painter.setFont(QFont("Segoe UI", 18))
-    painter.drawText(pixmap.rect(), Qt.AlignmentFlag.AlignCenter, iconos.get(tipo, "\u2753"))
+    painter.drawText(pixmap.rect(), Qt.AlignmentFlag.AlignCenter, iconos.get(tipo, "OTRO"))
     painter.end()
     return pixmap
 

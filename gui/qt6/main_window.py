@@ -1245,3 +1245,24 @@ class VentanaPrincipalQt6(QMainWindow):
             event.accept()
         else:
             event.ignore()
+
+    def _nuevo_proyecto(self):
+        """Crea un nuevo proyecto vacio."""
+        # Limpiar timeline
+        from core.timeline import Timeline
+        self._timeline = Timeline()
+        
+        # Actualizar paneles
+        self._panel_timeline.set_timeline(self._timeline)
+        self._panel_mixer.cargar_desde_timeline(self._timeline)
+        if hasattr(self._preview, 'set_timeline'):
+            self._preview.set_timeline(self._timeline)
+        
+        # Limpiar historial de comandos
+        self._cmd_manager.clear()
+        
+        # Actualizar toolbar
+        self._toolbar.habilitar_accion("undo", False)
+        self._toolbar.habilitar_accion("redo", False)
+        
+        self._status.showMessage("Nuevo proyecto creado", 3000)

@@ -97,6 +97,28 @@ class VideoClip:
         if source_path and os.path.exists(source_path):
             self._load_source_info()
 
+
+    def add_module(self, module):
+        """Añade un modulo/efecto al clip."""
+        if not hasattr(self, 'effects'):
+            self.effects = []
+        
+        # Convertir modulo a diccionario
+        module_dict = {}
+        if hasattr(module, 'to_dict'):
+            module_dict = module.to_dict()
+        elif hasattr(module, '__dict__'):
+            module_dict = module.__dict__.copy()
+        else:
+            module_dict = {"type": str(type(module).__name__)}
+        
+        # Añadir identificador
+        if "id" not in module_dict:
+            import uuid
+            module_dict["id"] = str(uuid.uuid4())[:8]
+        
+        self.effects.append(module_dict)
+        print(f"[VideoClip] Efecto añadido a '{self.name}': {module_dict.get('type', 'unknown')}")
     def _load_source_info(self):
         """Carga informacion basica del archivo fuente (sin cargar todos los frames)."""
         try:
@@ -299,6 +321,46 @@ class VideoClip:
         if frame is not None and self.opacity < 1.0:
             frame = (frame.astype(np.float32) * self.opacity).astype(np.uint8)
             
+        # Aplicar efectos del clip
+        if frame is not None and hasattr(self, 'effects') and self.effects:
+            import cv2
+            import numpy as np
+            for effect in self.effects:
+                try:
+                    effect_type = effect.get('type', 'unknown')
+                    
+                    if effect_type == 'transition':
+                        # Transicion simple (fade)
+                        subtype = effect.get('subtype', 'fade_in')
+                        if subtype == 'fade_in':
+                            # Fade in al inicio del clip
+                            clip_time = time_in_clip
+                            duration = effect.get('duration', 1.0)
+                            if clip_time < duration:
+                                alpha = clip_time / duration
+                                frame = (frame.astype(np.float32) * alpha).astype(np.uint8)
+                        elif subtype == 'fade_out':
+                            # Fade out al final del clip
+                            clip_time = time_in_clip
+                            duration = effect.get('duration', 1.0)
+                            if clip_time > self.duration - duration:
+                                alpha = (self.duration - clip_time) / duration
+                                frame = (frame.astype(np.float32) * alpha).astype(np.uint8)
+                    
+                    elif effect_type == 'waveform':
+                        # Efecto visual de waveform
+                        h, w = frame.shape[:2]
+                        overlay = np.zeros((h, w, 3), dtype=np.uint8)
+                        for x in range(0, w, 15):
+                            height = np.random.randint(20, h//3)
+                            y1 = h//2 - height//2
+                            y2 = h//2 + height//2
+                            cv2.line(overlay, (x, y1), (x, y2), (0, 200, 255), 3)
+                        frame = cv2.addWeighted(frame, 0.8, overlay, 0.2, 0)
+                        
+                except Exception as e:
+                    import logging
+                    logging.getLogger(__name__).warning(f"Error en efecto: {e}")
         return frame
     def get_thumbnail(self, width: int = 160, height: int = 90) -> Optional[np.ndarray]:
         """Obtiene un thumbnail del clip para la interfaz."""

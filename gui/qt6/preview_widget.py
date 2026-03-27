@@ -159,6 +159,10 @@ class PreviewWidget(QWidget):
 
         self._construir_ui()
 
+
+    def set_timeline(self, timeline):
+        """Establece el timeline para sincronizar audio."""
+        self._timeline = timeline
     def _construir_ui(self):
         layout = QVBoxLayout(self)
         layout.setContentsMargins(4, 4, 4, 4)
@@ -334,6 +338,9 @@ class PreviewWidget(QWidget):
             self._pausar()
         else:
             self._reproducir()
+            
+            # Sincronizar audio con video
+            self._sync_audio_playback()
 
     def _reproducir(self):
         self._reproduciendo = True
@@ -449,3 +456,43 @@ class PreviewWidget(QWidget):
     def is_playing(self) -> bool:
         """Retorna True si esta reproduciendo."""
         return self._reproduciendo
+    def _sync_audio_playback(self):
+        """Sincroniza la reproduccion de audio con la posicion del playhead."""
+        if not hasattr(self, '_timeline') or self._timeline is None:
+            return
+
+        if self._reproduciendo:
+            playhead_time = self._tiempo_actual
+            
+            # Detener audio anterior
+            if hasattr(self, '_audio_player'):
+                self._audio_player.stop()
+            
+            # Buscar un clip de audio en la posicion actual
+            audio_clip_to_play = None
+            for track in self._timeline.tracks:
+                for clip in track.clips:
+                    if hasattr(clip, 'clip_type') and clip.clip_type == 'audio' and clip.start_time <= playhead_time < clip.end_time:
+                        audio_clip_to_play = clip
+                        break
+                if audio_clip_to_play:
+                    break
+            
+            if audio_clip_to_play and hasattr(self, '_audio_player'):
+                # Calcular el punto de inicio dentro del archivo de audio
+                start_offset = playhead_time - audio_clip_to_play.start_time
+                
+                # Asegurarse que el archivo existe
+                import os
+                if os.path.exists(audio_clip_to_play.path):
+                    self._audio_player.play_audio(audio_clip_to_play.path, start_time=start_offset)
+
+        else:  # Si no se esta reproduciendo (pausa o stop)
+            if hasattr(self, '_audio_player'):
+                self._audio_player.stop()
+
+    def _actualizar_audio_position(self):
+        """Actualiza posicion de reproduccion de audio."""
+        if hasattr(self, '_audio_player') and self._audio_player._playing:
+            self._tiempo_actual = self._audio_player._current_position
+            self._actualizar_ui_tiempo()

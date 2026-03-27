@@ -1,3 +1,5 @@
+from __future__ import annotations
+from PyQt6.QtGui import QFont, QColor
 # -*- coding: utf-8 -*-
 """
 Soundvi Qt6 -- Timeline Visual interactivo.
@@ -16,7 +18,6 @@ Implementa un timeline multi-track completo usando QGraphicsView/QGraphicsScene:
   - Indicadores visuales de transiciones
 """
 
-from __future__ import annotations
 
 import os
 import sys
@@ -447,6 +448,49 @@ class PlayheadItem(QGraphicsLineItem):
     def set_position(self, x: float):
         self.setPos(x, 0)
 
+    
+    def mousePressEvent(self, event):
+        """Inicia arrastre del playhead."""
+        if event.button() == Qt.MouseButton.LeftButton:
+            self._dragging = True
+            self._drag_start_x = event.scenePos().x()
+            event.accept()
+        else:
+            super().mousePressEvent(event)
+    
+    def mouseMoveEvent(self, event):
+        """Arrastra el playhead."""
+        if hasattr(self, '_dragging') and self._dragging:
+            scene = self.scene()
+            if scene and hasattr(scene, '_pps'):
+                new_x = event.scenePos().x()
+                # Convertir a tiempo
+                tiempo = max(0.0, (new_x - HEADER_WIDTH) / scene._pps)
+                # Emitir señal para mover playhead
+                if hasattr(scene, 'playhead_moved'):
+                    scene.playhead_moved.emit(tiempo)
+            event.accept()
+        else:
+            super().mouseMoveEvent(event)
+    
+    def mouseReleaseEvent(self, event):
+        """Termina arrastre del playhead."""
+        if event.button() == Qt.MouseButton.LeftButton and hasattr(self, '_dragging'):
+            self._dragging = False
+            event.accept()
+        else:
+            super().mouseReleaseEvent(event)
+    
+    def hoverEnterEvent(self, event):
+        """Cambia cursor al pasar sobre playhead."""
+        self.setCursor(Qt.CursorShape.SizeHorCursor)
+        super().hoverEnterEvent(event)
+    
+    def hoverLeaveEvent(self, event):
+        """Restaura cursor al salir del playhead."""
+        self.setCursor(Qt.CursorShape.ArrowCursor)
+        super().hoverLeaveEvent(event)
+
     def set_height(self, h: float):
         self._height = h
         self.setLine(0, 0, 0, h)
@@ -688,6 +732,7 @@ class TimelineView(QGraphicsView):
 
     zoom_changed = pyqtSignal(float)  # nuevo nivel de zoom (pps)
     files_dropped = pyqtSignal(list, QPointF) # List of paths, scene pos
+    transition_dropped = pyqtSignal(str, QPointF) # transition_type, scene pos
 
     def __init__(self, scene: TimelineScene, parent=None):
         super().__init__(scene, parent)
@@ -706,23 +751,32 @@ class TimelineView(QGraphicsView):
         self.setAcceptDrops(True)
 
     def dragEnterEvent(self, event):
-        if event.mimeData().hasUrls():
+        mime = event.mimeData()
+        if mime.hasUrls() or (mime.hasText() and mime.text().startswith("transition:")):
             event.acceptProposedAction()
         else:
             super().dragEnterEvent(event)
 
     def dragMoveEvent(self, event):
-        if event.mimeData().hasUrls():
+        mime = event.mimeData()
+        if mime.hasUrls() or (mime.hasText() and mime.text().startswith("transition:")):
             event.acceptProposedAction()
         else:
             super().dragMoveEvent(event)
 
     def dropEvent(self, event):
-        if event.mimeData().hasUrls():
-            urls = [url.toLocalFile() for url in event.mimeData().urls() if url.isLocalFile()]
+        mime = event.mimeData()
+        if mime.hasUrls():
+            urls = [url.toLocalFile() for url in mime.urls() if url.isLocalFile()]
             if urls:
                 pos = self.mapToScene(event.position().toPoint())
                 self.files_dropped.emit(urls, pos)
+            event.acceptProposedAction()
+        elif mime.hasText() and mime.text().startswith("transition:"):
+            # Dropear transicion en el timeline
+            trans_type = mime.text().split(":", 1)[1]
+            pos = self.mapToScene(event.position().toPoint())
+            self.transition_dropped.emit(trans_type, pos)
             event.acceptProposedAction()
         else:
             super().dropEvent(event)
@@ -1259,6 +1313,7 @@ class TimelineWidget(QWidget):
 
         from core.video_clip import detect_source_type
         
+        from core.commands import AddClipCommand
         for url in urls:
             from core.video_clip import VideoClip
             clip = VideoClip(
@@ -1267,11 +1322,19 @@ class TimelineWidget(QWidget):
                 track_index=track_index,
                 start_time=tiempo
             )
-            self._timeline.add_clip(clip)
+            
+            # Validar duracion y recargar frames base si es necesario
+            if clip.duration <= 0.1:
+                clip.duration = 5.0
+            
+            cmd = AddClipCommand(self._timeline, clip, track_index)
+            self._cmd.execute(cmd)
+            
             # Avanzar tiempo para el siguiente clip droppeado a la vez
             tiempo += clip.duration
             
         self._refrescar_completo()
+        self.clips_changed.emit()
 
     def dividir_clip_en_playhead(self):
         """Divide el clip seleccionado en la posicion del playhead."""
@@ -1282,6 +1345,21 @@ class TimelineWidget(QWidget):
             self._cmd.execute(cmd)
             self._refrescar_completo()
             self.clips_changed.emit()
+
+    def eliminar_clip_seleccionado(self):
+        """Elimina el o los clips seleccionados del timeline."""
+        clips_sel = self.get_selected_clips()
+        if not clips_sel:
+            return
+            
+        from core.commands import RemoveClipCommand
+        for clip in clips_sel:
+            cmd = RemoveClipCommand(self._timeline, clip.clip_id)
+            self._cmd.execute(cmd)
+            
+        self._refrescar_completo()
+        self.clip_selected.emit(None)
+        self.clips_changed.emit()
 
     def copiar_seleccion(self):
         """Copia los clips seleccionados al clipboard interno."""

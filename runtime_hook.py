@@ -78,15 +78,19 @@ def setup_fonts():
             os.environ.setdefault('FONTCONFIG_PATH', fonts_dir)
             
             # Para Qt, necesitamos configurar QFontDatabase
+            # Usamos try/except amplio porque Qt puede no estar disponible aún
             try:
+                # Intentar importar Qt6
                 from PyQt6.QtGui import QFontDatabase
-                db = QFontDatabase()
+                # QFontDatabase es una clase estática, no se instancia
                 for font_file in os.listdir(fonts_dir):
                     if font_file.lower().endswith(('.ttf', '.otf')):
                         font_path = os.path.join(fonts_dir, font_file)
-                        db.addApplicationFont(font_path)
-            except ImportError:
-                pass  # Qt no está disponible
+                        QFontDatabase.addApplicationFont(font_path)
+            except Exception:
+                # Silenciar cualquier error de Qt en el runtime hook
+                # Esto es normal si Qt no está inicializado aún
+                pass
 
 # Ejecutar configuración al importar
 setup_unicode()

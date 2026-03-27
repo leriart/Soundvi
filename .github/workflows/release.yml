@@ -1,0 +1,52 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+
+    - name: Extract version from tag
+      id: version
+      run: echo "VERSION=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
+
+    - name: Create Release
+      uses: softprops/action-gh-release@v2
+      with:
+        name: Soundvi v${{ steps.version.outputs.VERSION }}
+        body: |
+          ## Soundvi v${{ steps.version.outputs.VERSION }}
+
+          ### Cambios
+          - Migracion a Qt6 (PyQt6) -- interfaz moderna
+          - Sistema de perfiles (Basico / Creador / Profesional / Personalizado)
+          - Sistema de plugins para modulos de terceros
+          - Preview widget con controles de reproduccion
+          - Nuevo sistema de temas QSS
+
+          ### Instalacion
+          ```bash
+          pip install -r requirements.txt
+          python main.py --qt6
+          ```
+
+          ### Artefactos de build
+          Los ejecutables para cada plataforma se generan automaticamente
+          via el workflow de Build.
+        draft: false
+        prerelease: false
+
+  trigger-build:
+    needs: release
+    uses: ./.github/workflows/build.yml
+    with:
+      version: ${{ github.ref_name }}

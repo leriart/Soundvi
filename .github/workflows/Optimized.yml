@@ -1,0 +1,67 @@
+name: Optimized Build (PyOxidizer)
+
+on:
+  workflow_dispatch:        # Solo ejecución manual
+
+jobs:
+  build:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            platform: windows
+            python-version: '3.10'
+          - os: ubuntu-latest
+            platform: linux
+            python-version: '3.10'
+
+    steps:
+      - name: Checkout código
+        uses: actions/checkout@v4
+
+      - name: Configurar Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Instalar dependencias Python
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install -r requirements-build.txt
+
+      - name: Instalar FFmpeg (Linux)
+        if: matrix.platform == 'linux'
+        run: sudo apt-get update && sudo apt-get install -y ffmpeg
+
+      - name: Instalar FFmpeg (Windows)
+        if: matrix.platform == 'windows'
+        run: |
+          choco install ffmpeg --no-progress
+          echo "C:\ProgramData\chocolatey\bin" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+
+      - name: Configurar MSVC (Windows)
+        if: matrix.platform == 'windows'
+        uses: ilammy/msvc-dev-cmd@v1
+
+      # Evitar error de emojis en Windows
+      - name: Configurar UTF-8 (Windows)
+        if: matrix.platform == 'windows'
+        run: echo "PYTHONIOENCODING=utf-8" >> $env:GITHUB_ENV
+
+      # Verificar que pyoxidizer esté disponible (opcional)
+      - name: Verificar PyOxidizer
+        run: pyoxidizer --version
+
+      # Ejecutar build con PyOxidizer
+      - name: Ejecutar build optimizado
+        run: python build.py --platform ${{ matrix.platform }} --builder pyoxidizer --portable
+
+      # Subir artefactos
+      - name: Subir artefactos
+        uses: actions/upload-artifact@v4
+        with:
+          name: soundvi-${{ matrix.platform }}-optimized
+          path: dist/*

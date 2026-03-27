@@ -206,7 +206,7 @@ class ExportDialog(QDialog):
         layout.addWidget(grp_rango)
 
         # -- Archivo de salida --
-        grp_salida = QGroupBox("\u➡  Archivo de Salida")
+        grp_salida = QGroupBox("➡  Archivo de Salida")
         lay_salida = QHBoxLayout(grp_salida)
 
         self._txt_salida = QLineEdit()

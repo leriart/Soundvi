@@ -125,20 +125,29 @@ def obtener_datos_adicionales() -> list:
 def obtener_hidden_imports() -> list:
     """Retorna la lista de hidden imports para PyInstaller."""
     return [
-        # Qt6
+        # Qt6 (todos los módulos necesarios)
         "PyQt6", "PyQt6.QtWidgets", "PyQt6.QtCore", "PyQt6.QtGui",
-        "PyQt6.sip",
+        "PyQt6.QtPrintSupport", "PyQt6.sip",
+        # Componentes específicos de QtWidgets que PyInstaller puede perder
+        "PyQt6.QtWidgets.QAction", "PyQt6.QtWidgets.QActionGroup",
+        "PyQt6.QtWidgets.QMenu", "PyQt6.QtWidgets.QMenuBar",
+        "PyQt6.QtWidgets.QToolBar", "PyQt6.QtWidgets.QStatusBar",
+        "PyQt6.QtWidgets.QDockWidget", "PyQt6.QtWidgets.QFileDialog",
+        "PyQt6.QtWidgets.QMessageBox", "PyQt6.QtWidgets.QSplitter",
+        "PyQt6.QtWidgets.QTabWidget",
         # Core
         "cv2", "numpy", "PIL", "PIL.Image", "PIL.ImageDraw", "PIL.ImageFont",
+        "PIL.ImageOps", "PIL.ImageFilter", "PIL.ImageEnhance",
         # Modulos internos
         "modules.core.base", "modules.core.registry", "modules.core.manager",
         "modules.video", "modules.audio", "modules.text",
         "modules.utility", "modules.export",
-        # Audio
-        "scipy", "scipy.signal", "scipy.fft",
-        "pydub", "soundfile",
+        # Audio (todos los módulos necesarios)
+        "scipy", "scipy.signal", "scipy.fft", "scipy.io", "scipy.ndimage",
+        "pydub", "soundfile", "librosa", "librosa.feature", "librosa.effects",
         # Procesamiento
-        "threadpoolctl", "joblib",
+        "threadpoolctl", "joblib", "moviepy", "moviepy.editor", "moviepy.video", "moviepy.audio",
+        "numba", "sklearn", "sklearn.cluster", "sklearn.preprocessing",
         # Gui internos
         "gui.qt6", "gui.qt6.main_window", "gui.qt6.theme",
         "gui.qt6.profile_selector", "gui.qt6.base",

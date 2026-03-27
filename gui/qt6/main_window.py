@@ -27,6 +27,8 @@ from PyQt6.QtWidgets import (
     QMenuBar, QMenu, QFileDialog, QMessageBox, QSplitter,
     QFrame, QSizePolicy, QTabWidget
 )
+_RAIZ = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+sys.path.insert(0, _RAIZ) if _RAIZ not in sys.path else None
 from core.logger import get_logger
 logger = get_logger(__name__)
 from PyQt6.QtCore import Qt, QSize, QTimer, pyqtSignal

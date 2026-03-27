@@ -25,17 +25,13 @@ import numpy as np
 from typing import Optional, Dict, List, Any
 
 from PyQt6.QtWidgets import (
-from core.logger import get_logger
-logger = get_logger(__name__)
-logger = get_logger(__name__)
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
     QGraphicsView, QGraphicsScene, QGraphicsRectItem, QGraphicsLineItem,
     QGraphicsTextItem, QGraphicsItem, QMenu, QFrame, QSizePolicy,
     QToolButton, QSplitter, QScrollBar, QGraphicsProxyWidget
 )
-from PyQt6.QtCore import (
-    Qt, QRectF, QPointF, QSizeF, pyqtSignal, QMimeData, QTimer
-)
+from core.logger import get_logger
+logger = get_logger(__name__)
 from PyQt6.QtGui import (
     QColor, QBrush, QPen, QFont, QPainter, QPainterPath, QDrag, QCursor,
     QAction, QWheelEvent, QMouseEvent, QKeyEvent
@@ -252,7 +248,7 @@ class ClipItem(QGraphicsRectItem):
                 new_duration = self._drag_start_duration - delta_time
                 
                 # Aplicar snap a guías de alineación si está activo
-                new_start = self._apply_alignment_snap(new_start, event.scenePos().x())
+                new_start = self._apply_alignment_snap(new_start, event.scenePos().x(), check_end=False)
                 # Recalcular duración basada en el nuevo inicio
                 new_duration = self._drag_start_duration - (new_start - self._drag_start_time)
                 
@@ -287,144 +283,157 @@ class ClipItem(QGraphicsRectItem):
             new_start = max(0.0, self._drag_start_time + delta_time)
             
             # Aplicar snap a guías de alineación si está activo
-            new_start = self._apply_alignment_snap(new_start, event.scenePos().x())
+            new_start = self._apply_alignment_snap(new_start, event.scenePos().x(), check_end=True)
             
             self.clip.start_time = new_start
             self._actualizar_geometria()
         super().mouseMoveEvent(event)
+
+    def mouseReleaseEvent(self, event):
+        self._resizing = False
+        self._drag_start_pos = None
+        if hasattr(self.scene(), 'update_snap_line'):
+            self.scene().update_snap_line(None)
+        super().mouseReleaseEvent(event)
     
-    def _apply_alignment_snap(self, proposed_start: float, mouse_x: float) -> float:
-        """
-        Aplica snap a las guías de alineación si el asistente está activo.
+    def _get_snap_times(self, timeline_widget) -> list:
+        """Obtiene todos los puntos de tiempo a los que se puede hacer snap."""
+        snap_times = [0.0]
         
-        Args:
-            proposed_start: Tiempo de inicio propuesto
-            mouse_x: Posición X del mouse en la escena
-            
-        Returns:
-            Tiempo de inicio ajustado con snap
+        if hasattr(timeline_widget, '_timeline') and timeline_widget._timeline:
+            snap_times.append(timeline_widget._timeline.playhead)
+            for track in timeline_widget._timeline.tracks:
+                for c in track.clips:
+                    if c.clip_id != self.clip.clip_id:
+                        snap_times.append(c.start_time)
+                        snap_times.append(c.end_time)
+        return snap_times
+
+    def _apply_alignment_snap(self, proposed_start: float, mouse_x: float, check_end: bool = True) -> float:
         """
-        # Obtener referencia al widget principal del timeline
+        Aplica magnetismo (snap) a otros clips, playhead y guías.
+        """
         scene = self.scene()
-        if not scene:
-            return proposed_start
-            
-        # Buscar el widget TimelineWidget en la jerarquía
-        timeline_widget = None
+        if not scene: return proposed_start
         view = scene.views()[0] if scene.views() else None
-        if view:
-            timeline_widget = view.parent()
+        timeline_widget = view.parent() if view else None
+        if not timeline_widget: return proposed_start
         
-        # Verificar si el asistente está activo
-        if not timeline_widget or not hasattr(timeline_widget, '_btn_alignment'):
+        snap_active = False
+        if hasattr(timeline_widget, '_timeline') and timeline_widget._timeline.snap_enabled:
+            snap_active = True
+        elif hasattr(timeline_widget, '_btn_alignment') and timeline_widget._btn_alignment.isChecked():
+            snap_active = True
+            
+        if not snap_active:
+            if hasattr(scene, 'update_snap_line'): scene.update_snap_line(None)
             return proposed_start
             
-        if not timeline_widget._btn_alignment.isChecked():
-            return proposed_start
+        SNAP_THRESHOLD_PX = 8
+        threshold_time = SNAP_THRESHOLD_PX / self._pps
         
-        # Umbral de snap (en píxeles)
-        SNAP_THRESHOLD = 8
+        best_start = proposed_start
+        min_dist = threshold_time
+        snapped_time_point = None
         
-        # Convertir tiempo a posición X
-        proposed_x = HEADER_WIDTH + proposed_start * self._pps
+        snap_times = self._get_snap_times(timeline_widget)
+        proposed_end = proposed_start + self.clip.duration
         
-        # Buscar la guía más cercana
-        if hasattr(timeline_widget, '_alignment_guides'):
-            closest_guide = None
-            min_distance = float('inf')
-            
-            # Solo verificar guías verticales (primeras 9)
-            for i, guide in enumerate(timeline_widget._alignment_guides[:9]):
-                if guide.isVisible():
-                    guide_line = guide.line()
-                    guide_x = guide_line.x1()
-                    distance = abs(mouse_x - guide_x)
+        for t in snap_times:
+            dist_start = abs(proposed_start - t)
+            if dist_start < min_dist:
+                min_dist = dist_start
+                best_start = t
+                snapped_time_point = t
+                
+            if check_end:
+                dist_end = abs(proposed_end - t)
+                if dist_end < min_dist:
+                    min_dist = dist_end
+                    best_start = t - self.clip.duration
+                    snapped_time_point = t
                     
-                    if distance < min_distance and distance < SNAP_THRESHOLD:
-                        min_distance = distance
-                        closest_guide = guide_x
+        if hasattr(timeline_widget, '_alignment_guides') and hasattr(timeline_widget, '_btn_alignment') and timeline_widget._btn_alignment.isChecked():
+            prop_x_start = HEADER_WIDTH + proposed_start * self._pps
+            prop_x_end = HEADER_WIDTH + proposed_end * self._pps
+            for guide in timeline_widget._alignment_guides[:9]:
+                if guide.isVisible():
+                    guide_x = guide.line().x1()
+                    dist_start_px = abs(prop_x_start - guide_x)
+                    if dist_start_px < SNAP_THRESHOLD_PX and (dist_start_px / self._pps) < min_dist:
+                        min_dist = dist_start_px / self._pps
+                        best_start = (guide_x - HEADER_WIDTH) / self._pps
+                        snapped_time_point = best_start
+                        
+                    if check_end:
+                        dist_end_px = abs(prop_x_end - guide_x)
+                        if dist_end_px < SNAP_THRESHOLD_PX and (dist_end_px / self._pps) < min_dist:
+                            min_dist = dist_end_px / self._pps
+                            best_start = ((guide_x - HEADER_WIDTH) / self._pps) - self.clip.duration
+                            snapped_time_point = (guide_x - HEADER_WIDTH) / self._pps
+                            
+        if snapped_time_point is not None and hasattr(scene, 'update_snap_line'):
+            scene.update_snap_line(HEADER_WIDTH + snapped_time_point * self._pps)
+        elif hasattr(scene, 'update_snap_line'):
+            scene.update_snap_line(None)
             
-            # Si encontramos una guía cercana, ajustar
-            if closest_guide is not None:
-                # Convertir posición X de vuelta a tiempo
-                snapped_start = (closest_guide - HEADER_WIDTH) / self._pps
-                return max(0.0, snapped_start)
-        
-        return proposed_start
+        return max(0.0, best_start)
     
     def _apply_alignment_snap_edge(self, proposed_x: float, mouse_x: float) -> float:
         """
-        Aplica snap a las guías de alineación para bordes de clips.
-        
-        Args:
-            proposed_x: Posición X propuesta
-            mouse_x: Posición X del mouse en la escena
-            
-        Returns:
-            Posición X ajustada con snap
+        Aplica snap para el borde derecho del clip durante el redimensionado.
         """
-        # Obtener referencia al widget principal del timeline
         scene = self.scene()
-        if not scene:
-            return proposed_x
-            
-        # Buscar el widget TimelineWidget en la jerarquía
-        timeline_widget = None
+        if not scene: return proposed_x
         view = scene.views()[0] if scene.views() else None
-        if view:
-            timeline_widget = view.parent()
+        timeline_widget = view.parent() if view else None
+        if not timeline_widget: return proposed_x
         
-        # Verificar si el asistente está activo
-        if not timeline_widget or not hasattr(timeline_widget, '_btn_alignment'):
+        snap_active = False
+        if hasattr(timeline_widget, '_timeline') and timeline_widget._timeline.snap_enabled:
+            snap_active = True
+        elif hasattr(timeline_widget, '_btn_alignment') and timeline_widget._btn_alignment.isChecked():
+            snap_active = True
+            
+        if not snap_active:
+            if hasattr(scene, 'update_snap_line'): scene.update_snap_line(None)
             return proposed_x
             
-        if not timeline_widget._btn_alignment.isChecked():
-            return proposed_x
+        SNAP_THRESHOLD_PX = 8
+        threshold_time = SNAP_THRESHOLD_PX / self._pps
         
-        # Umbral de snap (en píxeles)
-        SNAP_THRESHOLD = 8
+        proposed_end_time = (proposed_x - HEADER_WIDTH) / self._pps
+        best_end_time = proposed_end_time
+        min_dist = threshold_time
+        snapped_time_point = None
         
-        # Buscar la guía más cercana
-        if hasattr(timeline_widget, '_alignment_guides'):
-            closest_guide = None
-            min_distance = float('inf')
-            
-            # Solo verificar guías verticales (primeras 9)
-            for i, guide in enumerate(timeline_widget._alignment_guides[:9]):
+        snap_times = self._get_snap_times(timeline_widget)
+        
+        for t in snap_times:
+            dist = abs(proposed_end_time - t)
+            if dist < min_dist:
+                min_dist = dist
+                best_end_time = t
+                snapped_time_point = t
+                
+        if hasattr(timeline_widget, '_alignment_guides') and hasattr(timeline_widget, '_btn_alignment') and timeline_widget._btn_alignment.isChecked():
+            for guide in timeline_widget._alignment_guides[:9]:
                 if guide.isVisible():
-                    guide_line = guide.line()
-                    guide_x = guide_line.x1()
-                    distance = abs(mouse_x - guide_x)
-                    
-                    if distance < min_distance and distance < SNAP_THRESHOLD:
-                        min_distance = distance
-                        closest_guide = guide_x
+                    guide_x = guide.line().x1()
+                    dist_px = abs(proposed_x - guide_x)
+                    if dist_px < SNAP_THRESHOLD_PX and (dist_px / self._pps) < min_dist:
+                        min_dist = dist_px / self._pps
+                        best_end_time = (guide_x - HEADER_WIDTH) / self._pps
+                        snapped_time_point = best_end_time
+                        
+        if snapped_time_point is not None and hasattr(scene, 'update_snap_line'):
+            scene.update_snap_line(HEADER_WIDTH + snapped_time_point * self._pps)
+        elif hasattr(scene, 'update_snap_line'):
+            scene.update_snap_line(None)
             
-            # Si encontramos una guía cercana, ajustar
-            if closest_guide is not None:
-                return closest_guide
-        
-        return proposed_x
+        return HEADER_WIDTH + best_end_time * self._pps
 
-    def mouseReleaseEvent(self, event):
-        """Fin de arrastre o redimensionado."""
-        self._resizing = False
-        self._resize_edge = ""
-        self._drag_start_pos = None
-        self._pintar()
-        super().mouseReleaseEvent(event)
-
-    def itemChange(self, change, value):
-        """Actualiza apariencia al cambiar seleccion."""
-        if change == QGraphicsItem.GraphicsItemChange.ItemSelectedChange:
-            QTimer.singleShot(0, self._pintar)
-        return super().itemChange(change, value)
-
-
-# ---------------------------------------------------------------------------
-#  PlayheadItem -- Linea vertical del cabezal de reproduccion
-# ---------------------------------------------------------------------------
-class PlayheadItem(QGraphicsLineItem):
+# class PlayheadItem(QGraphicsLineItem):
     """Linea vertical roja que indica la posicion de reproduccion."""
 
     def __init__(self, height: float):
@@ -606,6 +615,22 @@ class TimelineScene(QGraphicsScene):
         self._snap_line: Optional[QGraphicsLineItem] = None
         self._pps: float = 100.0  # pixeles por segundo
         self._total_height: float = 0.0
+
+    def update_snap_line(self, x: float = None, height: float = 0.0):
+        """Muestra o oculta la linea indicadora de snap magnetico."""
+        if not self._snap_line:
+            from PyQt6.QtGui import QPen, QColor
+            from PyQt6.QtCore import Qt
+            self._snap_line = QGraphicsLineItem()
+            self._snap_line.setPen(QPen(QColor("#3498DB"), 2, Qt.PenStyle.DashLine))
+            self._snap_line.setZValue(999)
+            self.addItem(self._snap_line)
+        if x is not None:
+            h = height if height > 0 else (self.sceneRect().height() if self.sceneRect().height() > 0 else 1000)
+            self._snap_line.setLine(x, 0, x, h)
+            self._snap_line.setVisible(True)
+        else:
+            self._snap_line.setVisible(False)
 
     def crear_playhead(self, height: float):
         """Crea el indicador de playhead."""
@@ -1200,46 +1225,39 @@ class TimelineWidget(QWidget):
         if x < 0: x = 0
         tiempo = x / self._pps
 
+        # Aplicar magnetismo (snap) si esta habilitado
+        if self._timeline.snap_enabled or (hasattr(self, '_btn_alignment') and self._btn_alignment.isChecked()):
+            threshold_time = 15.0 / self._pps # 15 pixeles de tolerancia
+            best_time = tiempo
+            min_dist = threshold_time
+            
+            snap_times = [0.0, self._timeline.playhead]
+            for track in self._timeline.tracks:
+                for c in track.clips:
+                    snap_times.extend([c.start_time, c.end_time])
+                    
+            for t in snap_times:
+                dist = abs(tiempo - t)
+                if dist < min_dist:
+                    min_dist = dist
+                    best_time = t
+            tiempo = max(0.0, best_time)
+
         from core.video_clip import detect_source_type
         
         for url in urls:
+            from core.video_clip import VideoClip
             clip = VideoClip(
                 source_path=url,
                 source_type=detect_source_type(url),
                 track_index=track_index,
-                start_time=tiempo,
-                duration=0.0, # se autocalcula en VideoClip
-                name=os.path.basename(url)
+                start_time=tiempo
             )
-            self.agregar_clip(clip, track_index)
-            # asume duracion para el proximo offset si es 0 (imagenes por defecto es 5.0)
-            tiempo += max(1.0, clip.duration)
-
-    # -- Gestion de clips ------------------------------------------------------
-    def agregar_clip(self, clip: VideoClip, track_index: int = 0):
-        """Agrega un clip al timeline via CommandManager."""
-        cmd = AddClipCommand(self._timeline, clip, track_index)
-        self._cmd.execute(cmd)
-        self._refrescar_completo()
-        
-        # Auto-adaptar zoom si la duracion excede lo visible (acercarse/alejarse)
-        if self._timeline.duration > 0:
-            ancho_disponible = self._view.viewport().width() - HEADER_WIDTH
-            duracion_visible = ancho_disponible / self._pps if self._pps > 0 else 0
-            # Si el clip nuevo hace que la duracion sea mayor al area visible o muy pequena
-            if self._timeline.duration > duracion_visible or duracion_visible > self._timeline.duration * 2:
-                self._zoom_fit()
-                
-        self.clips_changed.emit()
-
-    def eliminar_clip_seleccionado(self):
-        """Elimina los clips seleccionados."""
-        clips = self._scene.get_selected_clips()
-        for clip in clips:
-            cmd = RemoveClipCommand(self._timeline, clip.clip_id)
-            self._cmd.execute(cmd)
-        self._refrescar_completo()
-        self.clips_changed.emit()
+            self._timeline.add_clip(clip)
+            # Avanzar tiempo para el siguiente clip droppeado a la vez
+            tiempo += clip.duration
+            
+        self._actualizar_clips()
 
     def dividir_clip_en_playhead(self):
         """Divide el clip seleccionado en la posicion del playhead."""

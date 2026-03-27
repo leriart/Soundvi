@@ -217,7 +217,7 @@ def construir(plataforma: str, version: str, modo_debug: bool = False,
     ]
     
     # Forzar UTF-8 para Unicode (importante para caracteres especiales)
-    cmd.extend(["--runtime-hook", "runtime_hook.py"])
+    cmd.extend(["--runtime-hook", "runtime_hook_simple.py"])
 
     # Icono
     if os.path.isfile(icono):

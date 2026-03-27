@@ -7,28 +7,40 @@ Esto evita confusiones y errores de ejecución.
 
 ---
 
-## 🎯 **ÚNICO WORKFLOW ACTIVO: MASTER_BUILD.yml**
+## 🎯 **WORKFLOWS ACTIVOS:**
 
-**El workflow maestro que reemplaza TODOS los demás.**
+### **1. MASTER_BUILD.yml (Linux/macOS)**
+**Para builds en Linux y macOS.**
 
-### **🚨 ¿Por qué solo este?**
-1. **Evita errores**: Los workflows viejos tenían problemas con argumentos
-2. **Consistencia**: Un solo flujo de trabajo para todo
-3. **Mantenimiento**: Más fácil de actualizar y debuggear
-
-### **Características:**
+#### **Características:**
 - ✅ **Todo en uno**: Build + Test + Release
 - ✅ **Virtual environment** automático (evita PEP 668)
 - ✅ **Node.js 24** compatible (sin warnings)
 - ✅ **Debugging** extensivo
 - ✅ **Summary** automático
-- ✅ **Argumentos correctos** (sin problemas de PowerShell)
 
-### **Cómo usar:**
-1. Ve a **Actions** → **🚀 MASTER BUILD - Soundvi CI/CD**
+#### **Cómo usar:**
+1. Ve a **Actions** → **MASTER BUILD - Soundvi CI/CD**
 2. Configura:
    - **Action**: `build` (solo build) o `build-and-release` (build + release)
-   - **Platform**: `linux`, `windows`, o `macos`
+   - **Platform**: `linux` o `macos` (NO windows)
+   - **Version**: `4.8.0` (o la que quieras)
+   - **Mode**: `onefile` (ejecutable único) o `onedir` (directorio)
+3. **¡Ejecuta!**
+
+---
+
+### **2. windows-build.yml (Windows)**
+**Workflow específico para Windows con PowerShell nativo.**
+
+#### **¿Por qué separado?**
+- PowerShell tiene sintaxis diferente a bash
+- Problemas con `if [ ... ]` en PowerShell
+- Mejor compatibilidad con Windows
+
+#### **Cómo usar:**
+1. Ve a **Actions** → **Windows Build**
+2. Configura:
    - **Version**: `4.8.0` (o la que quieras)
    - **Mode**: `onefile` (ejecutable único) o `onedir` (directorio)
 3. **¡Ejecuta!**
@@ -39,16 +51,16 @@ Esto evita confusiones y errores de ejecución.
 
 **Todos estos están deshabilitados (.disabled):**
 
-### **Deshabilitados por problemas de argumentos:**
+### **Deshabilitados por problemas de sintaxis:**
 - `build.yml` - ❌ Problemas con PowerShell argument parsing
 - `python-app.yml` - ❌ Mismos problemas
 - `multi-platform-release.yml` - ❌ Error: "unrecognized arguments"
-- `manual-build.yml` - ❌ Deshabilitado para evitar confusión
-- `simple-build.yml` - ❌ Deshabilitado para evitar confusión
-- `universal-build.yml` - ❌ Deshabilitado para evitar confusión
+- `manual-build.yml` - ❌ Mezcla bash/PowerShell problemática
+- `simple-build.yml` - ❌ Mezcla bash/PowerShell problemática
+- `universal-build.yml` - ❌ Mezcla bash/PowerShell problemática
 
 ### **Deshabilitados por obsolescencia:**
-- `release.yml` - ❌ Reemplazado por MASTER_BUILD
+- `release.yml` - ❌ Reemplazado por workflows específicos
 - `Optimized.yml` - ❌ Reemplazado
 - `test.yml` - ❌ Reemplazado por MASTER_BUILD
 

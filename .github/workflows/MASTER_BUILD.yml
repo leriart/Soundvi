@@ -58,8 +58,8 @@ jobs:
 
   build:
     needs: setup
-    if: needs.setup.outputs.should_build == 'true'
-    runs-on: ${{ inputs.platform == 'windows' && 'windows-latest' || inputs.platform == 'macos' && 'macos-latest' || 'ubuntu-latest' }}
+    if: needs.setup.outputs.should_build == 'true' && inputs.platform != 'windows'
+    runs-on: ${{ inputs.platform == 'macos' && 'macos-latest' || 'ubuntu-latest' }}
     
     steps:
     - name: Checkout code

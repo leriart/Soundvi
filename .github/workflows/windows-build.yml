@@ -1,0 +1,103 @@
+name: Windows Build
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version number'
+        required: true
+        default: '4.8.0'
+        type: string
+      mode:
+        description: 'Build mode'
+        required: true
+        default: 'onefile'
+        type: choice
+        options:
+          - onefile
+          - onedir
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+    
+    - name: Setup Python 3.11
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.11'
+        cache: pip
+    
+    - name: Install FFmpeg
+      run: |
+        choco install ffmpeg --no-progress
+        echo "C:\ProgramData\chocolatey\bin" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+    
+    - name: Create virtual environment
+      run: |
+        python -m venv venv
+        echo "VENV_PATH=venv\Scripts" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8
+    
+    - name: Install Python dependencies
+      run: |
+        .\venv\Scripts\activate
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+        pip install pyinstaller
+        pip install librosa moviepy pydub soundfile numba
+        echo "=== Installed packages ==="
+        pip list | findstr /i "PyQt numpy opencv librosa moviepy pyinstaller"
+    
+    - name: Run build
+      run: |
+        .\venv\Scripts\activate
+        echo "=== Building Soundvi ==="
+        echo "Platform: windows"
+        echo "Version: ${{ inputs.version }}"
+        echo "Mode: ${{ inputs.mode }}"
+        
+        # Build command
+        $cmd = "python build.py --platform windows --version ${{ inputs.version }} --clean"
+        if ("${{ inputs.mode }}" -eq "onefile") {
+            $cmd = "$cmd --onefile"
+        }
+        
+        echo "Command: $cmd"
+        Invoke-Expression $cmd
+    
+    - name: Verify build output
+      run: |
+        echo "=== Build verification ==="
+        if (Test-Path "dist") {
+            echo "SUCCESS: dist/ directory created successfully"
+            echo "Files in dist/:"
+            Get-ChildItem -Path "dist" -Recurse -File | ForEach-Object {
+                $size = "{0:N1} MB" -f ($_.Length / 1MB)
+                echo "  - $($_.FullName) ($size)"
+            }
+            
+            # Generate checksums
+            Set-Location dist
+            Get-ChildItem -File | ForEach-Object {
+                $hash = (Get-FileHash $_.FullName -Algorithm SHA256).Hash
+                "$hash  $($_.Name)" | Out-File -FilePath SHA256SUMS -Encoding utf8 -Append
+            }
+            Set-Location ..
+            echo "SUCCESS: Checksums generated"
+        } else {
+            echo "ERROR: dist/ directory not found!"
+            echo "Current directory:"
+            Get-Location
+            Get-ChildItem
+            exit 1
+        }
+    
+    - name: Upload artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: soundvi-windows-${{ inputs.version }}-${{ inputs.mode }}
+        path: dist/
+        if-no-files-found: error

@@ -1166,12 +1166,35 @@ class VentanaPrincipalQt6(QMainWindow):
                 "Revisa que el archivo no esté corrupto.")
 
     def _guardar_proyecto(self):
-        """Guarda el proyecto actual. Si no tiene ruta, invoca Guardar Como."""
+        """Guarda el proyecto actual en formato .soundvi."""
         if not self._project_manager.project_path:
             self._guardar_como()
             return
-
-        ok = self._project_manager.save_project()
+        
+        # Verificar si ya es un archivo .soundvi
+        if self._project_manager.project_path.endswith('.soundvi'):
+            # Preguntar si incrustar medios
+            from PyQt6.QtWidgets import QMessageBox
+            reply = QMessageBox.question(
+                self, "Guardar Proyecto",
+                "¿Deseas incrustar los archivos de medios en el proyecto?\n"
+                "Esto hará el archivo más grande pero será portable.",
+                QMessageBox.StandardButton.Yes | 
+                QMessageBox.StandardButton.No | 
+                QMessageBox.StandardButton.Cancel
+            )
+            
+            if reply == QMessageBox.StandardButton.Cancel:
+                return
+            
+            embed_media = (reply == QMessageBox.StandardButton.Yes)
+            
+            # Guardar con opción de incrustar medios
+            ok = self._project_manager.save_project(embed_media=embed_media)
+        else:
+            # Proyecto legacy .svproj - guardar normalmente
+            ok = self._project_manager.save_project()
+        
         if ok:
             # Registrar en historial y actualizar menu
             project_history.add_project(
@@ -1185,28 +1208,68 @@ class VentanaPrincipalQt6(QMainWindow):
                 except Exception as e:
                     log.warning("Error guardando modulos: %s", e)
             self._actualizar_titulo_ventana()
+            
+            # Mostrar información del guardado
+            file_size = os.path.getsize(self._project_manager.project_path) if os.path.exists(self._project_manager.project_path) else 0
+            size_mb = file_size / 1024 / 1024
             self._status.showMessage(
-                f"Proyecto guardado: {os.path.basename(self._project_manager.project_path)}",
-                3000)
+                f"Proyecto guardado: {os.path.basename(self._project_manager.project_path)} ({size_mb:.2f} MB)",
+                5000)
         else:
             QMessageBox.warning(
                 self, "Error al guardar",
                 "No se pudo guardar el proyecto.\nVerifica permisos de escritura.")
 
     def _guardar_como(self):
-        """Guarda el proyecto con un nuevo nombre/ruta."""
+        """Guarda el proyecto con un nuevo nombre/ruta en formato .soundvi."""
+        from PyQt6.QtWidgets import QFileDialog, QMessageBox
+        
+        # Diálogo para guardar como .soundvi
         ruta, _ = QFileDialog.getSaveFileName(
             self, "Guardar proyecto como", "",
-            "Proyectos Soundvi (*.svproj);;JSON (*.json)"
+            "Soundvi Projects (*.soundvi);;Proyectos Legacy (*.svproj);;Todos los archivos (*)"
         )
         if not ruta:
             return
-        # Asegurar extension
-        if not ruta.endswith(('.svproj', '.json')):
-            ruta += '.svproj'
-        # Actualizar nombre del proyecto basado en el nombre del archivo
+        
+        # Determinar formato basado en extensión o preferencia
+        if not ruta.endswith(('.soundvi', '.svproj')):
+            # Preguntar formato preferido
+            reply = QMessageBox.question(
+                self, "Formato de Proyecto",
+                "¿Qué formato deseas usar?\n"
+                "• .soundvi: Comprimido, puede incrustar medios (recomendado)\n"
+                "• .svproj: JSON simple (legacy)",
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
+            )
+            
+            if reply == QMessageBox.StandardButton.Yes:
+                ruta += '.soundvi'  # Formato nuevo
+            else:
+                ruta += '.svproj'   # Formato legacy
+        
+        # Actualizar nombre del proyecto
         self._project_manager.project_name = os.path.splitext(os.path.basename(ruta))[0]
-        ok = self._project_manager.save_project(ruta)
+        
+        # Si es formato .soundvi, preguntar sobre incrustar medios
+        embed_media = False
+        if ruta.endswith('.soundvi'):
+            reply = QMessageBox.question(
+                self, "Incrustar Medios",
+                "¿Deseas incrustar los archivos de medios en el proyecto?\n"
+                "Esto hará el archivo más grande pero será portable.",
+                QMessageBox.StandardButton.Yes | 
+                QMessageBox.StandardButton.No | 
+                QMessageBox.StandardButton.Cancel
+            )
+            
+            if reply == QMessageBox.StandardButton.Cancel:
+                return
+            
+            embed_media = (reply == QMessageBox.StandardButton.Yes)
+        
+        # Guardar proyecto
+        ok = self._project_manager.save_project(ruta, embed_media=embed_media)
         if ok:
             project_history.add_project(ruta, self._project_manager.project_name)
             self._actualizar_menu_recientes()
@@ -1215,6 +1278,13 @@ class VentanaPrincipalQt6(QMainWindow):
                     self._module_manager.save_all_modules()
                 except Exception as e:
                     log.warning("Error guardando modulos: %s", e)
+            
+            # Mostrar información del guardado
+            file_size = os.path.getsize(ruta) if os.path.exists(ruta) else 0
+            size_mb = file_size / 1024 / 1024
+            self._status.showMessage(
+                f"Proyecto guardado: {os.path.basename(ruta)} ({size_mb:.2f} MB)",
+                5000)
             self._actualizar_titulo_ventana()
             self._status.showMessage(
                 f"Guardado como: {os.path.basename(ruta)}", 3000)

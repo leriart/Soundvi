@@ -434,7 +434,7 @@ class ClipItem(QGraphicsRectItem):
             
         return HEADER_WIDTH + best_end_time * self._pps
 
-# class PlayheadItem(QGraphicsLineItem):
+class PlayheadItem(QGraphicsLineItem):
     """Linea vertical roja que indica la posicion de reproduccion."""
 
     def __init__(self, height: float):

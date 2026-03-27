@@ -25,10 +25,10 @@ from PyQt6.QtWidgets import (
     QMainWindow, QApplication, QWidget, QVBoxLayout, QHBoxLayout,
     QLabel, QPushButton, QToolBar, QStatusBar, QDockWidget,
     QMenuBar, QMenu, QFileDialog, QMessageBox, QSplitter,
-    QFrame, QSizePolicy, QTabWidget, QAction, QActionGroup
+    QFrame, QSizePolicy, QTabWidget
 )
 from PyQt6.QtCore import Qt, QSize, QTimer, pyqtSignal
-from PyQt6.QtGui import QKeySequence
+from PyQt6.QtGui import QKeySequence, QAction, QActionGroup
 from PyQt6.QtGui import QAction, QFont, QIcon, QKeySequence, QPixmap
 
 # Ruta raiz

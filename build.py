@@ -128,8 +128,8 @@ def obtener_hidden_imports() -> list:
         # Qt6 (todos los módulos necesarios)
         "PyQt6", "PyQt6.QtWidgets", "PyQt6.QtCore", "PyQt6.QtGui",
         "PyQt6.QtPrintSupport", "PyQt6.sip",
-        # Componentes específicos de QtWidgets que PyInstaller puede perder
-        "PyQt6.QtWidgets.QAction", "PyQt6.QtWidgets.QActionGroup",
+        # Componentes específicos de Qt que PyInstaller puede perder
+        "PyQt6.QtGui.QAction", "PyQt6.QtGui.QActionGroup",
         "PyQt6.QtWidgets.QMenu", "PyQt6.QtWidgets.QMenuBar",
         "PyQt6.QtWidgets.QToolBar", "PyQt6.QtWidgets.QStatusBar",
         "PyQt6.QtWidgets.QDockWidget", "PyQt6.QtWidgets.QFileDialog",

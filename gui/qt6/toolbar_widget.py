@@ -39,8 +39,8 @@ HERRAMIENTAS: List[tuple] = [
     (None, None, None, None, None, None),  # Separador
 
     # -- Grupo: Import/Export --
-    ("\u2912",  "Importar",  "Importar medios (Ctrl+I)",   "Ctrl+I",       "import_media",  "Import"),
-    ("\u➡",  "Exportar",  "Exportar video (Ctrl+E)",    "Ctrl+E",       "export_video",  "Export"),
+    ("⤒",  "Importar",  "Importar medios (Ctrl+I)",   "Ctrl+I",       "import_media",  "Import"),
+    ("➡",  "Exportar",  "Exportar video (Ctrl+E)",    "Ctrl+E",       "export_video",  "Export"),
     (None, None, None, None, None, None),  # Separador
 
     # -- Grupo: Edit --

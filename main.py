@@ -142,6 +142,25 @@ def run_app(perfil: str = ""):
     icon_path = zoundvi_logo if os.path.isfile(zoundvi_logo) else logo_path
     if os.path.isfile(icon_path):
         app.setWindowIcon(QIcon(icon_path))
+    
+    # Configurar fuentes para ejecutables empaquetados
+    # Esto debe hacerse DESPUÉS de crear QApplication
+    if is_frozen():
+        try:
+            from PyQt6.QtGui import QFontDatabase
+            # PyInstaller almacena datos en sys._MEIPASS
+            if hasattr(sys, '_MEIPASS'):
+                meipass = sys._MEIPASS
+                fonts_dir = os.path.join(meipass, 'fonts')
+                if os.path.isdir(fonts_dir):
+                    # Cargar todas las fuentes .ttf y .otf
+                    for font_file in os.listdir(fonts_dir):
+                        if font_file.lower().endswith(('.ttf', '.otf')):
+                            font_path = os.path.join(fonts_dir, font_file)
+                            QFontDatabase.addApplicationFont(font_path)
+        except Exception as e:
+            # Silenciar errores de fuentes - no es crítico
+            pass
 
     # Cargar preferencias de usuario
     prefs = load_user_prefs()

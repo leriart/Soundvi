@@ -114,8 +114,8 @@ def obtener_datos_adicionales() -> list:
         if os.path.isfile(ruta):
             datos.append((ruta, "."))
     
-    # Runtime hook para Unicode
-    runtime_hook = os.path.join(_RAIZ, "runtime_hook.py")
+    # Runtime hook SIMPLE para Unicode (sin Qt)
+    runtime_hook = os.path.join(_RAIZ, "runtime_hook_simple.py")
     if os.path.isfile(runtime_hook):
         datos.append((runtime_hook, "."))
 

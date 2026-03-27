@@ -113,6 +113,11 @@ def obtener_datos_adicionales() -> list:
         ruta = os.path.join(_RAIZ, cfg)
         if os.path.isfile(ruta):
             datos.append((ruta, "."))
+    
+    # Runtime hook para Unicode
+    runtime_hook = os.path.join(_RAIZ, "runtime_hook.py")
+    if os.path.isfile(runtime_hook):
+        datos.append((runtime_hook, "."))
 
     return datos
 
@@ -137,6 +142,9 @@ def obtener_hidden_imports() -> list:
         # Gui internos
         "gui.qt6", "gui.qt6.main_window", "gui.qt6.theme",
         "gui.qt6.profile_selector", "gui.qt6.base",
+        # Encoding/Unicode
+        "encodings", "encodings.utf_8", "encodings.latin_1",
+        "codecs", "locale", "json",
         "core.profiles", "core.timeline", "core.commands",
         "core.keyframes", "core.video_clip",
         # Utils
@@ -207,6 +215,9 @@ def construir(plataforma: str, version: str, modo_debug: bool = False,
         "--clean",
         "--log-level", "WARN" if not modo_debug else "DEBUG",
     ]
+    
+    # Forzar UTF-8 para Unicode (importante para caracteres especiales)
+    cmd.extend(["--runtime-hook", "runtime_hook.py"])
 
     # Icono
     if os.path.isfile(icono):

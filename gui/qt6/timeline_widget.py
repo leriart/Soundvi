@@ -184,7 +184,7 @@ class ClipItem(QGraphicsRectItem):
         if self.clip.source_type == "audio" and rect.width() > 30 and rect.height() > 20:
             painter.save()
             painter.setPen(QPen(QColor("#00BC8C"), 1))
-            painter.setBrush(QBrush(QColor("#00BC8C", 80)))
+            painter.setBrush(QBrush(QColor(0, 188, 140, 80)))
             
             # Dibujar waveform simple (ondas sinusoidales)
             h = rect.height() - 10

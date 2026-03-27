@@ -11,21 +11,21 @@ import sys
 # Mapeo de emojis gráficos a símbolos Unicode de texto
 EMOJI_REPLACEMENTS = {
     # Emojis gráficos comunes encontrados
-    "💡": "💡",  # Mantener como está (es aceptable)
-    "🎬": "🎬",  # Mantener como está
-    "🎨": "🎨",  # Mantener como está
-    "🔍": "🔍",  # Mantener como está
-    "🎭": "🎭",  # Mantener como está
-    "🎯": "🎯",  # Mantener como está
-    "🎉": "🎉",  # Mantener como está
-    "🚀": "🚀",  # Mantener como está
-    "✅": "✅",  # Mantener como está
-    "📊": "📊",  # Mantener como está
-    "🦀": "🦀",  # Mantener como está
-    "🎵": "🎵",  # Mantener como está
+    "[•]": "[•]",  # Mantener como está (es aceptable)
+    "[▶]": "[▶]",  # Mantener como está
+    "[✎]": "[✎]",  # Mantener como está
+    "[*]": "[*]",  # Mantener como está
+    "[*]": "[*]",  # Mantener como está
+    "[*]": "[*]",  # Mantener como está
+    "[★]": "[★]",  # Mantener como está
+    "[▶]": "[▶]",  # Mantener como está
+    "[✓]": "[✓]",  # Mantener como está
+    "[*]": "[*]",  # Mantener como está
+    "": "",  # Mantener como está
+    "[♫]": "[♫]",  # Mantener como está
     "⚠": "⚠",    # Mantener como está (ya es símbolo de advertencia)
-    "🔧": "🔧",  # Mantener como está
-    "❌": "❌",  # Mantener como está
+    "[*]": "[*]",  # Mantener como está
+    "[✗]": "[✗]",  # Mantener como está
     
     # Símbolos que YA convertimos (mantener)
     "➡": "➡",    # Rightwards arrow (U+27A1)
@@ -188,7 +188,7 @@ def replace_emojis_in_file(filepath):
         return False, []
 
 def main():
-    print("🔍 ANALIZANDO TODO EL PROYECTO PARA EMOJIS GRÁFICOS")
+    print("[*] ANALIZANDO TODO EL PROYECTO PARA EMOJIS GRÁFICOS")
     print("=" * 80)
     
     project_root = os.path.dirname(os.path.abspath(__file__))
@@ -216,14 +216,14 @@ def main():
                     files_with_unicode.append(rel_path)
                     all_unicode_chars.update(unicode_chars)
     
-    print(f"📊 Encontrados {len(all_unicode_chars)} caracteres Unicode diferentes:")
+    print(f"[*] Encontrados {len(all_unicode_chars)} caracteres Unicode diferentes:")
     for char in sorted(all_unicode_chars, key=lambda x: ord(x)):
         print(f"  U+{ord(char):04X}: '{char}'")
     
-    print(f"\n📁 {len(files_with_unicode)} archivos contienen caracteres Unicode")
+    print(f"\n {len(files_with_unicode)} archivos contienen caracteres Unicode")
     
     # Ahora reemplazar emojis gráficos
-    print("\n🔄 REEMPLAZANDO EMOJIS GRÁFICOS")
+    print("\n REEMPLAZANDO EMOJIS GRÁFICOS")
     print("=" * 80)
     
     for rel_path in files_with_unicode:
@@ -233,16 +233,16 @@ def main():
         if modified:
             files_modified.append(rel_path)
             total_replacements.extend([(rel_path, old, new, pos) for old, new, pos in replacements])
-            print(f"  ✅ Modificado: {rel_path}")
+            print(f"  [✓] Modificado: {rel_path}")
             for old, new, pos in replacements:
                 print(f"     {old} (U+{ord(old):04X}) → {new} (U+{ord(new):04X})")
     
-    print(f"\n📊 RESUMEN:")
+    print(f"\n[*] RESUMEN:")
     print(f"  Archivos modificados: {len(files_modified)}")
     print(f"  Reemplazos totales: {len(total_replacements)}")
     
     if total_replacements:
-        print("\n📋 DETALLE DE REEMPLAZOS:")
+        print("\n DETALLE DE REEMPLAZOS:")
         for filepath, old, new, pos in total_replacements:
             print(f"  {filepath}: {old} → {new}")
     
@@ -258,4 +258,4 @@ def main():
         for file in files_modified:
             f.write(f"- {file}\n")
         
-        f.write(f"\nReempl
+        f.write(f"\nReemplazos realizados: {len(total_replacements)}\n")

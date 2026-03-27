@@ -4,7 +4,7 @@
     "basico": {
       "nombre": "Novato",
       "descripcion": "Interfaz simplificada con guías paso a paso. Solo las herramientas esenciales.",
-      "icono": "🎬",
+      "icono": "▶",
       "modulos_permitidos": {
         "tipos": ["video"],
         "categorias": ["filters", "generators"],
@@ -44,7 +44,7 @@
     "creador": {
       "nombre": "Intermedio",
       "descripcion": "Para creadores de contenido: transiciones, efectos, audio y subtítulos.",
-      "icono": "🎨",
+      "icono": "✦",
       "modulos_permitidos": {
         "tipos": ["video", "audio", "text"],
         "categorias": ["effects", "filters", "generators", "visualization", "subtitles"],
@@ -129,7 +129,7 @@
     "personalizado": {
       "nombre": "Personalizado",
       "descripcion": "Tú decides qué módulos y paneles usar. Control total.",
-      "icono": "⚙️",
+      "icono": "⚙",
       "modulos_permitidos": {
         "tipos": ["video", "audio", "text", "utility", "export"],
         "categorias": ["*"],

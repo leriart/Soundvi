@@ -382,7 +382,7 @@ class SubAutoModule(Module):
 
     def _ui_upd(self, msg, val, srt=None):
         if not self.app: return
-        # Use QMetaObject.invokeMethod for thread-safe GUI updates
+        # Usar QMetaObject.invokeMethod para actualizaciones seguras de GUI desde hilos
         try:
             self.status_t.setText(msg)
             self.pbar.setValue(val)

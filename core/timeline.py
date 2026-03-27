@@ -12,6 +12,7 @@ import uuid
 from typing import Optional, Dict, Any, List, Tuple
 
 import numpy as np
+import cv2
 
 from core.video_clip import VideoClip
 

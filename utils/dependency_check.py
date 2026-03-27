@@ -102,7 +102,7 @@ def imprimir_informe():
     criticas_ok = True
     
     for nombre, info in informe.items():
-        estado = "2713" if info["instalado"] else "2717"
+        estado = "✓" if info["instalado"] else "✗"
         tipo = "CRÍTICA" if info["critica"] else "opcional"
         version = info["version"] or "no instalado"
         
@@ -122,7 +122,7 @@ def imprimir_informe():
         print(f"\n  [!] Dependencias críticas faltantes:")
         print(f"      pip install {' '.join(faltantes)}")
     else:
-        print(f"\n  [2713] Todas las dependencias críticas están instaladas.")
+        print(f"\n  [✓] Todas las dependencias críticas están instaladas.")
     
     opcionales = [info["pip"] for info in informe.values()
                   if not info["critica"] and not info["instalado"] 

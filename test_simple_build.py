@@ -8,7 +8,7 @@ import os
 from PyQt6.QtWidgets import QApplication, QMainWindow, QLabel
 from PyQt6.QtGui import QAction, QActionGroup
 
-print("✅ Test de imports de Qt exitoso:")
+print("[✓] Test de imports de Qt exitoso:")
 print(f"  QApplication: {QApplication}")
 print(f"  QAction: {QAction}")
 print(f"  QActionGroup: {QActionGroup}")
@@ -19,11 +19,11 @@ print(f"  QLabel: {QLabel}")
 app = QApplication([])
 window = QMainWindow()
 window.setWindowTitle("Test Qt")
-label = QLabel("✅ Qt funciona correctamente", window)
+label = QLabel("[✓] Qt funciona correctamente", window)
 window.setCentralWidget(label)
 window.show()
 
-print("\n✅ Aplicación Qt creada exitosamente")
+print("\n[✓] Aplicación Qt creada exitosamente")
 print("  Cierra la ventana para continuar...")
 
 sys.exit(app.exec())

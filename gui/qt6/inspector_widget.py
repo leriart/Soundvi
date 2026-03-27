@@ -228,7 +228,7 @@ class InspectorWidget(QWidget):
 
         # Tip para novatos
         if self._adapter.es_novato:
-            tip_lbl = QLabel("2022 Las opciones avanzadas (opacidad, velocidad)\nse habilitan al cambiar a nivel Intermedio.")
+            tip_lbl = QLabel("• Las opciones avanzadas (opacidad, velocidad)\nse habilitan al cambiar a nivel Intermedio.")
             tip_lbl.setWordWrap(True)
             tip_lbl.setStyleSheet("""
                 QLabel {

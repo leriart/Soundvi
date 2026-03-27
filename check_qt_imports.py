@@ -36,7 +36,7 @@ def check_file(filepath):
         return [f"  ERROR al leer archivo: {e}"]
 
 def main():
-    print("🔍 Verificando TODOS los imports de PyQt6 en el proyecto...")
+    print("[*] Verificando TODOS los imports de PyQt6 en el proyecto...")
     print("=" * 80)
     
     # Buscar todos los archivos .py
@@ -68,10 +68,10 @@ def main():
             all_problems.extend([(rel_path, p) for p in problems])
     
     if not all_problems:
-        print("✅ ¡No se encontraron problemas con imports de QAction/QActionGroup!")
+        print("[✓] ¡No se encontraron problemas con imports de QAction/QActionGroup!")
         print("Todos los imports parecen correctos (QAction/QActionGroup en QtGui).")
     else:
-        print(f"❌ Se encontraron {len(all_problems)} problemas.")
+        print(f"[✗] Se encontraron {len(all_problems)} problemas.")
         print("\nResumen de problemas:")
         for filepath, problem in all_problems:
             print(f"  {filepath}: {problem}")

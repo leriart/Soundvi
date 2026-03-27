@@ -52,7 +52,7 @@ def verificar_pyinstaller() -> bool:
     """Verifica que PyInstaller esta instalado."""
     try:
         import PyInstaller
-        print(f"  [2713] PyInstaller {PyInstaller.__version__} encontrado.")
+        print(f"  [✓] PyInstaller {PyInstaller.__version__} encontrado.")
         return True
     except ImportError:
         print("  [!] PyInstaller no instalado. Instalando...")
@@ -60,7 +60,7 @@ def verificar_pyinstaller() -> bool:
             [sys.executable, "-m", "pip", "install", "pyinstaller>=6.0"],
             stdout=subprocess.DEVNULL
         )
-        print("  [2713] PyInstaller instalado correctamente.")
+        print("  [✓] PyInstaller instalado correctamente.")
         return True
 
 
@@ -69,11 +69,11 @@ def limpiar_build():
     for d in [_DIST, _BUILD]:
         if os.path.isdir(d):
             shutil.rmtree(d)
-            print(f"  [2713] Limpiado: {d}")
+            print(f"  [✓] Limpiado: {d}")
     # Limpiar .spec files
     for spec in Path(_RAIZ).glob("*.spec"):
         spec.unlink()
-        print(f"  [2713] Limpiado: {spec.name}")
+        print(f"  [✓] Limpiado: {spec.name}")
 
 
 def calcular_hash(ruta: str) -> str:
@@ -239,20 +239,20 @@ def construir(plataforma: str, version: str, modo_debug: bool = False,
     # Icono
     if os.path.isfile(icono):
         cmd.extend(["--icon", icono])
-        print(f"  [2713] Icono: {os.path.basename(icono)}")
+        print(f"  [✓] Icono: {os.path.basename(icono)}")
 
     # Datos adicionales
     datos = obtener_datos_adicionales()
     for src, dst in datos:
         separador = ";" if plataforma == "windows" else ":"
         cmd.extend(["--add-data", f"{src}{separador}{dst}"])
-    print(f"  [2713] Datos adicionales: {len(datos)} entradas")
+    print(f"  [✓] Datos adicionales: {len(datos)} entradas")
 
     # Hidden imports
     hidden = obtener_hidden_imports()
     for h in hidden:
         cmd.extend(["--hidden-import", h])
-    print(f"  [2713] Hidden imports: {len(hidden)} módulos")
+    print(f"  [✓] Hidden imports: {len(hidden)} módulos")
     
     # FORZAR inclusión de módulos críticos (solución agresiva)
     # Esto asegura que PyInstaller incluya los módulos aunque no los detecte
@@ -264,12 +264,12 @@ def construir(plataforma: str, version: str, modo_debug: bool = False,
     excludes = obtener_excludes()
     for ex in excludes:
         cmd.extend(["--exclude-module", ex])
-    print(f"  [2713] Exclusiones: {len(excludes)} módulos")
+    print(f"  [✓] Exclusiones: {len(excludes)} módulos")
 
     # Opciones especificas por plataforma
     if plataforma == "linux":
         cmd.extend(["--strip"])  # Strip symbols en Linux
-        print("  [2713] Strip symbols habilitado (Linux)")
+        print("  [✓] Strip symbols habilitado (Linux)")
 
     if modo_debug:
         cmd.append("--debug=all")
@@ -285,7 +285,7 @@ def construir(plataforma: str, version: str, modo_debug: bool = False,
     duracion = (datetime.now() - inicio).total_seconds()
 
     if resultado.returncode != 0:
-        print(f"\n  [2717] Build fallido con codigo {resultado.returncode}")
+        print(f"\n  [✗] Build fallido con codigo {resultado.returncode}")
         print("  Sugerencias:")
         print("    - Ejecuta con --debug para más información")
         print("    - Verifica que todas las dependencias estén instaladas")
@@ -342,11 +342,11 @@ def construir(plataforma: str, version: str, modo_debug: bool = False,
         with open(checksums_path, "w", encoding="utf-8") as f:
             for file_path, hash_value in checksums.items():
                 f.write(f"{hash_value}  {file_path}\n")
-        print(f"  [2713] Checksums generados: {checksums_path}")
+        print(f"  [✓] Checksums generados: {checksums_path}")
 
     # Resumen
     print(f"\n{'='*60}")
-    print(f"  2713 BUILD EXITOSO")
+    print(f"  ✓ BUILD EXITOSO")
     print(f"{'='*60}")
     print(f"  Ejecutable: {_DIST}")
     if os.path.isfile(exe_path):
@@ -424,7 +424,7 @@ MimeType=video/mp4;video/avi;video/mkv;video/mov;
         # También copiar a la estructura estándar
         hicolor_icon = os.path.join(appdir, "usr", "share", "icons", "hicolor", "256x256", "apps", "soundvi.png")
         shutil.copy2(icon_src, hicolor_icon)
-        print(f"  [2713] Icono copiado: {os.path.basename(icon_src)}")
+        print(f"  [✓] Icono copiado: {os.path.basename(icon_src)}")
 
     # Descargar appimagetool si no está disponible
     appimagetool = shutil.which("appimagetool")
@@ -438,7 +438,7 @@ MimeType=video/mp4;video/avi;video/mkv;video/mov;
             urllib.request.urlretrieve(appimagetool_url, appimagetool_path)
             os.chmod(appimagetool_path, 0o755)
             appimagetool = appimagetool_path
-            print("  [2713] appimagetool descargado")
+            print("  [✓] appimagetool descargado")
         except Exception as e:
             print(f"  [!] Error descargando appimagetool: {e}")
             print("  [*] Intentando con curl...")
@@ -446,7 +446,7 @@ MimeType=video/mp4;video/avi;video/mkv;video/mov;
             if os.path.isfile(appimagetool_path):
                 os.chmod(appimagetool_path, 0o755)
                 appimagetool = appimagetool_path
-                print("  [2713] appimagetool descargado via curl")
+                print("  [✓] appimagetool descargado via curl")
 
     if appimagetool:
         output = os.path.join(_DIST, f"{NOMBRE_APP}-{version}-x86_64.AppImage")
@@ -458,15 +458,15 @@ MimeType=video/mp4;video/avi;video/mkv;video/mov;
         
         if result.returncode == 0 and os.path.isfile(output):
             os.chmod(output, 0o755)
-            print(f"  [2713] AppImage generado: {output}")
-            print(f"  [2713] Tamaño: {obtener_tamano_legible(output)}")
+            print(f"  [✓] AppImage generado: {output}")
+            print(f"  [✓] Tamaño: {obtener_tamano_legible(output)}")
             
             # Crear symlink sin versión
             symlink = os.path.join(_DIST, f"{NOMBRE_APP}.AppImage")
             if os.path.exists(symlink):
                 os.remove(symlink)
             os.symlink(os.path.basename(output), symlink)
-            print(f"  [2713] Symlink creado: {NOMBRE_APP}.AppImage")
+            print(f"  [✓] Symlink creado: {NOMBRE_APP}.AppImage")
         else:
             print(f"  [!] Error generando AppImage:")
             print(f"      Exit code: {result.returncode}")
@@ -516,7 +516,7 @@ Ejemplos:
     if args.clean:
         print("[*] Limpiando directorios de build...")
         limpiar_build()
-        print("[2713] Limpieza completada.")
+        print("[✓] Limpieza completada.")
         # NO return aquí - continuar con el build después de limpiar
 
     if args.appimage:

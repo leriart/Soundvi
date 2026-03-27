@@ -37,19 +37,19 @@ log = logging.getLogger("soundvi.qt6.welcome_wizard")
 # ---------------------------------------------------------------------------
 PASOS_WIZARD = [
     {
-        "titulo": "¡Bienvenido a Soundvi! 25B6",
-        "icono": "2605",
+        "titulo": "¡Bienvenido a Soundvi! ▶",
+        "icono": "★",
         "descripcion": (
             "Soundvi es un editor de video audio-reactivo que te permite\n"
             "crear videos increíbles sincronizados con tu música.\n\n"
             "Este asistente te guiará en tus primeros pasos.\n"
             "¡Vamos a crear tu primer video juntos!"
         ),
-        "tip": "2022 Puedes volver a ver este asistente desde el menú Help > Asistente de Bienvenida.",
+        "tip": "• Puedes volver a ver este asistente desde el menú Help > Asistente de Bienvenida.",
     },
     {
-        "titulo": "Paso 1: Importar medios 2302",
-        "icono": "2302",
+        "titulo": "Paso 1: Importar medios ⌂",
+        "icono": "⌂",
         "descripcion": (
             "Lo primero es agregar tu contenido a la Biblioteca de Medios.\n\n"
             "Puedes importar:\n"
@@ -58,11 +58,11 @@ PASOS_WIZARD = [
             "  • Imágenes (.png, .jpg, .gif)\n\n"
             "Usa Ctrl+I o el botón 'Importar' en la barra de herramientas."
         ),
-        "tip": "2022 También puedes arrastrar archivos directamente desde tu explorador de archivos.",
+        "tip": "• También puedes arrastrar archivos directamente desde tu explorador de archivos.",
     },
     {
-        "titulo": "Paso 2: Agregar al Timeline 2261",
-        "icono": "2261",
+        "titulo": "Paso 2: Agregar al Timeline ≡",
+        "icono": "≡",
         "descripcion": (
             "El Timeline es donde organizas tu video.\n\n"
             "Desde la Biblioteca, arrastra un clip hacia\n"
@@ -71,11 +71,11 @@ PASOS_WIZARD = [
             "  • Pista de Video: para clips de video e imágenes\n"
             "  • Pista de Audio: para música y sonidos"
         ),
-        "tip": "2022 Puedes mover clips arrastrándolos y redimensionarlos desde los bordes.",
+        "tip": "• Puedes mover clips arrastrándolos y redimensionarlos desde los bordes.",
     },
     {
-        "titulo": "Paso 3: Aplicar un efecto 2728",
-        "icono": "2728",
+        "titulo": "Paso 3: Aplicar un efecto ✨",
+        "icono": "✨",
         "descripcion": (
             "En el panel de Módulos (izquierda) encontrarás\n"
             "efectos para aplicar a tus clips.\n\n"
@@ -83,12 +83,12 @@ PASOS_WIZARD = [
             "  1. Selecciona un clip en el timeline\n"
             "  2. Haz doble clic en el módulo deseado\n\n"
             "Los efectos audio-reactivos responden a la\n"
-            "música automáticamente. ¡Es como magia! 266B"
+            "música automáticamente. ¡Es como magia! ♫"
         ),
-        "tip": "2022 Usa el Inspector (derecha) para ajustar las propiedades del efecto.",
+        "tip": "• Usa el Inspector (derecha) para ajustar las propiedades del efecto.",
     },
     {
-        "titulo": "Paso 4: Exportar tu video 25B6",
+        "titulo": "Paso 4: Exportar tu video ▶",
         "icono": "▶",
         "descripcion": (
             "Cuando estés listo, exporta tu creación:\n\n"
@@ -98,10 +98,10 @@ PASOS_WIZARD = [
             "  4. ¡Presiona Exportar!\n\n"
             "Soundvi se encarga del resto. ➡"
         ),
-        "tip": "2022 Para empezar, usa '1080p H.264' — es compatible con casi todo.",
+        "tip": "• Para empezar, usa '1080p H.264' — es compatible con casi todo.",
     },
     {
-        "titulo": "¡Listo para crear! 2605",
+        "titulo": "¡Listo para crear! ★",
         "icono": "➡",
         "descripcion": (
             "Ya conoces lo básico de Soundvi.\n\n"
@@ -111,7 +111,7 @@ PASOS_WIZARD = [
             "  • Los tooltips tienen información útil\n\n"
             "¡Diviértete creando! Zoundvi cree en ti. --"
         ),
-        "tip": "2022 Puedes cambiar tu nivel de experiencia en Modules > Cambiar perfil.",
+        "tip": "• Puedes cambiar tu nivel de experiencia en Modules > Cambiar perfil.",
     },
 ]
 
@@ -406,7 +406,7 @@ class PanelPrimerosPasos(QFrame):
             layout.addWidget(btn)
 
         # Boton para ver wizard
-        btn_wizard = QPushButton("2022 Ver tutorial completo")
+        btn_wizard = QPushButton("• Ver tutorial completo")
         btn_wizard.setStyleSheet("""
             QPushButton {
                 background-color: #00BC8C;
@@ -423,7 +423,7 @@ class PanelPrimerosPasos(QFrame):
         layout.addWidget(btn_wizard)
 
         # Link para cerrar
-        btn_cerrar = QPushButton("2717 Ocultar este panel")
+        btn_cerrar = QPushButton("✗ Ocultar este panel")
         btn_cerrar.setStyleSheet("""
             QPushButton {
                 background-color: transparent;

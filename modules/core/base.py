@@ -131,7 +131,7 @@ class Module(ABC):
         layer_spin.valueChanged.connect(on_layer_change)
         header_layout.addWidget(layer_spin)
 
-        # Delete button
+        # Boton de eliminar
         delete_btn = QPushButton("\u2716")
         delete_btn.setFixedWidth(30)
         delete_btn.setStyleSheet("color: #dc3545;")

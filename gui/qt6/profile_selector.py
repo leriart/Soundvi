@@ -73,7 +73,7 @@ def obtener_perfil_guardado() -> str:
 
 PERFILES_UI_INFO: Dict[str, Dict[str, Any]] = {
     "basico": {
-        "icono": "▶",  # 25B6 es ▶ (play/triangle right)
+        "icono": "▶",  # Triangulo de reproduccion (U+25B6)
         "titulo": "Novato",
         "subtitulo": "Interfaz simplificada",
         "descripcion": "Ideal para comenzar. Solo las herramientas\nesenciales con guías paso a paso.",
@@ -88,7 +88,7 @@ PERFILES_UI_INFO: Dict[str, Dict[str, Any]] = {
         "recomendado_para": "Usuarios que nunca han editado video",
     },
     "creador": {
-        "icono": "✦",  # 2726 es ✦ (black four pointed star)
+        "icono": "✦",  # Estrella de cuatro puntas (U+2726)
         "titulo": "Intermedio",
         "subtitulo": "Balance perfecto",
         "descripcion": "Para creadores de contenido. Transiciones,\nefectos, audio y subtítulos.",
@@ -118,7 +118,7 @@ PERFILES_UI_INFO: Dict[str, Dict[str, Any]] = {
         "recomendado_para": "Editores experimentados y profesionales",
     },
     "personalizado": {
-        "icono": "2699",
+        "icono": "⚙",
         "titulo": "Personalizado",
         "subtitulo": "Tú decides",
         "descripcion": "Selecciona exactamente los módulos y\npaneles que necesitas.",
@@ -911,7 +911,7 @@ class MenuQueQuieresHacer(QDialog):
             nivel = info.get("titulo", self._seleccion)
             tema = "Oscuro" if self._tema_inicial == "darkly" else "Claro"
             self._lbl_resumen.setText(
-                f"2261 Resumen: Nivel {nivel}  •  Tema {tema}"
+                f"≡ Resumen: Nivel {nivel}  •  Tema {tema}"
             )
 
     # ======================================================================
@@ -925,7 +925,7 @@ class MenuQueQuieresHacer(QDialog):
         layout.setContentsMargins(32, 28, 32, 24)
 
         # Header
-        titulo = QLabel("266B  Soundvi — Seleccionar perfil")
+        titulo = QLabel("♫  Soundvi — Seleccionar perfil")
         titulo.setFont(QFont("Segoe UI", 22, QFont.Weight.Bold))
         titulo.setAlignment(Qt.AlignmentFlag.AlignCenter)
         titulo.setStyleSheet("color: #00BC8C; background: transparent;")

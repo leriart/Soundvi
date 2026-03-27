@@ -200,7 +200,7 @@ class ScriptingPanel(QWidget):
         self._combo_snippets.currentTextChanged.connect(self._insertar_snippet)
         header_layout.addWidget(self._combo_snippets)
 
-        btn_limpiar = QPushButton("2717 Limpiar")
+        btn_limpiar = QPushButton("✗ Limpiar")
         btn_limpiar.setStyleSheet("""
             QPushButton {
                 background-color: #495057; color: #DEE2E6;
@@ -340,7 +340,7 @@ class ScriptingPanel(QWidget):
 
         except Exception as e:
             tb = traceback.format_exc()
-            self._agregar_salida(f"2717 Error:\n{tb}", "#E74C3C")
+            self._agregar_salida(f"✗ Error:\n{tb}", "#E74C3C")
 
         finally:
             sys.stdout = old_stdout

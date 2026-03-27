@@ -1,4 +1,4 @@
-# 🚀 Soundvi CI/CD Workflows
+# [▶] Soundvi CI/CD Workflows
 
 ## ⚠️ **IMPORTANTE: Solo un workflow activo**
 
@@ -7,17 +7,17 @@ Esto evita confusiones y errores de ejecución.
 
 ---
 
-## 🎯 **WORKFLOWS ACTIVOS:**
+## [*] **WORKFLOWS ACTIVOS:**
 
 ### **1. MASTER_BUILD.yml (Linux/macOS)**
 **Para builds en Linux y macOS.**
 
 #### **Características:**
-- ✅ **Todo en uno**: Build + Test + Release
-- ✅ **Virtual environment** automático (evita PEP 668)
-- ✅ **Node.js 24** compatible (sin warnings)
-- ✅ **Debugging** extensivo
-- ✅ **Summary** automático
+- [✓] **Todo en uno**: Build + Test + Release
+- [✓] **Virtual environment** automático (evita PEP 668)
+- [✓] **Node.js 24** compatible (sin warnings)
+- [✓] **Debugging** extensivo
+- [✓] **Summary** automático
 
 #### **Cómo usar:**
 1. Ve a **Actions** → **MASTER BUILD - Soundvi CI/CD**
@@ -52,21 +52,21 @@ Esto evita confusiones y errores de ejecución.
 **Todos estos están deshabilitados (.disabled):**
 
 ### **Deshabilitados por problemas de sintaxis:**
-- `build.yml` - ❌ Problemas con PowerShell argument parsing
-- `python-app.yml` - ❌ Mismos problemas
-- `multi-platform-release.yml` - ❌ Error: "unrecognized arguments"
-- `manual-build.yml` - ❌ Mezcla bash/PowerShell problemática
-- `simple-build.yml` - ❌ Mezcla bash/PowerShell problemática
-- `universal-build.yml` - ❌ Mezcla bash/PowerShell problemática
+- `build.yml` - [✗] Problemas con PowerShell argument parsing
+- `python-app.yml` - [✗] Mismos problemas
+- `multi-platform-release.yml` - [✗] Error: "unrecognized arguments"
+- `manual-build.yml` - [✗] Mezcla bash/PowerShell problemática
+- `simple-build.yml` - [✗] Mezcla bash/PowerShell problemática
+- `universal-build.yml` - [✗] Mezcla bash/PowerShell problemática
 
 ### **Deshabilitados por obsolescencia:**
-- `release.yml` - ❌ Reemplazado por workflows específicos
-- `Optimized.yml` - ❌ Reemplazado
-- `test.yml` - ❌ Reemplazado por MASTER_BUILD
+- `release.yml` - [✗] Reemplazado por workflows específicos
+- `Optimized.yml` - [✗] Reemplazado
+- `test.yml` - [✗] Reemplazado por MASTER_BUILD
 
 ---
 
-## 🐛 Problemas Conocidos y Soluciones
+##  Problemas Conocidos y Soluciones
 
 ### **Error: "unrecognized arguments"**
 **Causa:** Ejecutando workflows viejos que tienen problemas con PowerShell.
@@ -90,7 +90,7 @@ Esto evita confusiones y errores de ejecución.
 
 ---
 
-## 🚀 Flujo de Trabajo Recomendado
+## [▶] Flujo de Trabajo Recomendado
 
 ### **Para pruebas rápidas:**
 ```
@@ -115,7 +115,7 @@ Action: test
 
 ---
 
-## 🔗 Enlaces
+##  Enlaces
 
 - **Repositorio:** https://github.com/leriart/Soundvi
 - **Actions:** https://github.com/leriart/Soundvi/actions
@@ -125,7 +125,7 @@ Action: test
 
 ---
 
-## 📞 Soporte
+##  Soporte
 
 **Si encuentras problemas:**
 1. **Asegúrate** de usar **MASTER_BUILD.yml**
@@ -133,6 +133,6 @@ Action: test
 3. **Revisa** los logs completos en GitHub Actions
 4. **Reporta** issues si persiste el problema
 
-**¡NO uses workflows .disabled!** 🚫
+**¡NO uses workflows .disabled!** 
 
-**¡Happy building!** 🦀
+**¡Happy building!** 

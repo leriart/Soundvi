@@ -44,7 +44,7 @@ def fix_file(filepath):
     return False
 
 def main():
-    print("🔧 Arreglando problemas de Unicode en el proyecto...")
+    print("[*] Arreglando problemas de Unicode en el proyecto...")
     
     project_root = os.path.dirname(os.path.abspath(__file__))
     fixed_files = []
@@ -67,20 +67,20 @@ def main():
         filepath = os.path.join(project_root, rel_path)
         if os.path.exists(filepath):
             if fix_file(filepath):
-                print(f"  ✅ Arreglado: {rel_path}")
+                print(f"  [✓] Arreglado: {rel_path}")
                 fixed_files.append(rel_path)
             else:
                 print(f"  ✓ OK: {rel_path}")
         else:
             print(f"  ⚠ No encontrado: {rel_path}")
     
-    print(f"\n📊 Resumen: {len(fixed_files)} archivos arreglados")
+    print(f"\n[*] Resumen: {len(fixed_files)} archivos arreglados")
     if fixed_files:
         print("Archivos modificados:")
         for f in fixed_files:
             print(f"  - {f}")
     
-    print("\n🎯 Problemas comunes arreglados:")
+    print("\n[*] Problemas comunes arreglados:")
     print("  2713 → ✓ (check mark)")
     print("  25B6 → ▶ (play/triangle right)")
     print("  2726 → ✦ (black four pointed star)")

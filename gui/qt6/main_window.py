@@ -361,10 +361,10 @@ class VentanaPrincipalQt6(QMainWindow):
         nivel_txt = nivel_nombres.get(self._adapter.nivel, self._adapter.nivel)
         if perfil:
             self._lbl_perfil.setText(
-                f"  {perfil.icono} {perfil.nombre} ({nivel_txt})  |  Soundvi v5.1  "
+                f"  {perfil.icono} {perfil.nombre} ({nivel_txt})  |  Soundvi v4.8  "
             )
         else:
-            self._lbl_perfil.setText("  Soundvi v5.1  ")
+            self._lbl_perfil.setText("  Soundvi v4.8  ")
         self._status.showMessage("Listo.", 3000)
 
     # -- Paneles / Dock widgets ------------------------------------------------

@@ -95,7 +95,7 @@ class SubtitlesModule(Module):
         layout = QVBoxLayout(content)
         layout.setContentsMargins(0, 0, 0, 0)
 
-        # Load SRT button
+        # Boton para cargar SRT
         file_row = QWidget()
         frl = QHBoxLayout(file_row)
         frl.setContentsMargins(0, 0, 0, 0)

@@ -34,16 +34,16 @@ def check_unicode_support():
         for var in ['LC_ALL', 'LANG', 'LC_CTYPE']:
             value = os.environ.get(var, '')
             if 'UTF-8' in value.upper() or 'UTF8' in value.upper():
-                print(f"   ✅ {var} contiene UTF-8: {value}")
+                print(f"   [✓] {var} contiene UTF-8: {value}")
             elif value:
                 print(f"   ⚠️  {var} NO contiene UTF-8: {value}")
     except Exception as e:
-        print(f"   ❌ Error obteniendo locale: {e}")
+        print(f"   [✗] Error obteniendo locale: {e}")
     
     # 3. Probar caracteres Unicode
     print("\n3. Prueba de caracteres Unicode:")
     test_chars = [
-        ("Emojis", "🎉 🦀 🚀 ✅ ❌ ⚠️"),
+        ("Emojis", "[★]  [▶] [✓] [✗] ⚠️"),
         ("Acentos español", "á é í ó ú ñ Á É Í Ó Ú Ñ"),
         ("Símbolos", "• → ← ↑ ↓ © ® ™"),
         ("Caracteres especiales", "α β γ δ ε π σ μ ∞ ≠ ≈"),
@@ -53,13 +53,13 @@ def check_unicode_support():
         try:
             print(f"   {name}: {chars}")
         except UnicodeEncodeError as e:
-            print(f"   ❌ {name}: ERROR de encoding - {e}")
+            print(f"   [✗] {name}: ERROR de encoding - {e}")
     
     # 4. Probar escritura a stdout
     print("\n4. Prueba de escritura stdout:")
     test_strings = [
         "Hola mundo con acentos: café, niño, acción",
-        "Emojis: 🎵 🎨 🎭 🎬",
+        "Emojis: [♫] [✎] [*] [▶]",
         "Símbolos matemáticos: ∑ ∫ √ ∞",
     ]
     
@@ -68,7 +68,7 @@ def check_unicode_support():
             sys.stdout.write(f"   {test}\n")
             sys.stdout.flush()
         except Exception as e:
-            print(f"   ❌ Error escribiendo: {test[:30]}... - {e}")
+            print(f"   [✗] Error escribiendo: {test[:30]}... - {e}")
     
     # 5. Verificar variables de entorno importantes
     print("\n5. Variables de entorno importantes:")
@@ -101,7 +101,7 @@ def check_pyinstaller_unicode():
     
     # Verificar si estamos en un ejecutable PyInstaller
     if getattr(sys, 'frozen', False):
-        print("✅ Ejecutando desde PyInstaller bundle")
+        print("[✓] Ejecutando desde PyInstaller bundle")
         print(f"   _MEIPASS: {getattr(sys, '_MEIPASS', 'No disponible')}")
     else:
         print("⚠️  No ejecutando desde PyInstaller bundle")
@@ -111,25 +111,25 @@ def check_pyinstaller_unicode():
     for module_name in modules_to_test:
         try:
             __import__(module_name)
-            print(f"✅ Módulo {module_name} importado correctamente")
+            print(f"[✓] Módulo {module_name} importado correctamente")
         except Exception as e:
-            print(f"❌ Error importando {module_name}: {e}")
+            print(f"[✗] Error importando {module_name}: {e}")
 
 if __name__ == "__main__":
-    print("🔧 Diagnóstico de problemas Unicode/Encoding\n")
+    print("[*] Diagnóstico de problemas Unicode/Encoding\n")
     check_unicode_support()
     check_pyinstaller_unicode()
     
     # Prueba final
-    print("\n🎯 Prueba final - Caracteres problemáticos comunes:")
-    problem_chars = "áéíóúñÁÉÍÓÚÑ©®™🎵🎨→←"
+    print("\n[*] Prueba final - Caracteres problemáticos comunes:")
+    problem_chars = "áéíóúñÁÉÍÓÚÑ©®™[♫][✎]→←"
     print(f"   Cadena de prueba: {problem_chars}")
     print(f"   Longitud: {len(problem_chars)} caracteres")
     print(f"   Bytes (UTF-8): {problem_chars.encode('utf-8')}")
     
     # Sugerencia para terminal
-    print("\n💡 Si ves números/letras en vez de caracteres:")
+    print("\n[•] Si ves números/letras en vez de caracteres:")
     print("   1. Verifica que tu terminal soporte UTF-8")
-    print("   2. Prueba con: echo -e '\\xf0\\x9f\\x8e\\x89' (debería mostrar 🎉)")
+    print("   2. Prueba con: echo -e '\\xf0\\x9f\\x8e\\x89' (debería mostrar [★])")
     print("   3. Configura: export LC_ALL=en_US.UTF-8")
     print("   4. O usa: export PYTHONIOENCODING=utf-8")

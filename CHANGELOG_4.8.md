@@ -1,15 +1,15 @@
 # Soundvi 4.8 - Cambios y Fixes Completos
 
-## 🎯 VERSIÓN 4.8 - ESTABLE Y CORREGIDA
+## - VERSIÓN 4.8 - ESTABLE Y CORREGIDA
 
 ### **FIXES CRÍTICOS APLICADOS:**
 
-#### 1. **IMPORTS DE QT6 CORREGIDOS** ✅
+#### 1. **IMPORTS DE QT6 CORREGIDOS** ✓
 - **Problema:** `ImportError: cannot import name 'QAction' from 'PyQt6.QtWidgets'`
 - **Solución:** QAction y QActionGroup importados desde `PyQt6.QtGui` (correcto en PyQt6)
 - **Archivos afectados:** `main_window.py`, `sidebar_widget.py`, `toolbar_widget.py`, etc.
 
-#### 2. **UNICODE/ENCODING CORREGIDO** ✅
+#### 2. **UNICODE/ENCODING CORREGIDO** ✓
 - **Problema:** `27A1` en vez de `➡`, códigos hexadecimales en vez de caracteres
 - **Solución:** Reemplazar códigos por caracteres Unicode reales:
   - `27A1` → `➡` (rightwards arrow)
@@ -21,34 +21,34 @@
   - `2139` → `ℹ` (information source)
   - `270E` → `✎` (lower right pencil)
 
-#### 3. **EMOJIS GRÁFICOS REEMPLAZADOS** ✅
+#### 3. **EMOJIS GRÁFICOS REEMPLAZADOS** ✓
 - **Problema:** Emojis a color no renderizan en algunos sistemas
 - **Solución:** Reemplazar por símbolos Unicode de texto:
-  - `🎨` (paleta) → `✎` (lápiz) - para "tema/selector"
-  - `💡` (bombilla) → `ℹ` (información) - para "tips/info"
+  - `✎` (paleta) → `✎` (lápiz) - para "tema/selector"
+  - `•` (bombilla) → `ℹ` (información) - para "tips/info"
   - `⏸` (pausa) → `‖` (doble línea vertical)
   - `⏹` (stop) → `■` (cuadrado negro)
   - `⏩` (fast forward) → `»` (doble ángulo derecho)
   - `⏪` (rewind) → `«` (doble ángulo izquierdo)
   - `⏺` (record) → `●` (círculo negro)
 
-#### 4. **RUNTIME HOOK SEGURO** ✅
+#### 4. **RUNTIME HOOK SEGURO** ✓
 - **Problema:** Segmentation faults al importar Qt antes de QApplication
 - **Solución:** `runtime_hook_simple.py` con solo configuración básica de encoding
 - **Configura:** UTF-8 en stdout/stderr, variables de entorno, locale
 - **NO importa Qt** (evita segmentation faults)
 
-#### 5. **PROPIEDAD VS MÉTODO CORREGIDO** ✅
+#### 5. **PROPIEDAD VS MÉTODO CORREGIDO** ✓
 - **Problema:** `TypeError: 'str' object is not callable`
 - **Solución:** `tema_actual` es propiedad (`@property`), usar sin paréntesis
 - **Cambio:** `tema_manager.tema_actual()` → `tema_manager.tema_actual`
 
-#### 6. **VERSIONES CONSISTENTES** ✅
+#### 6. **VERSIONES CONSISTENTES** ✓
 - **Problema:** Referencias a versiones 5.0/5.1 en vez de 4.8
 - **Solución:** Actualizar todas las referencias a "4.8" en:
   - `build.py`, `main.py`, `README.md`, etc. (12 archivos)
 
-#### 7. **WORKFLOWS ACTUALIZADOS** ✅
+#### 7. **WORKFLOWS ACTUALIZADOS** ✓
 - **Problema:** Workflows con argumentos incorrectos y emojis
 - **Solución:**
   - `MASTER_BUILD.yml` - Solo Linux/macOS (bash)
@@ -103,12 +103,12 @@ python build.py --platform macos --onefile --clean --version 4.8
 ```
 
 ### **ESTADO FINAL:**
-- **✅ Sin segmentation faults** (runtime hook seguro)
-- **✅ Sin ImportError de Qt** (imports correctos)
-- **✅ Unicode funcionando** (caracteres reales, no códigos)
-- **✅ Sin emojis gráficos** (símbolos de texto estándar)
-- **✅ Versión consistente 4.8** (todas las referencias)
-- **✅ Workflows funcionales** (Linux, Windows, macOS)
+- **✓ Sin segmentation faults** (runtime hook seguro)
+- **✓ Sin ImportError de Qt** (imports correctos)
+- **✓ Unicode funcionando** (caracteres reales, no códigos)
+- **✓ Sin emojis gráficos** (símbolos de texto estándar)
+- **✓ Versión consistente 4.8** (todas las referencias)
+- **✓ Workflows funcionales** (Linux, Windows, macOS)
 
 ### **PRÓXIMOS PASOS:**
 1. Ejecutar workflow **MASTER BUILD** en GitHub Actions
@@ -118,4 +118,4 @@ python build.py --platform macos --onefile --clean --version 4.8
 
 ---
 
-**Soundvi 4.8 - "It compiles, ship it"** 🦀
+**Soundvi 4.8 - "It compiles, ship it"** 

@@ -28,6 +28,8 @@ _RAIZ = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__
 _ZOUNDVI_DIR = os.path.join(_RAIZ, "multimedia", "zoundvi")
 sys.path.insert(0, _RAIZ) if _RAIZ not in sys.path else None
 
+import random
+
 from gui.qt6.base import ICONOS_UNICODE
 from core.profiles import ProfileManager
 
@@ -328,7 +330,6 @@ class ExportDialog(QDialog):
 
     def _on_exportar(self):
         """Inicia el proceso de exportacion."""
-        import random
         ruta_salida = self._txt_salida.text().strip()
         if not ruta_salida:
             errores_ruta = [
@@ -407,9 +408,9 @@ class ExportDialog(QDialog):
 
             # Zoundvi celebrando
             mensajes_exito = [
-                "¡Exportación exitosa! Milagro divino. 2605",
+                "¡Exportación exitosa! Milagro divino. ★",
                 "Done! Tu PC sobrevivió. GG.",
-                "Success! Ni yo me la creía. 2605",
+                "Success! Ni yo me la creía. ★",
                 "Completado! Achievement unlocked.",
                 "Terminado! FFmpeg es un dios.",
                 "Export complete! Tu paciencia valió la pena.",
@@ -424,16 +425,15 @@ class ExportDialog(QDialog):
             self.exportacion_completada.emit(ruta)
 
             # Dialogo con Zoundvi success
-            import random
             msg = QMessageBox(self)
             
             # Títulos aleatorios de éxito
             titulos_success = [
-                "¡Exportación completada! 2605",
+                "¡Exportación completada! ★",
                 "¡GG WP! Video exportado",
                 "Achievement Unlocked: Video Renderer",
                 "Success! (milagrosamente)",
-                "¡Lo lograste, campeón! 2605",
+                "¡Lo lograste, campeón! ★",
                 "Task failed successfully... wait, no"
             ]
             
@@ -461,7 +461,7 @@ class ExportDialog(QDialog):
             msg.setStandardButtons(QMessageBox.StandardButton.Ok)
             
             # Botones random de celebración
-            btn_ok_texts = ["¡Chingón!", "Let's goooo!", "Épico", "Nice", "Based", "POG", "Sheesh 2022"]
+            btn_ok_texts = ["¡Chingón!", "Let's goooo!", "Épico", "Nice", "Based", "POG", "Sheesh •"]
             msg.button(QMessageBox.StandardButton.Ok).setText(random.choice(btn_ok_texts))
             msg.exec()
             self.accept()

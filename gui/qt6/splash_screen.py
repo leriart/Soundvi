@@ -28,7 +28,7 @@ class SoundviSplashScreen(QSplashScreen):
     _FRASES = [
         "Cargando módulos de dudosa procedencia...",
         "Invocando al zombie editor (espero que esté sobrio)...",
-        "Preparando el café virtual... 2615 (no juzgues)",
+        "Preparando el café virtual... ☕ (no juzgues)",
         "Calibrando el desastre visual...",
         "Despertando neuronas zombies (si es que hay alguna)...",
         "Compilando excusas creativas para los bugs...",
@@ -141,7 +141,7 @@ class SoundviSplashScreen(QSplashScreen):
         # Credito
         creditos_zoundvi = [
             "Zoundvi dice: 'Editar video nunca fue tan... cuestionable'",
-            "Zoundvi: 'Si crashea, no fui yo' 2620",
+            "Zoundvi: 'Si crashea, no fui yo' ☠",
             "Zoundvi promete bugs al mejor estilo 2020",
             "Warning: Zombie inside, proceed with caution 26A0",
             "Powered by café, pizza fría y Stack Overflow",

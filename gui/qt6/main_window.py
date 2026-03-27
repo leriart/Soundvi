@@ -22,22 +22,16 @@ import logging
 from typing import Optional
 
 from PyQt6.QtWidgets import (
-from core.logger import get_logger
-logger = get_logger(__name__)
-logger = get_logger(__name__)
     QMainWindow, QApplication, QWidget, QVBoxLayout, QHBoxLayout,
     QLabel, QPushButton, QToolBar, QStatusBar, QDockWidget,
     QMenuBar, QMenu, QFileDialog, QMessageBox, QSplitter,
     QFrame, QSizePolicy, QTabWidget
 )
+from core.logger import get_logger
+logger = get_logger(__name__)
 from PyQt6.QtCore import Qt, QSize, QTimer, pyqtSignal
 from PyQt6.QtGui import QKeySequence, QAction, QActionGroup
-from PyQt6.QtGui import QAction, QFont, QIcon, QKeySequence, QPixmap
-
-# Ruta raiz
-_RAIZ = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-sys.path.insert(0, _RAIZ) if _RAIZ not in sys.path else None
-
+from PyQt6.QtGui import QFont, QIcon, QPixmap
 from gui.qt6.base import (
     ICONOS_UNICODE, PanelBase, FabricaWidgets,
     UserLevelAdapter, NIVEL_NOVATO, NIVEL_INTERMEDIO, NIVEL_PROFESIONAL

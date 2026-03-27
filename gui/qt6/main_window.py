@@ -21,6 +21,9 @@ import json
 import logging
 from typing import Optional
 
+import numpy as np
+import cv2
+
 from PyQt6.QtWidgets import (
     QMainWindow, QApplication, QWidget, QVBoxLayout, QHBoxLayout,
     QLabel, QPushButton, QToolBar, QStatusBar, QDockWidget,
@@ -58,6 +61,8 @@ from core.profiles import ProfileManager
 from core.timeline import Timeline
 from core.commands import CommandManager
 from core.keyframes import KeyframeAnimator
+from core.project_manager import ProjectManager
+from core.project_history import project_history
 
 log = logging.getLogger("soundvi.qt6.main")
 
@@ -82,10 +87,32 @@ class VentanaPrincipalQt6(QMainWindow):
         # Adaptador de nivel de usuario (central)
         self._adapter = UserLevelAdapter(profile_manager)
 
+        # -- ProjectManager centralizado --
+        self._project_manager = ProjectManager()
+
         # Sistemas de backend compartidos
-        self._timeline = Timeline()
-        self._cmd_manager = CommandManager()
+        self._timeline = self._project_manager.timeline
+        self._cmd_manager = self._project_manager.command_manager
         self._keyframe_animator = KeyframeAnimator()
+
+        # -- Module Manager --
+        self._module_manager = None
+        try:
+            from modules.core.manager import CategorizedModuleManager
+            self._module_manager = CategorizedModuleManager()
+            log.info("CategorizedModuleManager inicializado con %d tipos de modulos",
+                     len(self._module_manager.get_module_types()))
+        except Exception as e:
+            log.warning("No se pudo inicializar CategorizedModuleManager: %s", e)
+            try:
+                from modules.manager import ModuleManager
+                self._module_manager = ModuleManager()
+                log.info("ModuleManager (legacy) inicializado")
+            except Exception as e2:
+                log.error("No se pudo inicializar ningun gestor de modulos: %s", e2)
+
+        # Cache de instancias de módulos del timeline (item_id -> Module instance)
+        self._timeline_module_cache: dict = {}
 
         self.setWindowTitle("Soundvi — Editor de Video Modular")
         self.setMinimumSize(QSize(900, 600))
@@ -116,6 +143,31 @@ class VentanaPrincipalQt6(QMainWindow):
         # Registrar callback de undo/redo
         self._cmd_manager.on_change(self._on_historial_cambiado)
 
+        # Conectar module manager con sidebar
+        if self._module_manager is not None:
+            self._panel_sidebar.set_module_manager(self._module_manager)
+            # Cargar modulos guardados previamente
+            try:
+                loaded = self._module_manager.load_saved_modules()
+                if loaded:
+                    log.info("Cargados %d modulos guardados", len(loaded))
+            except Exception as e:
+                log.warning("Error cargando modulos guardados: %s", e)
+
+        # Configurar plugin system con contexto
+        self._registro_plugins.set_contexto({
+            "profile_manager": self._pm,
+            "timeline": self._timeline,
+            "cmd_manager": self._cmd_manager,
+            "module_manager": self._module_manager,
+            "ventana": self,
+        })
+        # Buscar plugins en directorio modules/
+        plugins_dir = os.path.join(_RAIZ, "modules")
+        if os.path.isdir(plugins_dir):
+            self._registro_plugins.agregar_directorio(plugins_dir)
+            self._registro_plugins.descubrir_plugins()
+
         # Cargar mixer con tracks del timeline
         self._panel_mixer.cargar_desde_timeline(self._timeline)
 
@@ -142,6 +194,10 @@ class VentanaPrincipalQt6(QMainWindow):
         self._agregar_accion(menu_file, "Abrir proyecto...", "Ctrl+O", self._abrir_proyecto)
         self._agregar_accion(menu_file, "Guardar proyecto", "Ctrl+S", self._guardar_proyecto)
         self._agregar_accion(menu_file, "Guardar como...", "Ctrl+Shift+S", self._guardar_como)
+        menu_file.addSeparator()
+        # Submenu de proyectos recientes
+        self._menu_recientes = menu_file.addMenu("Proyectos recientes")
+        self._actualizar_menu_recientes()
         menu_file.addSeparator()
         self._agregar_accion(menu_file, "Importar medios...", "Ctrl+I", self._importar_medios)
         self._act_export = self._agregar_accion(
@@ -373,6 +429,7 @@ class VentanaPrincipalQt6(QMainWindow):
     def _crear_paneles(self):
         # Widget central: Preview
         self._preview = PreviewWidget()
+        self._preview.set_timeline(self._timeline)
         self.setCentralWidget(self._preview)
 
         # -- Dock: Sidebar de Modulos (izquierda) --
@@ -451,6 +508,9 @@ class VentanaPrincipalQt6(QMainWindow):
 
         # Timeline -> Inspector: mostrar propiedades del clip seleccionado
         self._panel_timeline.clip_selected.connect(self._on_clip_selected)
+
+        # Timeline -> Inspector: mostrar propiedades del módulo seleccionado
+        self._panel_timeline.module_selected.connect(self._on_module_selected)
 
         # Preview -> Timeline: sincronizar playhead desde preview
         self._preview.tiempo_cambiado.connect(self._panel_timeline.set_playhead)
@@ -714,10 +774,49 @@ class VentanaPrincipalQt6(QMainWindow):
         else:
             self._panel_inspector.limpiar()
 
+    def _on_module_selected(self, module_item):
+        """Muestra propiedades del módulo seleccionado en el inspector."""
+        if module_item is not None:
+            # Obtener o crear la instancia del módulo para el inspector
+            mod_instance = None
+            if self._module_manager is not None:
+                mod_instance = self._get_or_create_timeline_module(module_item)
+            self._panel_inspector.mostrar_modulo_timeline(
+                module_item, mod_instance, self._module_manager
+            )
+        else:
+            self._panel_inspector.limpiar()
+
     def _on_transicion_aplicada(self, tipo: str, duracion: float):
-        """Aplica una transicion entre clips seleccionados."""
-        self._status.showMessage(
-            f"Transicion aplicada: {tipo} ({duracion:.1f}s)", 3000)
+        """Aplica una transición al clip seleccionado en el timeline."""
+        clips_sel = self._panel_timeline.get_selected_clips()
+        
+        trans_data = {
+            'type': tipo,
+            'duration': duracion,
+            'easing': 'ease_in_out',
+            'color': [0, 0, 0],
+            'softness': 0.1,
+        }
+        
+        # Tipos inherentemente de entrada
+        in_types = {'fade_in', 'fade_from_color', 'iris_open', 'zoom_in',
+                    'wipe_left', 'slide_left', 'push_left'}
+        
+        if clips_sel:
+            for clip in clips_sel:
+                if tipo in in_types:
+                    clip.transition_in = trans_data.copy()
+                else:
+                    clip.transition_out = trans_data.copy()
+            
+            self._panel_timeline.refrescar()
+            self._actualizar_preview()
+            self._status.showMessage(
+                f"Transición '{tipo}' ({duracion:.1f}s) aplicada a {len(clips_sel)} clip(s)", 3000)
+        else:
+            self._status.showMessage(
+                f"Selecciona un clip para aplicar la transición '{tipo}'", 3000)
 
     def _on_historial_cambiado(self):
         """Actualiza estado de botones Undo/Redo."""
@@ -738,7 +837,28 @@ class VentanaPrincipalQt6(QMainWindow):
 
     def _on_modulo_aplicado(self, type_key: str):
         """Aplica un modulo al clip seleccionado desde la sidebar."""
-        self._status.showMessage(f"Modulo aplicado: {type_key}", 3000)
+        if self._module_manager is None:
+            self._status.showMessage("Gestor de modulos no disponible", 3000)
+            return
+
+        # Crear instancia del modulo
+        try:
+            mod = self._module_manager.create_module_instance(type_key)
+            if mod is not None:
+                mod.habilitado = True
+                self._module_manager.add_module_instance(mod)
+                self._status.showMessage(
+                    f"Modulo añadido: {mod.nombre} ({type_key})", 3000)
+                # Refrescar sidebar para mostrar el estado actualizado
+                self._panel_sidebar.refrescar()
+                # Actualizar preview
+                self._actualizar_preview()
+            else:
+                self._status.showMessage(
+                    f"No se pudo crear modulo: {type_key}", 3000)
+        except Exception as e:
+            log.error("Error aplicando modulo %s: %s", type_key, e)
+            self._status.showMessage(f"Error al aplicar modulo: {e}", 3000)
 
     def _on_media_agregar_timeline(self, ruta: str):
         """Agrega un archivo de medios al timeline en la posicion del playhead."""
@@ -823,9 +943,94 @@ class VentanaPrincipalQt6(QMainWindow):
         if frame is not None and hasattr(self._preview, 'mostrar_frame'):
             self._preview.mostrar_frame(frame)
     
+    def _get_or_create_timeline_module(self, mod_item):
+        """
+        Obtiene o crea una instancia de módulo para un ModuleTimelineItem.
+        Utiliza caché para evitar recrear módulos en cada frame.
+        Aplica los parámetros del ModuleTimelineItem a la instancia.
+        """
+        item_id = mod_item.item_id
+        cached = self._timeline_module_cache.get(item_id)
+        
+        if cached is not None:
+            # Verificar que el tipo sigue siendo el mismo
+            cached_type = getattr(cached, '_cached_module_type', None)
+            if cached_type == mod_item.module_type:
+                # Sincronizar parámetros si cambiaron
+                if mod_item.params and hasattr(cached, 'set_config'):
+                    cached.set_config(mod_item.params)
+                return cached
+            else:
+                # Tipo cambió, recrear
+                del self._timeline_module_cache[item_id]
+        
+        # Crear nueva instancia
+        mod_instance = self._module_manager.create_module_instance(mod_item.module_type)
+        if mod_instance is None:
+            return None
+        
+        # Habilitar el módulo para que se renderice
+        mod_instance.habilitado = True
+        mod_instance._habilitado = True
+        
+        # Aplicar parámetros del ModuleTimelineItem
+        if mod_item.params:
+            if hasattr(mod_instance, 'set_config'):
+                mod_instance.set_config(mod_item.params)
+            elif hasattr(mod_instance, '_config'):
+                mod_instance._config.update(mod_item.params)
+        
+        # Para módulos de audio (waveform), preparar audio si hay clips disponibles
+        if hasattr(mod_instance, 'prepare_audio') and self._timeline:
+            self._prepare_module_audio(mod_instance, mod_item)
+        
+        # Guardar referencia del tipo para validación de caché
+        mod_instance._cached_module_type = mod_item.module_type
+        self._timeline_module_cache[item_id] = mod_instance
+        return mod_instance
+
+    def _prepare_module_audio(self, mod_instance, mod_item):
+        """Prepara el audio de un módulo que lo requiera (ej: waveform)."""
+        try:
+            # Buscar clips de audio activos en el rango del módulo
+            audio_clips = self._timeline.get_audio_clips_at_time(mod_item.start_time)
+            if not audio_clips:
+                # Buscar cualquier clip de audio en el timeline
+                for track in self._timeline.tracks:
+                    for clip in track.clips:
+                        if clip.source_type in ('audio', 'video') and clip.source_path:
+                            audio_clips = [{
+                                'path': clip.source_path,
+                                'clip_start': clip.start_time,
+                                'clip_duration': clip.duration,
+                            }]
+                            break
+                    if audio_clips:
+                        break
+            
+            if audio_clips:
+                audio_path = audio_clips[0]['path']
+                fps = getattr(self._preview, '_fps', 30)
+                duration = mod_item.duration
+                try:
+                    mod_instance.prepare_audio(
+                        audio_path=audio_path,
+                        mel_data=None,
+                        sr=None,
+                        hop=None,
+                        duration=duration,
+                        fps=fps
+                    )
+                except Exception as e:
+                    log.debug("Error preparando audio para módulo '%s': %s",
+                             mod_item.module_type, e)
+        except Exception as e:
+            log.debug("Error buscando audio para módulo: %s", e)
+
     def _render_frame_composito(self, tiempo: float) -> Optional[np.ndarray]:
         """
         Renderiza un frame compuesto del timeline para un tiempo dado.
+        Incluye transiciones de clip y módulos posicionados en el timeline.
         
         Args:
             tiempo: Tiempo en segundos desde el inicio del timeline
@@ -834,170 +1039,215 @@ class VentanaPrincipalQt6(QMainWindow):
             Frame numpy BGR o None si no hay contenido
         """
         try:
-            import numpy as np
-            import cv2
-            
             # Tamaño de preview por defecto
             preview_width = 1280
             preview_height = 720
             
-            # Crear frame negro por defecto
-            frame_composito = np.zeros((preview_height, preview_width, 3), dtype=np.uint8)
+            # Usar el método del timeline que ya aplica transiciones
+            frame_composito = self._timeline.get_composite_frame(
+                tiempo, preview_width, preview_height
+            )
             
-            # Verificar si hay algun clip en el timeline
-            has_content = False
-            frame_content = None
+            # Verificar si hay contenido real (no todo negro)
+            has_content = np.any(frame_composito > 0)
             
-            # Renderizar tracks de video en orden (de fondo a frente)
-            for track in self._timeline.tracks:
-                if not track.visible or track.muted:
-                    continue
-                    
-                if track.track_type == 'video':
-                    # Buscar clips activos en este tiempo
-                    for clip in track.clips:
-                        if clip.start_time <= tiempo <= (clip.start_time + clip.duration):
-                            # Obtener frame del clip
-                            tiempo_en_clip = tiempo - clip.start_time
-                            clip_frame = clip.get_frame_at_time(tiempo_en_clip, preview_width, preview_height)
-                            
-                            if clip_frame is not None:
-                                has_content = True
-                                # Asegurar tamaño correcto
-                                if clip_frame.shape[:2] != (preview_height, preview_width):
-                                    clip_frame = cv2.resize(clip_frame, (preview_width, preview_height))
-                                
-                                # Mezclar con frame composito (por ahora simple overlay)
-                                # En una implementacion completa se usarian modos de mezcla
-                                frame_content = clip_frame
-                                break
-                    if has_content:
-                        break
-            
-            # Si hay al menos un clip de audio, mostrar indicador
-            has_audio = False
-            for track in self._timeline.tracks:
-                if track.track_type == 'audio':
-                    for clip in track.clips:
-                        if clip.start_time <= tiempo <= (clip.start_time + clip.duration):
-                            has_audio = True
-                            break
-                    if has_audio:
-                        break
-            
-            if has_content and frame_content is not None:
-                frame_composito = frame_content
-                if has_audio:
-                    # Dibujar indicador de audio en esquina
-                    cv2.putText(frame_composito, "♪", (10, 30), 
-                               cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
-            else:
-                # Mostrar mensaje de timeline vacio con texto centrado
-                # Título principal
-                title = "Soundvi Preview"
-                title_font_scale = 2
-                title_thickness = 3
-                title_color = (100, 100, 255)
+            if has_content:
+                # Aplicar módulos globales activos (del ModuleManager)
+                if self._module_manager is not None:
+                    try:
+                        frame_composito = self._module_manager.render_all(
+                            frame_composito, tiempo, fps=self._preview._fps
+                        )
+                    except Exception as e:
+                        log.warning("Error aplicando modulos globales: %s", e)
                 
-                # Calcular tamaño del texto para centrarlo
-                (title_width, title_height), baseline = cv2.getTextSize(
-                    title, cv2.FONT_HERSHEY_SIMPLEX, title_font_scale, title_thickness
-                )
-                title_x = (preview_width - title_width) // 2
-                title_y = preview_height // 2 - 50
-                cv2.putText(frame_composito, title, (title_x, title_y), 
-                           cv2.FONT_HERSHEY_SIMPLEX, title_font_scale, title_color, title_thickness)
-                
-                # Instrucción
-                instruction = "Arrastra archivos de video o audio al timeline"
-                instr_font_scale = 0.8
-                instr_thickness = 2
-                instr_color = (200, 200, 200)
-                
-                (instr_width, instr_height), _ = cv2.getTextSize(
-                    instruction, cv2.FONT_HERSHEY_SIMPLEX, instr_font_scale, instr_thickness
-                )
-                instr_x = (preview_width - instr_width) // 2
-                instr_y = preview_height // 2 + 20
-                cv2.putText(frame_composito, instruction, (instr_x, instr_y), 
-                           cv2.FONT_HERSHEY_SIMPLEX, instr_font_scale, instr_color, instr_thickness)
-                
-                # Tiempo actual
-                time_text = f"Tiempo: {tiempo:.1f}s"
-                time_font_scale = 1
-                time_thickness = 2
-                time_color = (150, 150, 150)
-                
-                (time_width, time_height), _ = cv2.getTextSize(
-                    time_text, cv2.FONT_HERSHEY_SIMPLEX, time_font_scale, time_thickness
-                )
-                time_x = (preview_width - time_width) // 2
-                time_y = preview_height // 2 + 80
-                cv2.putText(frame_composito, time_text, (time_x, time_y), 
-                           cv2.FONT_HERSHEY_SIMPLEX, time_font_scale, time_color, time_thickness)
+                # Aplicar módulos posicionados en el timeline
+                active_tl_modules = self._timeline.get_active_modules_at_time(tiempo)
+                if active_tl_modules and self._module_manager is not None:
+                    for mod_item in active_tl_modules:
+                        try:
+                            mod_instance = self._get_or_create_timeline_module(mod_item)
+                            if mod_instance and hasattr(mod_instance, 'render'):
+                                # Tiempo relativo dentro del módulo
+                                mod_time = tiempo - mod_item.start_time
+                                frame_composito = mod_instance.render(
+                                    frame_composito, mod_time, fps=self._preview._fps
+                                )
+                        except Exception as e:
+                            log.debug("Error aplicando módulo timeline '%s': %s",
+                                     mod_item.module_type, e)
             
             return frame_composito
             
         except Exception as e:
             logger.error(f"Error renderizando frame: {e}")
-            # Crear frame de error
-            error_frame = np.zeros((720, 1280, 3), dtype=np.uint8)
-            cv2.putText(error_frame, f"Preview: {e}", (50, 360), 
-                       cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 255), 2)
-            return error_frame
+            try:
+                return np.zeros((720, 1280, 3), dtype=np.uint8)
+            except Exception:
+                return None
 
     # -- Callbacks de menu / toolbar -------------------------------------------
     def _nuevo_proyecto(self):
-        self._timeline = Timeline()
-        self._cmd_manager.clear()
+        """Crea un nuevo proyecto vacío usando ProjectManager."""
+        self._project_manager.new_project()
+        self._timeline = self._project_manager.timeline
+        self._cmd_manager = self._project_manager.command_manager
         self._panel_timeline.set_timeline(self._timeline)
         self._panel_inspector.limpiar()
         self._panel_media.limpiar()
         self._panel_mixer.cargar_desde_timeline(self._timeline)
+        if hasattr(self._preview, 'set_timeline'):
+            self._preview.set_timeline(self._timeline)
+        self._toolbar.habilitar_accion("undo", False)
+        self._toolbar.habilitar_accion("redo", False)
+        self._actualizar_titulo_ventana()
         self._status.showMessage("Nuevo proyecto creado.", 3000)
 
     def _abrir_proyecto(self):
+        """Abre un proyecto .svproj usando ProjectManager."""
         ruta, _ = QFileDialog.getOpenFileName(
             self, "Abrir proyecto Soundvi", "",
             "Proyectos Soundvi (*.svproj *.json);;Todos (*)"
         )
-        if ruta:
-            try:
-                with open(ruta, "r", encoding="utf-8") as f:
-                    datos = json.load(f)
-                if "tracks" in datos:
-                    self._timeline = Timeline.from_dict(datos)
-                    self._panel_timeline.set_timeline(self._timeline)
-                    self._panel_mixer.cargar_desde_timeline(self._timeline)
-                    self._status.showMessage(f"Proyecto abierto: {os.path.basename(ruta)}", 3000)
-                else:
-                    self._status.showMessage(f"Proyecto abierto: {os.path.basename(ruta)}", 3000)
-            except Exception as e:
-                import random
-                titulos_error = ["Oops", "Houston, tenemos un problema", "Error inesperado", "Algo salio mal", "Error de lectura"]
-                QMessageBox.warning(self, random.choice(titulos_error), 
-                    f"No se pudo abrir el proyecto:\n{e}\n\nPista: revisa que el archivo no esté corrupto.")
-            
+        if not ruta:
+            return
+
+        ok = self._project_manager.load_project(ruta)
+        if ok:
+            self._timeline = self._project_manager.timeline
+            self._cmd_manager = self._project_manager.command_manager
+            self._panel_timeline.set_timeline(self._timeline)
+            self._panel_mixer.cargar_desde_timeline(self._timeline)
+            if hasattr(self._preview, 'set_timeline'):
+                self._preview.set_timeline(self._timeline)
+            self._actualizar_duracion_preview()
+            self._actualizar_titulo_ventana()
+            # Registrar en historial y actualizar menu
+            project_history.add_project(ruta, self._project_manager.project_name)
+            self._actualizar_menu_recientes()
+            self._status.showMessage(
+                f"Proyecto abierto: {self._project_manager.project_name}", 3000)
+        else:
+            QMessageBox.warning(
+                self, "Error al abrir",
+                f"No se pudo abrir el proyecto:\n{ruta}\n\n"
+                "Revisa que el archivo no esté corrupto.")
 
     def _guardar_proyecto(self):
-        self._status.showMessage("Proyecto guardado.", 3000)
+        """Guarda el proyecto actual. Si no tiene ruta, invoca Guardar Como."""
+        if not self._project_manager.project_path:
+            self._guardar_como()
+            return
+
+        ok = self._project_manager.save_project()
+        if ok:
+            # Registrar en historial y actualizar menu
+            project_history.add_project(
+                self._project_manager.project_path,
+                self._project_manager.project_name)
+            self._actualizar_menu_recientes()
+            # Guardar modulos activos
+            if self._module_manager is not None:
+                try:
+                    self._module_manager.save_all_modules()
+                except Exception as e:
+                    log.warning("Error guardando modulos: %s", e)
+            self._actualizar_titulo_ventana()
+            self._status.showMessage(
+                f"Proyecto guardado: {os.path.basename(self._project_manager.project_path)}",
+                3000)
+        else:
+            QMessageBox.warning(
+                self, "Error al guardar",
+                "No se pudo guardar el proyecto.\nVerifica permisos de escritura.")
 
     def _guardar_como(self):
+        """Guarda el proyecto con un nuevo nombre/ruta."""
         ruta, _ = QFileDialog.getSaveFileName(
             self, "Guardar proyecto como", "",
             "Proyectos Soundvi (*.svproj);;JSON (*.json)"
         )
-        if ruta:
-            try:
-                datos = self._timeline.to_dict()
-                with open(ruta, "w", encoding="utf-8") as f:
-                    json.dump(datos, f, indent=2, ensure_ascii=False)
-                self._status.showMessage(f"Guardado como: {os.path.basename(ruta)}", 3000)
-            except Exception as e:
-                import random
-                titulos_error_save = ["Save failed", "Error de escritura", "Error al guardar", "No se pudo guardar", "Fallo de guardado"]
-                QMessageBox.warning(self, random.choice(titulos_error_save), 
-                    f"No se pudo guardar:\n{e}\n\nSugerencia: verifica permisos de escritura o espacio en disco.")
+        if not ruta:
+            return
+        # Asegurar extension
+        if not ruta.endswith(('.svproj', '.json')):
+            ruta += '.svproj'
+        # Actualizar nombre del proyecto basado en el nombre del archivo
+        self._project_manager.project_name = os.path.splitext(os.path.basename(ruta))[0]
+        ok = self._project_manager.save_project(ruta)
+        if ok:
+            project_history.add_project(ruta, self._project_manager.project_name)
+            self._actualizar_menu_recientes()
+            if self._module_manager is not None:
+                try:
+                    self._module_manager.save_all_modules()
+                except Exception as e:
+                    log.warning("Error guardando modulos: %s", e)
+            self._actualizar_titulo_ventana()
+            self._status.showMessage(
+                f"Guardado como: {os.path.basename(ruta)}", 3000)
+        else:
+            QMessageBox.warning(
+                self, "Error al guardar",
+                f"No se pudo guardar en:\n{ruta}\nVerifica permisos de escritura.")
+
+    def _actualizar_titulo_ventana(self):
+        """Actualiza el título de la ventana con el nombre del proyecto."""
+        nombre = self._project_manager.project_name or "Sin titulo"
+        modificado = " *" if self._project_manager.is_modified else ""
+        self.setWindowTitle(f"Soundvi — {nombre}{modificado}")
+
+    def _actualizar_menu_recientes(self):
+        """Actualiza el submenú de proyectos recientes."""
+        self._menu_recientes.clear()
+        recientes = project_history.get_recent_projects(limit=10)
+        if not recientes:
+            act = QAction("(sin proyectos recientes)", self)
+            act.setEnabled(False)
+            self._menu_recientes.addAction(act)
+            return
+        for proyecto in recientes:
+            ruta = proyecto.get("path", "")
+            nombre = proyecto.get("name", os.path.basename(ruta))
+            act = QAction(f"{nombre}  —  {ruta}", self)
+            act.triggered.connect(lambda checked, r=ruta: self._abrir_proyecto_reciente(r))
+            self._menu_recientes.addAction(act)
+        self._menu_recientes.addSeparator()
+        act_limpiar = QAction("Limpiar historial", self)
+        act_limpiar.triggered.connect(self._limpiar_historial_recientes)
+        self._menu_recientes.addAction(act_limpiar)
+
+    def _abrir_proyecto_reciente(self, ruta: str):
+        """Abre un proyecto desde el menú de recientes."""
+        if not os.path.exists(ruta):
+            QMessageBox.warning(self, "Archivo no encontrado",
+                                f"El archivo ya no existe:\n{ruta}")
+            project_history.remove_project(ruta)
+            self._actualizar_menu_recientes()
+            return
+        ok = self._project_manager.load_project(ruta)
+        if ok:
+            self._timeline = self._project_manager.timeline
+            self._cmd_manager = self._project_manager.command_manager
+            self._panel_timeline.set_timeline(self._timeline)
+            self._panel_mixer.cargar_desde_timeline(self._timeline)
+            if hasattr(self._preview, 'set_timeline'):
+                self._preview.set_timeline(self._timeline)
+            self._actualizar_duracion_preview()
+            self._actualizar_titulo_ventana()
+            project_history.add_project(ruta, self._project_manager.project_name)
+            self._actualizar_menu_recientes()
+            self._status.showMessage(
+                f"Proyecto abierto: {self._project_manager.project_name}", 3000)
+        else:
+            QMessageBox.warning(self, "Error al abrir",
+                                f"No se pudo abrir: {ruta}")
+
+    def _limpiar_historial_recientes(self):
+        """Limpia el historial de proyectos recientes."""
+        project_history.clear_history()
+        self._actualizar_menu_recientes()
+        self._status.showMessage("Historial de proyectos recientes limpiado.", 3000)
 
     def _importar_medios(self):
         """Abre el dialogo de importacion de medios."""
@@ -1138,16 +1388,39 @@ class VentanaPrincipalQt6(QMainWindow):
         self._panel_timeline.refrescar()
 
     def _gestor_modulos(self):
-        QMessageBox.information(self, "\u29C9 Gestor de Modulos",
-                                "Los modulos ya estan integrados en el sidebar.\n\n"
-                                "Tip: Mira el panel 'Modulos' a la izquierda.\n"
-                                "Puedes activar/desactivar modulos desde ahi.")
+        """Muestra información sobre los módulos cargados."""
+        if self._module_manager is not None:
+            tipos = self._module_manager.get_module_types()
+            activos = self._module_manager.get_active_modules()
+            info = (f"Tipos de módulos disponibles: {len(tipos)}\n"
+                    f"Módulos activos: {len(activos)}\n\n"
+                    f"Los módulos están integrados en el panel 'Módulos' (sidebar izquierdo).\n"
+                    f"Haz doble click en un módulo para activarlo.")
+            if activos:
+                info += "\n\nMódulos activos:\n"
+                for m in activos:
+                    info += f"  • {m.nombre} (capa {m.capa})\n"
+        else:
+            info = "El gestor de módulos no está disponible."
+        QMessageBox.information(self, "⧉ Gestor de Módulos", info)
 
     def _instalar_plugin(self):
-        QMessageBox.information(self, "\u2699 Instalador de Plugins",
-                                "Sistema de plugins: Proximamente\n\n"
-                                "Pronto podras cargar archivos .py externos.\n"
-                                "Mientras tanto, usa los modulos incluidos.")
+        """Permite instalar un plugin externo desde archivo .py."""
+        ruta, _ = QFileDialog.getOpenFileName(
+            self, "Seleccionar plugin", "",
+            "Archivos Python (*.py);;Todos (*)"
+        )
+        if ruta and os.path.isfile(ruta):
+            try:
+                self._registro_plugins._cargar_plugin_desde_archivo(ruta)
+                QMessageBox.information(
+                    self, "Plugin instalado",
+                    f"Plugin cargado desde:\n{os.path.basename(ruta)}\n\n"
+                    "Revisa el panel de Módulos para activarlo.")
+            except Exception as e:
+                QMessageBox.warning(
+                    self, "Error",
+                    f"No se pudo cargar el plugin:\n{e}")
 
     def _cambiar_perfil(self):
         from gui.qt6.profile_selector import mostrar_selector_perfil
@@ -1242,27 +1515,14 @@ class VentanaPrincipalQt6(QMainWindow):
         if msg.exec() == QMessageBox.StandardButton.Yes:
             self._panel_mixer.detener_monitoreo()
             self._pm.guardar_seleccion()
+            # Guardar módulos activos al cerrar
+            if self._module_manager is not None:
+                try:
+                    self._module_manager.save_all_modules()
+                except Exception:
+                    pass
             event.accept()
         else:
             event.ignore()
 
-    def _nuevo_proyecto(self):
-        """Crea un nuevo proyecto vacio."""
-        # Limpiar timeline
-        from core.timeline import Timeline
-        self._timeline = Timeline()
-        
-        # Actualizar paneles
-        self._panel_timeline.set_timeline(self._timeline)
-        self._panel_mixer.cargar_desde_timeline(self._timeline)
-        if hasattr(self._preview, 'set_timeline'):
-            self._preview.set_timeline(self._timeline)
-        
-        # Limpiar historial de comandos
-        self._cmd_manager.clear()
-        
-        # Actualizar toolbar
-        self._toolbar.habilitar_accion("undo", False)
-        self._toolbar.habilitar_accion("redo", False)
-        
-        self._status.showMessage("Nuevo proyecto creado", 3000)
+    # (nuevo proyecto movido arriba a la seccion de callbacks)

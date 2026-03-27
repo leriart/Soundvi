@@ -59,7 +59,7 @@ class ProjectHistory:
             project_path: Ruta completa al archivo .svproj
             project_name: Nombre del proyecto (si None, se extrae del path)
         """
-        if not project_path or not os.path.exists(project_path):
+        if not project_path:
             return
         
         # Extraer nombre si no se proporciona

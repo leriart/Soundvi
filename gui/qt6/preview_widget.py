@@ -17,6 +17,7 @@ import logging
 from typing import Optional
 
 import numpy as np
+import cv2
 
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
@@ -88,11 +89,9 @@ class DisplayFrame(QLabel):
 
         if canales == 3:
             # BGR -> RGB
-            import cv2
             rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
             qimg = QImage(rgb.data, w, h, w * 3, QImage.Format.Format_RGB888)
         elif canales == 4:
-            import cv2
             rgba = cv2.cvtColor(frame, cv2.COLOR_BGRA2RGBA)
             qimg = QImage(rgba.data, w, h, w * 4, QImage.Format.Format_RGBA8888)
         else:
@@ -156,9 +155,17 @@ class PreviewWidget(QWidget):
         self._fps = 30
         self._timer = QTimer()
         self._timer.timeout.connect(self._tick)
+        self._timeline = None
+        self._audio_player = None
+
+        # Inicializar reproductor de audio
+        try:
+            from core.audio_player import AudioPlayer
+            self._audio_player = AudioPlayer()
+        except Exception as e:
+            log.warning("No se pudo inicializar AudioPlayer: %s", e)
 
         self._construir_ui()
-
 
     def set_timeline(self, timeline):
         """Establece el timeline para sincronizar audio."""
@@ -355,10 +362,12 @@ class PreviewWidget(QWidget):
         self._btn_play.setText(ICONOS_UNICODE["play"])
         self._btn_play.setToolTip("Reproducir")
         self._timer.stop()
+        self._pause_audio()
         self.play_toggled.emit(False)
 
     def _detener(self):
         self._pausar()
+        self._stop_audio()
         self._tiempo_actual = 0.0
         self._actualizar_ui_tiempo()
         self.stop_signal.emit()
@@ -457,42 +466,34 @@ class PreviewWidget(QWidget):
         """Retorna True si esta reproduciendo."""
         return self._reproduciendo
     def _sync_audio_playback(self):
-        """Sincroniza la reproduccion de audio con la posicion del playhead."""
-        if not hasattr(self, '_timeline') or self._timeline is None:
+        """Sincroniza la reproducción de audio con la posición del playhead."""
+        if self._timeline is None or self._audio_player is None:
             return
 
         if self._reproduciendo:
             playhead_time = self._tiempo_actual
             
-            # Detener audio anterior
-            if hasattr(self, '_audio_player'):
-                self._audio_player.stop()
+            # Obtener todos los clips de audio activos en este tiempo
+            audio_clips = self._timeline.get_audio_clips_at_time(playhead_time)
             
-            # Buscar un clip de audio en la posicion actual
-            audio_clip_to_play = None
-            for track in self._timeline.tracks:
-                for clip in track.clips:
-                    if hasattr(clip, 'clip_type') and clip.clip_type == 'audio' and clip.start_time <= playhead_time < clip.end_time:
-                        audio_clip_to_play = clip
-                        break
-                if audio_clip_to_play:
-                    break
-            
-            if audio_clip_to_play and hasattr(self, '_audio_player'):
-                # Calcular el punto de inicio dentro del archivo de audio
-                start_offset = playhead_time - audio_clip_to_play.start_time
-                
-                # Asegurarse que el archivo existe
-                import os
-                if os.path.exists(audio_clip_to_play.path):
-                    self._audio_player.play_audio(audio_clip_to_play.path, start_time=start_offset)
-
-        else:  # Si no se esta reproduciendo (pausa o stop)
-            if hasattr(self, '_audio_player'):
+            if audio_clips:
+                self._audio_player.play_clips_at_time(audio_clips, playhead_time)
+            else:
                 self._audio_player.stop()
+        else:
+            self._audio_player.stop()
 
-    def _actualizar_audio_position(self):
-        """Actualiza posicion de reproduccion de audio."""
-        if hasattr(self, '_audio_player') and self._audio_player._playing:
-            self._tiempo_actual = self._audio_player._current_position
-            self._actualizar_ui_tiempo()
+    def _stop_audio(self):
+        """Detiene toda la reproducción de audio."""
+        if self._audio_player is not None:
+            self._audio_player.stop(fade_out_ms=50)
+
+    def _pause_audio(self):
+        """Pausa la reproducción de audio."""
+        if self._audio_player is not None:
+            self._audio_player.pause()
+
+    def _resume_audio(self):
+        """Reanuda la reproducción de audio."""
+        if self._audio_player is not None:
+            self._audio_player.resume()

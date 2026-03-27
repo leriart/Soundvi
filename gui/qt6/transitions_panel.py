@@ -40,7 +40,14 @@ log = logging.getLogger("soundvi.qt6.transitions")
 
 # Categorias de transiciones para filtrado
 CATEGORIAS: Dict[str, List[str]] = {
-    "Todas": TransitionType.ALL_TYPES,
+    "Todas": TransitionType.ALL_TYPES + [
+        TransitionType.FADE_IN, TransitionType.FADE_OUT,
+        TransitionType.FADE_TO_COLOR, TransitionType.FADE_FROM_COLOR,
+    ],
+    "Fade In/Out": [
+        TransitionType.FADE_IN, TransitionType.FADE_OUT,
+        TransitionType.FADE_TO_COLOR, TransitionType.FADE_FROM_COLOR,
+    ],
     "Fundido": [TransitionType.FADE, TransitionType.CROSSFADE, TransitionType.DISSOLVE],
     "Barrido": [TransitionType.WIPE_LEFT, TransitionType.WIPE_RIGHT,
                 TransitionType.WIPE_UP, TransitionType.WIPE_DOWN,
@@ -74,6 +81,10 @@ ICONOS_TRANSICION: Dict[str, str] = {
     TransitionType.IRIS_OPEN:      "\u25CE",
     TransitionType.IRIS_CLOSE:     "\u25C9",
     TransitionType.BLUR_TRANSITION: "\u224B",
+    TransitionType.FADE_IN:        "▶",
+    TransitionType.FADE_OUT:       "◀",
+    TransitionType.FADE_TO_COLOR:  "◆",
+    TransitionType.FADE_FROM_COLOR: "◇",
 }
 
 # Colores de preview por tipo de transicion

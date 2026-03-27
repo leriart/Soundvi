@@ -20,7 +20,7 @@ import cv2
 from core.logger import get_logger
 logger = get_logger(__name__)
 
-logger = get_logger(__name__)
+
 class VideoClip:
     """
     Representa un clip de video/imagen/GIF en el timeline.
@@ -89,6 +89,10 @@ class VideoClip:
         
         # Efectos aplicados al clip
         self.effects: List[Dict[str, Any]] = []
+        
+        # Transiciones de entrada/salida del clip
+        self.transition_in: Optional[Dict[str, Any]] = None   # {type, duration, easing, color, softness}
+        self.transition_out: Optional[Dict[str, Any]] = None  # {type, duration, easing, color, softness}
         
         # Metadatos
         self.metadata: Dict[str, Any] = {}
@@ -323,8 +327,6 @@ class VideoClip:
             
         # Aplicar efectos del clip
         if frame is not None and hasattr(self, 'effects') and self.effects:
-            import cv2
-            import numpy as np
             for effect in self.effects:
                 try:
                     effect_type = effect.get('type', 'unknown')
@@ -521,6 +523,8 @@ class VideoClip:
             "enabled": self.enabled,
             "color": list(self.color),
             "effects": self.effects,
+            "transition_in": self.transition_in,
+            "transition_out": self.transition_out,
             "metadata": self.metadata,
         }
 
@@ -544,6 +548,8 @@ class VideoClip:
         clip.enabled = data.get("enabled", True)
         clip.color = tuple(data.get("color", [0, 0, 0]))
         clip.effects = data.get("effects", [])
+        clip.transition_in = data.get("transition_in", None)
+        clip.transition_out = data.get("transition_out", None)
         clip.metadata = data.get("metadata", {})
         return clip
 

@@ -42,8 +42,9 @@ from PyQt6.QtGui import (
 _RAIZ = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 sys.path.insert(0, _RAIZ) if _RAIZ not in sys.path else None
 
-from core.timeline import Timeline, Track
+from core.timeline import Timeline, Track, ModuleTimelineItem
 from core.video_clip import VideoClip
+from core.transitions import TransitionType
 from core.commands import (
     CommandManager, MoveClipCommand, RemoveClipCommand,
     SplitClipCommand, AddClipCommand, ChangePropertyCommand
@@ -435,6 +436,267 @@ class ClipItem(QGraphicsRectItem):
             
         return HEADER_WIDTH + best_end_time * self._pps
 
+# ---------------------------------------------------------------------------
+#  TransitionIndicatorItem -- Indicador visual de transición en un clip
+# ---------------------------------------------------------------------------
+class TransitionIndicatorItem(QGraphicsRectItem):
+    """
+    Indicador visual de una transición aplicada a un clip.
+    Muestra un triángulo/gradiente en el inicio o fin del clip.
+    """
+
+    # Colores por tipo de transición
+    TRANSITION_COLORS = {
+        'fade_in': "#3498DB",
+        'fade_out': "#E74C3C",
+        'crossfade': "#2ECC71",
+        'dissolve': "#9B59B6",
+        'fade': "#F39C12",
+    }
+
+    def __init__(self, clip_item: 'ClipItem', position: str, transition_data: dict,
+                 pps: float, track_height: float):
+        """
+        Args:
+            clip_item: ClipItem padre
+            position: 'in' para inicio, 'out' para final
+            transition_data: Dict con {type, duration, ...}
+            pps: Pixels por segundo
+            track_height: Altura del track
+        """
+        super().__init__()
+        self._clip_item = clip_item
+        self._position = position
+        self._data = transition_data
+        self._pps = pps
+        self._track_height = track_height
+
+        trans_type = transition_data.get('type', 'fade_in')
+        trans_dur = transition_data.get('duration', 1.0)
+
+        # Calcular dimensiones
+        w = max(4, trans_dur * pps)
+        h = track_height - 8
+
+        color_hex = self.TRANSITION_COLORS.get(trans_type, "#F39C12")
+        color = QColor(color_hex)
+        color.setAlpha(120)
+
+        self.setRect(0, 0, w, h)
+        self.setBrush(QBrush(color))
+        self.setPen(QPen(QColor(color_hex), 1.5))
+        self.setZValue(50)
+        self.setToolTip(
+            f"{'Entrada' if position == 'in' else 'Salida'}: "
+            f"{TransitionType.DISPLAY_NAMES.get(trans_type, trans_type)} "
+            f"({trans_dur:.1f}s)"
+        )
+
+    def paint(self, painter: QPainter, option, widget=None):
+        """Renderiza el indicador con un gradiente triangular."""
+        rect = self.rect()
+        w, h = rect.width(), rect.height()
+
+        trans_type = self._data.get('type', 'fade_in')
+        color_hex = self.TRANSITION_COLORS.get(trans_type, "#F39C12")
+        color = QColor(color_hex)
+
+        # Dibujar gradiente diagonal para indicar la dirección del fade
+        path = QPainterPath()
+        if self._position == 'in':
+            # Triángulo que crece de izq a derecha (fade in)
+            path.moveTo(0, h)
+            path.lineTo(w, 0)
+            path.lineTo(w, h)
+            path.closeSubpath()
+        else:
+            # Triángulo que decrece de izq a derecha (fade out)
+            path.moveTo(0, 0)
+            path.lineTo(0, h)
+            path.lineTo(w, h)
+            path.closeSubpath()
+
+        color.setAlpha(100)
+        painter.setBrush(QBrush(color))
+        painter.setPen(QPen(QColor(color_hex), 1))
+        painter.drawPath(path)
+
+        # Icono tipo texto
+        if w > 20:
+            painter.setPen(QPen(QColor("#FFFFFF")))
+            painter.setFont(QFont("Consolas", 7))
+            label = "▶" if self._position == 'in' else "◀"
+            painter.drawText(rect.adjusted(2, 2, -2, -2),
+                             Qt.AlignmentFlag.AlignCenter, label)
+
+
+# ---------------------------------------------------------------------------
+#  ModuleTimelineGraphicsItem -- Módulo posicionado en el timeline
+# ---------------------------------------------------------------------------
+class ModuleTimelineGraphicsItem(QGraphicsRectItem):
+    """
+    Representación gráfica de un ModuleTimelineItem en el timeline.
+    Muestra módulos/efectos con duración y posición en el tiempo.
+    """
+
+    # Colores por categoría de módulo
+    MODULE_COLORS = {
+        'video': "#9B59B6",
+        'audio': "#1ABC9C",
+        'text': "#E67E22",
+        'utility': "#3498DB",
+        'export': "#95A5A6",
+        'effect': "#E74C3C",
+    }
+
+    def __init__(self, module_item: ModuleTimelineItem, pps: float,
+                 track_y: float, track_height: float):
+        super().__init__()
+        self.module_item = module_item
+        self._pps = pps
+        self._track_y = track_y
+        self._track_height = track_height
+        self._drag_start_pos = None
+        self._drag_start_time = 0.0
+        self._resizing = False
+        self._resize_edge = ""
+
+        self.setFlag(QGraphicsItem.GraphicsItemFlag.ItemIsSelectable, True)
+        self.setFlag(QGraphicsItem.GraphicsItemFlag.ItemIsMovable, False)
+        self.setAcceptHoverEvents(True)
+        self.setCursor(Qt.CursorShape.PointingHandCursor)
+
+        # Determinar color basado en tipo de módulo
+        mod_type = module_item.module_type.split("/")[0] if "/" in module_item.module_type else "effect"
+        self._color_base = QColor(module_item.color or self.MODULE_COLORS.get(mod_type, "#9B59B6"))
+
+        self._actualizar_geometria()
+
+    def _actualizar_geometria(self):
+        x = HEADER_WIDTH + self.module_item.start_time * self._pps
+        w = max(8, self.module_item.duration * self._pps)
+        h = self._track_height - 8
+        self.setRect(0, 0, w, h)
+        self.setPos(x, self._track_y + 4)
+        self._pintar()
+
+    def _pintar(self):
+        if self.isSelected():
+            color = self._color_base.lighter(140)
+            pen = QPen(QColor("#00BC8C"), 2)
+        else:
+            color = self._color_base
+            pen = QPen(QColor(self._color_base.darker(130)), 1)
+
+        if not self.module_item.enabled:
+            color.setAlpha(80)
+        else:
+            color.setAlpha(180)
+
+        self.setBrush(QBrush(color))
+        self.setPen(pen)
+
+    def paint(self, painter: QPainter, option, widget=None):
+        super().paint(painter, option, widget)
+        rect = self.rect()
+
+        # Patrón de rayas diagonales para diferenciar de clips
+        painter.save()
+        painter.setClipRect(rect)
+        pen_stripe = QPen(QColor(255, 255, 255, 30), 1)
+        painter.setPen(pen_stripe)
+        step = 8
+        for i in range(0, int(rect.width() + rect.height()), step):
+            painter.drawLine(
+                int(rect.x() + i), int(rect.y()),
+                int(rect.x() + i - rect.height()), int(rect.y() + rect.height())
+            )
+        painter.restore()
+
+        # Nombre del módulo
+        if rect.width() > 30:
+            painter.setPen(QPen(QColor("#FFFFFF")))
+            painter.setFont(QFont("Segoe UI", 8, QFont.Weight.Bold))
+            text = self.module_item.name
+            if len(text) > 18 and rect.width() < 140:
+                text = text[:16] + ".."
+            painter.drawText(rect.adjusted(4, 2, -4, -2),
+                             Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignTop,
+                             f"⚡ {text}")
+
+        # Duración
+        if rect.width() > 60:
+            painter.setPen(QPen(QColor("#ADB5BD")))
+            painter.setFont(QFont("Consolas", 7))
+            painter.drawText(rect.adjusted(4, 0, -4, -2),
+                             Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignBottom,
+                             f"{self.module_item.duration:.1f}s")
+
+        # Indicador deshabilitado
+        if not self.module_item.enabled:
+            painter.setPen(QPen(QColor("#E74C3C"), 2))
+            painter.drawLine(rect.topLeft().toPoint(), rect.bottomRight().toPoint())
+
+    def hoverMoveEvent(self, event):
+        x = event.pos().x()
+        if x < 6 or x > self.rect().width() - 6:
+            self.setCursor(Qt.CursorShape.SizeHorCursor)
+        else:
+            self.setCursor(Qt.CursorShape.PointingHandCursor)
+        super().hoverMoveEvent(event)
+
+    def mousePressEvent(self, event):
+        if event.button() == Qt.MouseButton.LeftButton:
+            x = event.pos().x()
+            if x < 6:
+                self._resizing = True
+                self._resize_edge = "left"
+                self._drag_start_pos = event.scenePos()
+                self._drag_start_time = self.module_item.start_time
+                self._drag_start_duration = self.module_item.duration
+            elif x > self.rect().width() - 6:
+                self._resizing = True
+                self._resize_edge = "right"
+                self._drag_start_pos = event.scenePos()
+                self._drag_start_duration = self.module_item.duration
+            else:
+                self._drag_start_pos = event.scenePos()
+                self._drag_start_time = self.module_item.start_time
+        super().mousePressEvent(event)
+
+    def mouseMoveEvent(self, event):
+        if self._resizing and self._drag_start_pos:
+            delta_x = event.scenePos().x() - self._drag_start_pos.x()
+            delta_time = delta_x / self._pps
+            if self._resize_edge == "left":
+                new_start = max(0, self._drag_start_time + delta_time)
+                new_dur = self._drag_start_duration - delta_time
+                if new_dur >= 0.1:
+                    self.module_item.start_time = new_start
+                    self.module_item.duration = new_dur
+                    self._actualizar_geometria()
+            elif self._resize_edge == "right":
+                new_dur = self._drag_start_duration + delta_time
+                if new_dur >= 0.1:
+                    self.module_item.duration = new_dur
+                    self._actualizar_geometria()
+        elif self._drag_start_pos is not None:
+            delta_x = event.scenePos().x() - self._drag_start_pos.x()
+            delta_time = delta_x / self._pps
+            self.module_item.start_time = max(0, self._drag_start_time + delta_time)
+            self._actualizar_geometria()
+        super().mouseMoveEvent(event)
+
+    def mouseReleaseEvent(self, event):
+        self._resizing = False
+        self._drag_start_pos = None
+        super().mouseReleaseEvent(event)
+
+    def set_pixels_per_second(self, pps: float):
+        self._pps = pps
+        self._actualizar_geometria()
+
+
 class PlayheadItem(QGraphicsLineItem):
     """Linea vertical roja que indica la posicion de reproduccion."""
 
@@ -650,6 +912,7 @@ class TimelineScene(QGraphicsScene):
     """Escena personalizada que gestiona la disposicion de tracks y clips."""
 
     clip_selected = pyqtSignal(object)     # VideoClip o None
+    module_selected = pyqtSignal(object)   # ModuleTimelineItem o None
     clip_moved = pyqtSignal(str, float)    # clip_id, new_start_time
     playhead_moved = pyqtSignal(float)     # tiempo en segundos
 
@@ -660,6 +923,20 @@ class TimelineScene(QGraphicsScene):
         self._snap_line: Optional[QGraphicsLineItem] = None
         self._pps: float = 100.0  # pixeles por segundo
         self._total_height: float = 0.0
+
+        # Detectar cambios de selección para emitir señales de módulo/clip
+        self.selectionChanged.connect(self._on_selection_changed)
+
+    def _on_selection_changed(self):
+        """Detecta qué tipo de item fue seleccionado y emite la señal apropiada."""
+        selected = self.selectedItems()
+        if not selected:
+            return
+        item = selected[0]
+        if isinstance(item, ModuleTimelineGraphicsItem):
+            self.module_selected.emit(item.module_item)
+        elif isinstance(item, ClipItem):
+            self.clip_selected.emit(item.clip)
 
     def update_snap_line(self, x: float = None, height: float = 0.0):
         """Muestra o oculta la linea indicadora de snap magnetico."""
@@ -733,6 +1010,7 @@ class TimelineView(QGraphicsView):
     zoom_changed = pyqtSignal(float)  # nuevo nivel de zoom (pps)
     files_dropped = pyqtSignal(list, QPointF) # List of paths, scene pos
     transition_dropped = pyqtSignal(str, QPointF) # transition_type, scene pos
+    module_dropped = pyqtSignal(str, QPointF)  # module_type, scene pos
 
     def __init__(self, scene: TimelineScene, parent=None):
         super().__init__(scene, parent)
@@ -752,14 +1030,18 @@ class TimelineView(QGraphicsView):
 
     def dragEnterEvent(self, event):
         mime = event.mimeData()
-        if mime.hasUrls() or (mime.hasText() and mime.text().startswith("transition:")):
+        if (mime.hasUrls() or 
+            (mime.hasText() and mime.text().startswith("transition:")) or
+            (mime.hasText() and mime.text().startswith("module:"))):
             event.acceptProposedAction()
         else:
             super().dragEnterEvent(event)
 
     def dragMoveEvent(self, event):
         mime = event.mimeData()
-        if mime.hasUrls() or (mime.hasText() and mime.text().startswith("transition:")):
+        if (mime.hasUrls() or 
+            (mime.hasText() and mime.text().startswith("transition:")) or
+            (mime.hasText() and mime.text().startswith("module:"))):
             event.acceptProposedAction()
         else:
             super().dragMoveEvent(event)
@@ -773,10 +1055,14 @@ class TimelineView(QGraphicsView):
                 self.files_dropped.emit(urls, pos)
             event.acceptProposedAction()
         elif mime.hasText() and mime.text().startswith("transition:"):
-            # Dropear transicion en el timeline
             trans_type = mime.text().split(":", 1)[1]
             pos = self.mapToScene(event.position().toPoint())
             self.transition_dropped.emit(trans_type, pos)
+            event.acceptProposedAction()
+        elif mime.hasText() and mime.text().startswith("module:"):
+            mod_type = mime.text().split(":", 1)[1]
+            pos = self.mapToScene(event.position().toPoint())
+            self.module_dropped.emit(mod_type, pos)
             event.acceptProposedAction()
         else:
             super().dropEvent(event)
@@ -810,6 +1096,7 @@ class TimelineWidget(QWidget):
 
     # Senales publicas
     clip_selected = pyqtSignal(object)         # VideoClip o None
+    module_selected = pyqtSignal(object)       # ModuleTimelineItem o None
     playhead_changed = pyqtSignal(float)       # tiempo en segundos
     clips_changed = pyqtSignal()               # cuando cambia algun clip
     track_changed = pyqtSignal(object)         # Track modificado
@@ -964,9 +1251,12 @@ class TimelineWidget(QWidget):
 
         # Conectar senales de la escena
         self._scene.clip_selected.connect(self.clip_selected.emit)
+        self._scene.module_selected.connect(self.module_selected.emit)
         self._scene.playhead_moved.connect(self._on_playhead_scene_click)
         self._view.zoom_changed.connect(self._on_zoom_changed)
         self._view.files_dropped.connect(self._on_files_dropped)
+        self._view.transition_dropped.connect(self._on_transition_dropped)
+        self._view.module_dropped.connect(self._on_module_dropped)
 
         layout.addLayout(area)
 
@@ -1051,8 +1341,44 @@ class TimelineWidget(QWidget):
                 self._scene.addItem(clip_item)
                 self._scene.registrar_clip_item(clip.clip_id, clip_item)
 
+                # Dibujar indicadores de transición en el clip
+                if hasattr(clip, 'transition_in') and clip.transition_in:
+                    trans_in = TransitionIndicatorItem(
+                        clip_item, 'in', clip.transition_in, self._pps, TRACK_HEIGHT
+                    )
+                    trans_in.setPos(clip_item.pos().x(), y + 4)
+                    trans_in.setZValue(60)
+                    self._scene.addItem(trans_in)
+
+                if hasattr(clip, 'transition_out') and clip.transition_out:
+                    trans_dur = clip.transition_out.get('duration', 1.0)
+                    trans_out = TransitionIndicatorItem(
+                        clip_item, 'out', clip.transition_out, self._pps, TRACK_HEIGHT
+                    )
+                    out_x = clip_item.pos().x() + clip_item.rect().width() - max(4, trans_dur * self._pps)
+                    trans_out.setPos(out_x, y + 4)
+                    trans_out.setZValue(60)
+                    self._scene.addItem(trans_out)
+
             y += TRACK_HEIGHT
             total_h += TRACK_HEIGHT
+
+        # Dibujar módulos del timeline en el track de efectos
+        effect_track_y = None
+        for i, track in enumerate(self._timeline.tracks):
+            if track.track_type == 'effect':
+                effect_track_y = RULER_HEIGHT + i * TRACK_HEIGHT
+                break
+        
+        if effect_track_y is None:
+            # Si no hay track de efectos, usar la parte inferior
+            effect_track_y = y
+        
+        for mod_item in self._timeline.module_items:
+            mod_gfx = ModuleTimelineGraphicsItem(
+                mod_item, self._pps, effect_track_y, TRACK_HEIGHT
+            )
+            self._scene.addItem(mod_gfx)
 
         self._headers_layout.addStretch()
 
@@ -1336,6 +1662,98 @@ class TimelineWidget(QWidget):
         self._refrescar_completo()
         self.clips_changed.emit()
 
+    def _on_transition_dropped(self, trans_type: str, pos: QPointF):
+        """Maneja drop de una transición en el timeline."""
+        # Encontrar el clip más cercano a la posición del drop
+        x = pos.x()
+        y = pos.y() - RULER_HEIGHT
+        if y < 0 or x < HEADER_WIDTH:
+            return
+
+        tiempo = (x - HEADER_WIDTH) / self._pps
+        track_index = int(y / TRACK_HEIGHT)
+        if track_index < 0 or track_index >= len(self._timeline.tracks):
+            return
+
+        track = self._timeline.tracks[track_index]
+        best_clip = None
+        best_dist = float('inf')
+        apply_position = 'in'  # 'in' para inicio, 'out' para final
+
+        for clip in track.clips:
+            # Distancia al inicio del clip
+            dist_start = abs(tiempo - clip.start_time)
+            if dist_start < best_dist:
+                best_dist = dist_start
+                best_clip = clip
+                apply_position = 'in'
+            # Distancia al final del clip
+            dist_end = abs(tiempo - clip.end_time)
+            if dist_end < best_dist:
+                best_dist = dist_end
+                best_clip = clip
+                apply_position = 'out'
+
+        if best_clip is None:
+            return
+
+        # Determinar si es transición de entrada o salida
+        # según el tipo de transición y la posición
+        trans_data = {
+            'type': trans_type,
+            'duration': 1.0,
+            'easing': 'ease_in_out',
+            'color': [0, 0, 0],
+            'softness': 0.1,
+        }
+
+        # Transiciones que son inherentemente de entrada o salida
+        in_types = {'fade_in', 'fade_from_color'}
+        out_types = {'fade_out', 'fade_to_color'}
+
+        if trans_type in in_types:
+            apply_position = 'in'
+        elif trans_type in out_types:
+            apply_position = 'out'
+
+        if apply_position == 'in':
+            best_clip.transition_in = trans_data
+            logger.info("Transición IN '%s' aplicada a clip '%s'", trans_type, best_clip.name)
+        else:
+            best_clip.transition_out = trans_data
+            logger.info("Transición OUT '%s' aplicada a clip '%s'", trans_type, best_clip.name)
+
+        self._refrescar_completo()
+        self.clips_changed.emit()
+
+    def _on_module_dropped(self, mod_type: str, pos: QPointF):
+        """Maneja drop de un módulo desde el sidebar al timeline."""
+        x = pos.x()
+        if x < HEADER_WIDTH:
+            x = HEADER_WIDTH
+        
+        tiempo = (x - HEADER_WIDTH) / self._pps
+        
+        # Crear ModuleTimelineItem
+        item = ModuleTimelineItem(
+            module_type=mod_type,
+            start_time=max(0.0, tiempo),
+            duration=5.0,
+        )
+        
+        # Buscar track de efectos
+        for i, track in enumerate(self._timeline.tracks):
+            if track.track_type == 'effect':
+                item.track_index = i
+                break
+        
+        self._timeline.add_module_item(item)
+        logger.info("Módulo '%s' añadido al timeline en t=%.1fs", mod_type, tiempo)
+        
+        self._refrescar_completo()
+        self.clips_changed.emit()
+
+
     def dividir_clip_en_playhead(self):
         """Divide el clip seleccionado en la posicion del playhead."""
         clips = self._scene.get_selected_clips()
@@ -1418,6 +1836,59 @@ class TimelineWidget(QWidget):
             menu.addAction(f"{ICONOS_UNICODE['trash']} Eliminar",
                            self.eliminar_clip_seleccionado)
             menu.addSeparator()
+
+            # Submenu de transiciones
+            trans_menu = menu.addMenu("⇄ Transiciones")
+            
+            # Transición de entrada
+            in_menu = trans_menu.addMenu("▶ Entrada (Fade In)")
+            for ttype, tname in [
+                ("fade_in", "Fade In (negro)"),
+                ("fade_from_color", "Fade desde color"),
+                ("crossfade", "Crossfade"),
+                ("dissolve", "Disolver"),
+                ("wipe_left", "Barrido izquierda"),
+                ("zoom_in", "Zoom acercar"),
+                ("iris_open", "Iris abrir"),
+                ("blur_transition", "Desenfoque"),
+            ]:
+                act = in_menu.addAction(tname)
+                act.triggered.connect(
+                    lambda checked, c=clips_sel[0], t=ttype: self._aplicar_transicion_clip(c, 'in', t)
+                )
+            
+            # Transición de salida
+            out_menu = trans_menu.addMenu("◀ Salida (Fade Out)")
+            for ttype, tname in [
+                ("fade_out", "Fade Out (negro)"),
+                ("fade_to_color", "Fade a color"),
+                ("crossfade", "Crossfade"),
+                ("dissolve", "Disolver"),
+                ("wipe_right", "Barrido derecha"),
+                ("zoom_out", "Zoom alejar"),
+                ("iris_close", "Iris cerrar"),
+                ("blur_transition", "Desenfoque"),
+            ]:
+                act = out_menu.addAction(tname)
+                act.triggered.connect(
+                    lambda checked, c=clips_sel[0], t=ttype: self._aplicar_transicion_clip(c, 'out', t)
+                )
+            
+            trans_menu.addSeparator()
+            
+            # Quitar transiciones
+            if clips_sel[0].transition_in:
+                act_rm_in = trans_menu.addAction("✕ Quitar transición de entrada")
+                act_rm_in.triggered.connect(
+                    lambda: self._quitar_transicion_clip(clips_sel[0], 'in')
+                )
+            if clips_sel[0].transition_out:
+                act_rm_out = trans_menu.addAction("✕ Quitar transición de salida")
+                act_rm_out.triggered.connect(
+                    lambda: self._quitar_transicion_clip(clips_sel[0], 'out')
+                )
+            
+            menu.addSeparator()
             menu.addAction("Propiedades...", lambda: self.clip_selected.emit(clips_sel[0]))
         else:
             menu.addAction(f"{ICONOS_UNICODE['paste']} Pegar", self.pegar_clips)
@@ -1468,3 +1939,39 @@ class TimelineWidget(QWidget):
     def get_selected_clips(self) -> List[VideoClip]:
         """Retorna los clips seleccionados."""
         return self._scene.get_selected_clips()
+
+    def _aplicar_transicion_clip(self, clip: VideoClip, position: str, trans_type: str):
+        """Aplica una transición de entrada o salida a un clip."""
+        trans_data = {
+            'type': trans_type,
+            'duration': 1.0,
+            'easing': 'ease_in_out',
+            'color': [0, 0, 0],
+            'softness': 0.1,
+        }
+        if position == 'in':
+            clip.transition_in = trans_data
+        else:
+            clip.transition_out = trans_data
+        
+        logger.info("Transición '%s' (%s) aplicada a '%s'", trans_type, position, clip.name)
+        self._refrescar_completo()
+        self.clips_changed.emit()
+
+    def _quitar_transicion_clip(self, clip: VideoClip, position: str):
+        """Quita una transición de un clip."""
+        if position == 'in':
+            clip.transition_in = None
+        else:
+            clip.transition_out = None
+        
+        logger.info("Transición (%s) quitada de '%s'", position, clip.name)
+        self._refrescar_completo()
+        self.clips_changed.emit()
+
+    def agregar_clip(self, clip: VideoClip, track_index: int = 0):
+        """Agrega un clip al timeline (API pública)."""
+        cmd = AddClipCommand(self._timeline, clip, track_index)
+        self._cmd.execute(cmd)
+        self._refrescar_completo()
+        self.clips_changed.emit()

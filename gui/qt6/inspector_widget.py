@@ -32,7 +32,8 @@ _RAIZ = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__
 sys.path.insert(0, _RAIZ) if _RAIZ not in sys.path else None
 
 from core.video_clip import VideoClip
-from core.timeline import Track
+from core.timeline import Track, ModuleTimelineItem
+from core.transitions import TransitionType
 from core.commands import CommandManager, ChangePropertyCommand
 from core.profiles import ProfileManager
 from gui.qt6.widgets.custom_widgets import (
@@ -278,7 +279,110 @@ class InspectorWidget(QWidget):
 
             self._contenido_layout.addWidget(grupo_estado)
 
+        # -- Sección: Transiciones (Intermedio/Profesional) --
+        if self._adapter.opciones_avanzadas_visibles():
+            grupo_trans = PropertyGroup("Transiciones", expandido=False)
+
+            # Transición de entrada
+            trans_in_layout = QHBoxLayout()
+            trans_in_layout.addWidget(QLabel("Entrada:"))
+            self._combo_trans_in = QComboBox()
+            self._combo_trans_in.addItem("Ninguna", "")
+            for ttype in ['fade_in', 'fade_from_color', 'crossfade', 'dissolve',
+                          'wipe_left', 'zoom_in', 'iris_open', 'blur_transition']:
+                name = TransitionType.DISPLAY_NAMES.get(ttype, ttype)
+                self._combo_trans_in.addItem(name, ttype)
+            # Set current
+            current_in = clip.transition_in.get('type', '') if clip.transition_in else ''
+            idx_in = self._combo_trans_in.findData(current_in)
+            if idx_in >= 0:
+                self._combo_trans_in.setCurrentIndex(idx_in)
+            self._combo_trans_in.setStyleSheet(
+                "QComboBox { background-color: #3B4148; color: #DEE2E6; "
+                "border: 1px solid #495057; border-radius: 3px; padding: 2px 4px; }"
+            )
+            self._combo_trans_in.currentIndexChanged.connect(
+                lambda idx: self._set_clip_transition(clip, 'in',
+                    self._combo_trans_in.currentData())
+            )
+            trans_in_layout.addWidget(self._combo_trans_in)
+            grupo_trans.agregar_layout(trans_in_layout)
+
+            # Duración entrada
+            if clip.transition_in:
+                dur_in = SliderWithLabel("Duración entrada", 0.1, 5.0,
+                                         clip.transition_in.get('duration', 1.0),
+                                         decimales=1, paso=49)
+                dur_in.value_changed.connect(
+                    lambda v: self._set_transition_duration(clip, 'in', v))
+                grupo_trans.agregar_widget(dur_in)
+
+            # Transición de salida
+            trans_out_layout = QHBoxLayout()
+            trans_out_layout.addWidget(QLabel("Salida:"))
+            self._combo_trans_out = QComboBox()
+            self._combo_trans_out.addItem("Ninguna", "")
+            for ttype in ['fade_out', 'fade_to_color', 'crossfade', 'dissolve',
+                          'wipe_right', 'zoom_out', 'iris_close', 'blur_transition']:
+                name = TransitionType.DISPLAY_NAMES.get(ttype, ttype)
+                self._combo_trans_out.addItem(name, ttype)
+            current_out = clip.transition_out.get('type', '') if clip.transition_out else ''
+            idx_out = self._combo_trans_out.findData(current_out)
+            if idx_out >= 0:
+                self._combo_trans_out.setCurrentIndex(idx_out)
+            self._combo_trans_out.setStyleSheet(
+                "QComboBox { background-color: #3B4148; color: #DEE2E6; "
+                "border: 1px solid #495057; border-radius: 3px; padding: 2px 4px; }"
+            )
+            self._combo_trans_out.currentIndexChanged.connect(
+                lambda idx: self._set_clip_transition(clip, 'out',
+                    self._combo_trans_out.currentData())
+            )
+            trans_out_layout.addWidget(self._combo_trans_out)
+            grupo_trans.agregar_layout(trans_out_layout)
+
+            # Duración salida
+            if clip.transition_out:
+                dur_out = SliderWithLabel("Duración salida", 0.1, 5.0,
+                                          clip.transition_out.get('duration', 1.0),
+                                          decimales=1, paso=49)
+                dur_out.value_changed.connect(
+                    lambda v: self._set_transition_duration(clip, 'out', v))
+                grupo_trans.agregar_widget(dur_out)
+
+            self._contenido_layout.addWidget(grupo_trans)
+
         self._contenido_layout.addStretch()
+
+    def _set_clip_transition(self, clip: VideoClip, position: str, trans_type: str):
+        """Establece o quita una transición en un clip desde el inspector."""
+        if not trans_type:
+            if position == 'in':
+                clip.transition_in = None
+            else:
+                clip.transition_out = None
+        else:
+            trans_data = {
+                'type': trans_type,
+                'duration': 1.0,
+                'easing': 'ease_in_out',
+                'color': [0, 0, 0],
+                'softness': 0.1,
+            }
+            if position == 'in':
+                clip.transition_in = trans_data
+            else:
+                clip.transition_out = trans_data
+        self.preview_requested.emit()
+        self.property_changed.emit(f"transition_{position}", trans_type)
+
+    def _set_transition_duration(self, clip: VideoClip, position: str, duration: float):
+        """Cambia la duración de una transición."""
+        trans = clip.transition_in if position == 'in' else clip.transition_out
+        if trans:
+            trans['duration'] = duration
+            self.preview_requested.emit()
+            self.property_changed.emit(f"transition_{position}_duration", str(duration))
 
     # -- Mostrar propiedades de Track ------------------------------------------
     def mostrar_track(self, track: Track):
@@ -429,6 +533,197 @@ class InspectorWidget(QWidget):
         self._contenido_layout.addWidget(grupo_mod)
         self._contenido_layout.addStretch()
 
+    # -- Mostrar propiedades de ModuleTimelineItem --------------------------------
+    def mostrar_modulo_timeline(self, mod_item: 'ModuleTimelineItem',
+                                 mod_instance=None, module_manager=None):
+        """
+        Muestra las propiedades editables de un módulo posicionado en el timeline.
+        
+        Args:
+            mod_item: ModuleTimelineItem del timeline
+            mod_instance: Instancia real del módulo (Module) si existe
+            module_manager: ModuleManager para acceder a tipos de módulos
+        """
+        self._objeto_actual = mod_item
+        self._limpiar_contenido()
+        self._lbl_titulo.setText(f"Módulo: {mod_item.name}")
+        self._btn_reset.setVisible(True)
+
+        # -- Sección: Información general del módulo --
+        grupo_info = PropertyGroup("Información", expandido=True)
+
+        # Nombre editable
+        nombre_layout = QHBoxLayout()
+        nombre_layout.addWidget(QLabel("Nombre:"))
+        edit_nombre = QLineEdit(mod_item.name)
+        edit_nombre.setStyleSheet(
+            "QLineEdit { background-color: #3B4148; color: #DEE2E6; "
+            "border: 1px solid #495057; border-radius: 3px; padding: 2px 4px; }"
+        )
+        edit_nombre.editingFinished.connect(
+            lambda: self._cambiar_propiedad_modulo_tl(mod_item, "name",
+                                                       edit_nombre.text()))
+        nombre_layout.addWidget(edit_nombre)
+        grupo_info.agregar_layout(nombre_layout)
+
+        # Tipo de módulo
+        tipo_lbl = QLabel(f"Tipo: {mod_item.module_type}")
+        tipo_lbl.setStyleSheet("color: #ADB5BD; font-size: 10px;")
+        grupo_info.agregar_widget(tipo_lbl)
+
+        # ID
+        id_lbl = QLabel(f"ID: {mod_item.item_id}")
+        id_lbl.setStyleSheet("color: #6C757D; font-size: 9px;")
+        grupo_info.agregar_widget(id_lbl)
+
+        self._contenido_layout.addWidget(grupo_info)
+
+        # -- Sección: Posición temporal --
+        grupo_tiempo = PropertyGroup("Posición temporal", expandido=True)
+
+        tc_start = TimeCodeEdit("Inicio", mod_item.start_time)
+        tc_start.time_changed.connect(
+            lambda v: self._cambiar_propiedad_modulo_tl(mod_item, "start_time", v))
+        grupo_tiempo.agregar_widget(tc_start)
+
+        dur_slider = SliderWithLabel("Duración", 0.1, 300.0, mod_item.duration,
+                                      decimales=2, paso=3000)
+        dur_slider.value_changed.connect(
+            lambda v: self._cambiar_propiedad_modulo_tl(mod_item, "duration", v))
+        grupo_tiempo.agregar_widget(dur_slider)
+
+        self._contenido_layout.addWidget(grupo_tiempo)
+
+        # -- Sección: Estado --
+        grupo_estado = PropertyGroup("Estado", expandido=True)
+
+        chk_enabled = QCheckBox("Habilitado")
+        chk_enabled.setChecked(mod_item.enabled)
+        chk_enabled.stateChanged.connect(
+            lambda s: self._cambiar_propiedad_modulo_tl(
+                mod_item, "enabled", s == Qt.CheckState.Checked.value))
+        grupo_estado.agregar_widget(chk_enabled)
+
+        self._contenido_layout.addWidget(grupo_estado)
+
+        # -- Sección: Parámetros del módulo (desde la instancia real) --
+        config = {}
+        if mod_instance is not None:
+            if hasattr(mod_instance, 'get_config'):
+                config = mod_instance.get_config()
+            elif hasattr(mod_instance, '_config'):
+                config = dict(mod_instance._config)
+        # Fallback: usar params del ModuleTimelineItem
+        if not config and mod_item.params:
+            config = dict(mod_item.params)
+
+        if config:
+            grupo_params = PropertyGroup("Parámetros del módulo", expandido=True)
+            for clave, valor in config.items():
+                if isinstance(valor, bool):
+                    chk = QCheckBox(clave.replace("_", " ").title())
+                    chk.setChecked(valor)
+                    chk.stateChanged.connect(
+                        lambda s, k=clave: self._cambiar_param_modulo_tl(
+                            mod_item, mod_instance, k,
+                            s == Qt.CheckState.Checked.value))
+                    grupo_params.agregar_widget(chk)
+                elif isinstance(valor, float):
+                    # Rango inteligente
+                    if 0.0 <= valor <= 1.0:
+                        min_v, max_v = 0.0, 1.0
+                    elif valor < 0:
+                        min_v, max_v = valor * 3, abs(valor) * 3
+                    else:
+                        min_v, max_v = 0.0, max(valor * 3, 1.0)
+                    slider = SliderWithLabel(clave.replace("_", " ").title(),
+                                              min_v, max_v, valor, decimales=2)
+                    slider.value_changed.connect(
+                        lambda v, k=clave: self._cambiar_param_modulo_tl(
+                            mod_item, mod_instance, k, v))
+                    grupo_params.agregar_widget(slider)
+                elif isinstance(valor, int):
+                    spin_layout = QHBoxLayout()
+                    spin_layout.addWidget(QLabel(clave.replace("_", " ").title()))
+                    spin = QSpinBox()
+                    spin.setRange(0, max(valor * 3, 100))
+                    spin.setValue(valor)
+                    spin.setStyleSheet(
+                        "QSpinBox { background-color: #3B4148; color: #DEE2E6; "
+                        "border: 1px solid #495057; border-radius: 3px; }"
+                    )
+                    spin.valueChanged.connect(
+                        lambda v, k=clave: self._cambiar_param_modulo_tl(
+                            mod_item, mod_instance, k, v))
+                    spin_layout.addWidget(spin)
+                    grupo_params.agregar_layout(spin_layout)
+                elif isinstance(valor, str):
+                    if valor.startswith("#") and len(valor) in (7, 9):
+                        picker = ColorPickerWidget(clave.replace("_", " ").title(), valor)
+                        picker.color_changed.connect(
+                            lambda c, k=clave: self._cambiar_param_modulo_tl(
+                                mod_item, mod_instance, k, c))
+                        grupo_params.agregar_widget(picker)
+                    else:
+                        str_layout = QHBoxLayout()
+                        str_layout.addWidget(QLabel(clave.replace("_", " ").title()))
+                        edit = QLineEdit(valor)
+                        edit.setStyleSheet(
+                            "QLineEdit { background-color: #3B4148; color: #DEE2E6; "
+                            "border: 1px solid #495057; border-radius: 3px; padding: 2px 4px; }"
+                        )
+                        edit.editingFinished.connect(
+                            lambda k=clave, e=edit: self._cambiar_param_modulo_tl(
+                                mod_item, mod_instance, k, e.text()))
+                        str_layout.addWidget(edit)
+                        grupo_params.agregar_layout(str_layout)
+
+            self._contenido_layout.addWidget(grupo_params)
+
+        # -- Sección: Widget de configuración nativo del módulo --
+        if mod_instance is not None and hasattr(mod_instance, 'get_config_widgets'):
+            try:
+                grupo_nativo = PropertyGroup("Configuración avanzada", expandido=False)
+                # Crear un objeto proxy para callbacks del módulo
+                class _AppProxy:
+                    def __init__(self, inspector):
+                        self._inspector = inspector
+                    def trigger_auto_save(self):
+                        pass
+                    def update_preview(self):
+                        self._inspector.preview_requested.emit()
+
+                proxy = _AppProxy(self)
+                config_widget = mod_instance.get_config_widgets(
+                    self._contenido, proxy
+                )
+                if config_widget:
+                    grupo_nativo.agregar_widget(config_widget)
+                    self._contenido_layout.addWidget(grupo_nativo)
+            except Exception as e:
+                log.debug("Error creando widgets nativos del módulo: %s", e)
+
+        self._contenido_layout.addStretch()
+
+    def _cambiar_propiedad_modulo_tl(self, mod_item, prop: str, valor):
+        """Cambia una propiedad directa del ModuleTimelineItem."""
+        setattr(mod_item, prop, valor)
+        self.property_changed.emit(prop, valor)
+        self.preview_requested.emit()
+
+    def _cambiar_param_modulo_tl(self, mod_item, mod_instance, param: str, valor):
+        """Cambia un parámetro del módulo y lo sincroniza con el ModuleTimelineItem."""
+        # Guardar en params del item del timeline
+        mod_item.params[param] = valor
+        # Aplicar a la instancia real si existe
+        if mod_instance is not None:
+            if hasattr(mod_instance, '_config'):
+                mod_instance._config[param] = valor
+            if hasattr(mod_instance, 'set_config'):
+                mod_instance.set_config({param: valor})
+        self.property_changed.emit(param, valor)
+        self.preview_requested.emit()
+
     # -- Cambiar propiedades con Undo/Redo -------------------------------------
     def _cambiar_propiedad(self, obj: Any, prop: str, valor: Any, desc: str = ""):
         """Cambia una propiedad usando CommandManager para soporte Undo/Redo."""
@@ -458,6 +753,10 @@ class InspectorWidget(QWidget):
             obj.volume = 1.0
             obj.pan = 0.0
             self.mostrar_track(obj)
+        elif isinstance(obj, ModuleTimelineItem):
+            obj.enabled = True
+            obj.params = {}
+            self.mostrar_modulo_timeline(obj)
 
         self.preview_requested.emit()
 
@@ -475,6 +774,8 @@ class InspectorWidget(QWidget):
             self.mostrar_clip(obj)
         elif isinstance(obj, Track):
             self.mostrar_track(obj)
+        elif isinstance(obj, ModuleTimelineItem):
+            self.mostrar_modulo_timeline(obj)
         else:
             self.mostrar_modulo(obj)
 

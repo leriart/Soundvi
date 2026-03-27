@@ -20,7 +20,7 @@ from PyQt6.QtWidgets import (
     QFrame, QSizePolicy, QAbstractItemView, QToolTip
 )
 from PyQt6.QtCore import Qt, pyqtSignal, QMimeData, QPoint
-from PyQt6.QtGui import QFont, QDrag, QAction, QCursor
+from PyQt6.QtGui import QFont, QDrag, QAction, QCursor, QPainter, QPen, QColor, QPixmap
 
 _RAIZ = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 sys.path.insert(0, _RAIZ) if _RAIZ not in sys.path else None
@@ -137,6 +137,9 @@ class SidebarWidget(QFrame):
                 color: #FFFFFF;
             }
         """)
+
+        # Habilitar drag & drop de módulos al timeline
+        self._arbol.startDrag = self._start_module_drag
 
         # Conexiones del arbol
         self._arbol.itemClicked.connect(self._on_item_clicked)
@@ -350,6 +353,42 @@ class SidebarWidget(QFrame):
                 info += f"\nTags: {', '.join(tags)}"
 
         QToolTip.showText(QCursor.pos(), info, self)
+
+    # -- Drag & Drop de módulos al timeline ------------------------------------
+
+    def _start_module_drag(self, supported_actions):
+        """Inicia un drag de módulo desde el sidebar al timeline."""
+        item = self._arbol.currentItem()
+        if item is None:
+            return
+
+        datos = item.data(0, Qt.ItemDataRole.UserRole)
+        if not datos or datos.get("tipo") != "modulo":
+            return
+
+        clave = datos["clave"]
+        nombre = clave.replace("_module", "").replace("_", " ").title()
+
+        drag = QDrag(self._arbol)
+        mime = QMimeData()
+        mime.setText(f"module:{clave}")
+        drag.setMimeData(mime)
+
+        # Crear pixmap de arrastre visual
+        pixmap = QPixmap(120, 36)
+        pixmap.fill(QColor("#2B3035"))
+        painter = QPainter(pixmap)
+        painter.setPen(QPen(QColor("#9B59B6"), 2))
+        painter.drawRoundedRect(1, 1, 118, 34, 4, 4)
+        painter.setPen(QPen(QColor("#DEE2E6")))
+        painter.setFont(QFont("Segoe UI", 9))
+        text = nombre[:16] if len(nombre) > 16 else nombre
+        painter.drawText(pixmap.rect(), Qt.AlignmentFlag.AlignCenter, f"⚡ {text}")
+        painter.end()
+        drag.setPixmap(pixmap)
+
+        self.modulo_drag_started.emit(clave)
+        drag.exec(Qt.DropAction.CopyAction)
 
     # -- API publica -----------------------------------------------------------
 

@@ -15,6 +15,7 @@ import numpy as np
 import cv2
 
 from core.video_clip import VideoClip
+from core.transitions import Transition
 
 
 class Track:
@@ -157,6 +158,59 @@ class Track:
         return track
 
 
+class ModuleTimelineItem:
+    """
+    Representa un módulo/efecto posicionado en el timeline.
+    Los módulos pueden tener duración y posición temporal específica.
+    """
+    
+    def __init__(self, module_type: str = "", name: str = "",
+                 start_time: float = 0.0, duration: float = 5.0,
+                 track_index: int = -1):
+        import uuid
+        self.item_id: str = str(uuid.uuid4())[:8]
+        self.module_type: str = module_type
+        self.name: str = name or module_type.replace("_module", "").replace("_", " ").title()
+        self.start_time: float = start_time
+        self.duration: float = duration
+        self.track_index: int = track_index  # -1 = effect track
+        self.enabled: bool = True
+        self.params: Dict[str, Any] = {}
+        self.color: str = "#9b59b6"  # Morado por defecto para módulos
+    
+    @property
+    def end_time(self) -> float:
+        return self.start_time + self.duration
+    
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "item_id": self.item_id,
+            "module_type": self.module_type,
+            "name": self.name,
+            "start_time": self.start_time,
+            "duration": self.duration,
+            "track_index": self.track_index,
+            "enabled": self.enabled,
+            "params": self.params,
+            "color": self.color,
+        }
+    
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> 'ModuleTimelineItem':
+        item = cls(
+            module_type=data.get("module_type", ""),
+            name=data.get("name", ""),
+            start_time=data.get("start_time", 0.0),
+            duration=data.get("duration", 5.0),
+            track_index=data.get("track_index", -1),
+        )
+        item.item_id = data.get("item_id", item.item_id)
+        item.enabled = data.get("enabled", True)
+        item.params = data.get("params", {})
+        item.color = data.get("color", "#9b59b6")
+        return item
+
+
 class Timeline:
     """
     Timeline multi-track principal de Soundvi.
@@ -166,6 +220,7 @@ class Timeline:
     - Navegar temporalmente
     - Renderizar el frame compuesto para un tiempo dado
     - Zoom y scroll del timeline
+    - Módulos posicionados en el tiempo
     """
 
     def __init__(self):
@@ -181,6 +236,9 @@ class Timeline:
         self.loop_start: float = 0.0       # Inicio de region de loop
         self.loop_end: float = 0.0         # Fin de region de loop
         self.loop_enabled: bool = False    # Loop activado
+        
+        # Módulos posicionados en el timeline
+        self.module_items: List[ModuleTimelineItem] = []
         
         # Crear tracks por defecto
         self._create_default_tracks()
@@ -336,12 +394,55 @@ class Timeline:
                     
         return closest
 
+    # -- Gestión de módulos en timeline --
+
+    def add_module_item(self, item: ModuleTimelineItem) -> bool:
+        """Agrega un módulo al timeline."""
+        self.module_items.append(item)
+        self._update_duration()
+        return True
+
+    def remove_module_item(self, item_id: str) -> Optional[ModuleTimelineItem]:
+        """Elimina un módulo del timeline por su ID."""
+        for i, item in enumerate(self.module_items):
+            if item.item_id == item_id:
+                removed = self.module_items.pop(i)
+                self._update_duration()
+                return removed
+        return None
+
+    def get_active_modules_at_time(self, time: float) -> List[ModuleTimelineItem]:
+        """Obtiene los módulos activos en un tiempo dado."""
+        return [
+            m for m in self.module_items
+            if m.enabled and m.start_time <= time < m.end_time
+        ]
+
+    def get_audio_clips_at_time(self, time: float) -> list:
+        """Obtiene info de clips de audio activos en un tiempo dado."""
+        clips_info = []
+        audio_tracks = [t for t in self.tracks 
+                        if t.track_type in ('audio', 'video') and not t.muted]
+        for track in audio_tracks:
+            for clip in track.clips:
+                if clip.start_time <= time < clip.end_time and clip.enabled:
+                    if clip.source_type in ('audio', 'video'):
+                        clips_info.append({
+                            'path': clip.source_path,
+                            'clip_start': clip.start_time,
+                            'clip_duration': clip.duration,
+                            'volume': clip.volume * track.volume,
+                            'trim_start': clip.trim_start,
+                        })
+        return clips_info
+
     # -- Renderizado --
 
     def get_composite_frame(self, time: float, width: int, height: int) -> np.ndarray:
         """
         Genera el frame compuesto para un tiempo dado.
         Combina todos los clips activos de los tracks de video.
+        Aplica transiciones de entrada/salida de cada clip.
         
         Args:
             time: Tiempo en el timeline (segundos)
@@ -354,7 +455,7 @@ class Timeline:
         # Frame base negro
         composite = np.zeros((height, width, 3), dtype=np.uint8)
         
-        # Recorrer tracks de video de abajo hacia arriba (el indice mas alto se dibuja encima)
+        # Recorrer tracks de video de abajo hacia arriba
         video_tracks = [t for t in self.tracks if t.track_type == 'video' and t.visible and not t.muted]
         
         for track in video_tracks:
@@ -367,14 +468,52 @@ class Timeline:
             frame = clip.get_frame_at_time(clip_time, width, height)
             
             if frame is not None:
+                # Aplicar transiciones de entrada/salida
+                frame = self._apply_clip_transitions(frame, clip, clip_time, width, height)
+                
                 if clip.opacity >= 1.0:
                     composite = frame
                 else:
-                    # Mezclar con opacidad
                     alpha = clip.opacity
                     composite = cv2.addWeighted(frame, alpha, composite, 1.0 - alpha, 0)
                     
         return composite
+
+    def _apply_clip_transitions(self, frame: np.ndarray, clip: VideoClip,
+                                 clip_time: float, width: int, height: int) -> np.ndarray:
+        """Aplica transiciones fade in/out a un clip individual."""
+        try:
+            # Transición de entrada (fade in)
+            if clip.transition_in:
+                trans_dur = clip.transition_in.get('duration', 1.0)
+                if clip_time < trans_dur:
+                    progress = clip_time / trans_dur
+                    trans = Transition(
+                        transition_type=clip.transition_in.get('type', 'fade_in'),
+                        duration=trans_dur,
+                        easing=clip.transition_in.get('easing', 'ease_in_out'),
+                    )
+                    trans.color = tuple(clip.transition_in.get('color', [0, 0, 0]))
+                    trans.softness = clip.transition_in.get('softness', 0.1)
+                    frame = trans.apply_to_single_clip(frame, progress)
+            
+            # Transición de salida (fade out)
+            if clip.transition_out:
+                trans_dur = clip.transition_out.get('duration', 1.0)
+                time_until_end = clip.duration - clip_time
+                if time_until_end < trans_dur:
+                    progress = 1.0 - (time_until_end / trans_dur)
+                    trans = Transition(
+                        transition_type=clip.transition_out.get('type', 'fade_out'),
+                        duration=trans_dur,
+                        easing=clip.transition_out.get('easing', 'ease_in_out'),
+                    )
+                    trans.color = tuple(clip.transition_out.get('color', [0, 0, 0]))
+                    trans.softness = clip.transition_out.get('softness', 0.1)
+                    frame = trans.apply_to_single_clip(frame, progress)
+        except Exception:
+            pass
+        return frame
 
     # -- Navegacion --
 
@@ -435,6 +574,10 @@ class Timeline:
             track_dur = track.total_duration
             if track_dur > max_end:
                 max_end = track_dur
+        # Considerar módulos en el cálculo de duración
+        for item in self.module_items:
+            if item.end_time > max_end:
+                max_end = item.end_time
         self.duration = max_end
 
     def time_to_pixels(self, time: float) -> float:
@@ -451,6 +594,7 @@ class Timeline:
         """Limpia todo el timeline."""
         for track in self.tracks:
             track.clips.clear()
+        self.module_items.clear()
         self.playhead = 0.0
         self.duration = 0.0
         self.selection.clear()
@@ -468,6 +612,7 @@ class Timeline:
             "loop_start": self.loop_start,
             "loop_end": self.loop_end,
             "loop_enabled": self.loop_enabled,
+            "module_items": [m.to_dict() for m in self.module_items],
         }
 
     @classmethod
@@ -485,6 +630,11 @@ class Timeline:
         timeline.loop_start = data.get("loop_start", 0.0)
         timeline.loop_end = data.get("loop_end", 0.0)
         timeline.loop_enabled = data.get("loop_enabled", False)
+        # Cargar módulos del timeline
+        timeline.module_items = []
+        for mod_data in data.get("module_items", []):
+            item = ModuleTimelineItem.from_dict(mod_data)
+            timeline.module_items.append(item)
         return timeline
 
     def __repr__(self):

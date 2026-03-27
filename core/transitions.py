@@ -172,7 +172,7 @@ class Transition:
             TransitionType.IRIS_OPEN: self._iris_open,
             TransitionType.IRIS_CLOSE: self._iris_close,
             TransitionType.BLUR_TRANSITION: self._blur_transition,
-                    TransitionType.FADE_IN: self._fade_in,
+            TransitionType.FADE_IN: self._fade_in,
             TransitionType.FADE_OUT: self._fade_out,
             TransitionType.FADE_TO_COLOR: self._fade_to_color,
             TransitionType.FADE_FROM_COLOR: self._fade_from_color,

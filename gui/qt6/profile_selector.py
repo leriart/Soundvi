@@ -269,7 +269,7 @@ class TarjetaPerfil(QFrame):
 # ---------------------------------------------------------------------------
 
 class SelectorTema(QFrame):
-    """Widget para elegir entre tema oscuro y claro con preview visual."""
+    """Widget para elegir entre todos los temas disponibles con preview visual."""
 
     tema_cambiado = pyqtSignal(str)
 
@@ -281,68 +281,112 @@ class SelectorTema(QFrame):
         self._construir_ui()
 
     def _construir_ui(self):
-        layout = QHBoxLayout(self)
+        layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
-        layout.setSpacing(12)
+        layout.setSpacing(8)
 
-        lbl = QLabel("2726  Tema visual:")
-        lbl.setFont(QFont("Segoe UI", 11))
+        # Título
+        lbl = QLabel("🎨 Tema visual:")
+        lbl.setFont(QFont("Segoe UI", 11, QFont.Weight.Bold))
         lbl.setStyleSheet("color: #ADB5BD; background: transparent;")
         layout.addWidget(lbl)
 
-        layout.addStretch()
-
-        # Boton tema oscuro
-        self._btn_oscuro = QPushButton("25CB  Oscuro")
-        self._btn_oscuro.setFixedSize(140, 40)
-        self._btn_oscuro.setCursor(Qt.CursorShape.PointingHandCursor)
-        self._btn_oscuro.clicked.connect(lambda: self._seleccionar("darkly"))
-        layout.addWidget(self._btn_oscuro)
-
-        # Boton tema claro
-        self._btn_claro = QPushButton("25CF  Claro")
-        self._btn_claro.setFixedSize(140, 40)
-        self._btn_claro.setCursor(Qt.CursorShape.PointingHandCursor)
-        self._btn_claro.clicked.connect(lambda: self._seleccionar("claro"))
-        layout.addWidget(self._btn_claro)
-
+        # Grid de botones de temas
+        grid_widget = QWidget()
+        grid_layout = QGridLayout(grid_widget)
+        grid_layout.setSpacing(8)
+        grid_layout.setContentsMargins(0, 0, 0, 0)
+        
+        # Obtener todos los temas disponibles
+        from .theme import AdministradorTemas
+        tema_manager = AdministradorTemas()
+        temas = tema_manager.listar_temas_nombres()
+        
+        # Crear botones para cada tema
+        self.botones_temas = {}
+        temas_items = list(temas.items())
+        
+        for i, (tema_id, tema_nombre) in enumerate(temas_items):
+            row = i // 2
+            col = i % 2
+            
+            btn = QPushButton(tema_nombre)
+            btn.setFixedSize(140, 40)
+            btn.setCursor(Qt.CursorShape.PointingHandCursor)
+            btn.setProperty("tema_id", tema_id)
+            btn.clicked.connect(lambda checked, tid=tema_id: self._seleccionar(tid))
+            
+            self.botones_temas[tema_id] = btn
+            grid_layout.addWidget(btn, row, col)
+        
+        layout.addWidget(grid_widget)
+        
+        # Información
+        info = QLabel("Los cambios se aplican inmediatamente")
+        info.setFont(QFont("Segoe UI", 9))
+        info.setStyleSheet("color: #6C757D; background: transparent;")
+        layout.addWidget(info)
+        
         self._actualizar_botones()
 
     def _seleccionar(self, tema: str):
         self._tema = tema
         self._actualizar_botones()
         self.tema_cambiado.emit(tema)
+        
+        # Aplicar tema inmediatamente
+        from .theme import AdministradorTemas
+        tema_manager = AdministradorTemas()
+        tema_manager.aplicar_tema(tema)
+        
+        # Guardar en preferencias
+        try:
+            from utils.config import load_user_prefs, save_user_prefs
+            prefs = load_user_prefs()
+            prefs["tema"] = tema
+            save_user_prefs(prefs)
+        except Exception:
+            pass  # Silenciar errores de configuración
 
     def _actualizar_botones(self):
-        activo_style = """
-            QPushButton {{
-                background-color: {acento};
-                color: #FFFFFF;
-                border: 2px solid {acento};
-                border-radius: 8px;
-                font-weight: bold;
-                font-size: 12px;
-            }}
-        """
-        inactivo_style = """
-            QPushButton {
-                background-color: #343A40;
-                color: #ADB5BD;
-                border: 1px solid #495057;
-                border-radius: 8px;
-                font-size: 12px;
-            }
-            QPushButton:hover {
-                border: 1px solid #6C757D;
-                background-color: #3B4148;
-            }
-        """
-        if self._tema == "darkly":
-            self._btn_oscuro.setStyleSheet(activo_style.format(acento="#375A7F"))
-            self._btn_claro.setStyleSheet(inactivo_style)
-        else:
-            self._btn_claro.setStyleSheet(activo_style.format(acento="#0D6EFD"))
-            self._btn_oscuro.setStyleSheet(inactivo_style)
+        """Actualiza los estilos de todos los botones según el tema activo."""
+        from .theme import TEMAS
+        
+        tema_activo = TEMAS.get(self._tema, TEMAS.get("darkly"))
+        
+        for tema_id, btn in self.botones_temas.items():
+            if tema_id == self._tema:
+                # Botón activo
+                estilo = f"""
+                    QPushButton {{
+                        background-color: {tema_activo.primario};
+                        color: #FFFFFF;
+                        border: 2px solid {tema_activo.primario};
+                        border-radius: 8px;
+                        font-weight: bold;
+                        font-size: 12px;
+                    }}
+                    QPushButton:hover {{
+                        background-color: {tema_activo.primario_hover};
+                        border: 2px solid {tema_activo.primario_hover};
+                    }}
+                """
+            else:
+                # Botón inactivo
+                estilo = f"""
+                    QPushButton {{
+                        background-color: {tema_activo.fondo_input};
+                        color: {tema_activo.texto_secundario};
+                        border: 1px solid {tema_activo.borde};
+                        border-radius: 8px;
+                        font-size: 12px;
+                    }}
+                    QPushButton:hover {{
+                        border: 1px solid {tema_activo.primario};
+                        background-color: {tema_activo.fondo_panel};
+                    }}
+                """
+            btn.setStyleSheet(estilo)
 
     @property
     def tema_seleccionado(self) -> str:

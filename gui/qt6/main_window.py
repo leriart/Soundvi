@@ -25,9 +25,10 @@ from PyQt6.QtWidgets import (
     QMainWindow, QApplication, QWidget, QVBoxLayout, QHBoxLayout,
     QLabel, QPushButton, QToolBar, QStatusBar, QDockWidget,
     QMenuBar, QMenu, QFileDialog, QMessageBox, QSplitter,
-    QFrame, QSizePolicy, QTabWidget
+    QFrame, QSizePolicy, QTabWidget, QAction, QActionGroup
 )
 from PyQt6.QtCore import Qt, QSize, QTimer, pyqtSignal
+from PyQt6.QtGui import QKeySequence
 from PyQt6.QtGui import QAction, QFont, QIcon, QKeySequence, QPixmap
 
 # Ruta raiz
@@ -167,6 +168,10 @@ class VentanaPrincipalQt6(QMainWindow):
         # View
         self._menu_view = menubar.addMenu("&View")
         self._acciones_view = {}
+        
+        # Submenú de temas
+        self._menu_temas = self._menu_view.addMenu("🎨 Cambiar tema")
+        self._crear_menu_temas()
 
         # Modules
         self._menu_modules = menubar.addMenu("&Modules")
@@ -191,6 +196,122 @@ class VentanaPrincipalQt6(QMainWindow):
         accion.setVisible(visible)
         menu.addAction(accion)
         return accion
+    
+    def _crear_menu_temas(self):
+        """Crea el submenú de temas con todos los temas disponibles."""
+        from .theme import AdministradorTemas
+        
+        tema_manager = AdministradorTemas()
+        temas = tema_manager.listar_temas_nombres()
+        tema_actual = tema_manager.tema_actual()
+        
+        # Grupo de acciones para selección exclusiva
+        self._grupo_temas = QActionGroup(self)
+        self._grupo_temas.setExclusive(True)
+        
+        for tema_id, tema_nombre in temas.items():
+            accion = QAction(tema_nombre, self)
+            accion.setCheckable(True)
+            accion.setChecked(tema_id == tema_actual)
+            accion.setProperty("tema_id", tema_id)
+            accion.triggered.connect(lambda checked, tid=tema_id: self._cambiar_tema(tid))
+            
+            self._grupo_temas.addAction(accion)
+            self._menu_temas.addAction(accion)
+        
+        self._menu_temas.addSeparator()
+        
+        # Acción para abrir selector avanzado
+        accion_avanzado = QAction("🎨 Selector avanzado...", self)
+        accion_avanzado.triggered.connect(self._abrir_selector_temas_avanzado)
+        self._menu_temas.addAction(accion_avanzado)
+    
+    def _cambiar_tema(self, tema_id: str):
+        """Cambia el tema de la aplicación."""
+        from .theme import AdministradorTemas
+        from utils.config import load_user_prefs, save_user_prefs
+        
+        # Aplicar tema
+        tema_manager = AdministradorTemas()
+        tema_manager.aplicar_tema(tema_id)
+        
+        # Guardar preferencias
+        try:
+            prefs = load_user_prefs()
+            prefs["tema"] = tema_id
+            save_user_prefs(prefs)
+        except Exception:
+            pass  # Silenciar errores de configuración
+        
+        # Actualizar estado de checkboxes en el menú
+        for accion in self._grupo_temas.actions():
+            accion.setChecked(accion.property("tema_id") == tema_id)
+    
+    def _abrir_selector_temas_avanzado(self):
+        """Abre el selector avanzado de temas."""
+        try:
+            from .theme_selector import mostrar_selector_temas
+            dialog = mostrar_selector_temas(self)
+            dialog.theme_changed.connect(self._actualizar_menu_temas)
+        except ImportError:
+            # Fallback al método básico
+            self._cambiar_tema_dialogo_simple()
+    
+    def _actualizar_menu_temas(self, tema_id: str):
+        """Actualiza el menú de temas después de un cambio."""
+        for accion in self._grupo_temas.actions():
+            accion.setChecked(accion.property("tema_id") == tema_id)
+    
+    def _cambiar_tema_dialogo_simple(self):
+        """Diálogo simple para cambiar tema (fallback)."""
+        from PyQt6.QtWidgets import QDialog, QVBoxLayout, QLabel, QPushButton, QButtonGroup, QHBoxLayout
+        from .theme import AdministradorTemas
+        
+        tema_manager = AdministradorTemas()
+        temas = tema_manager.listar_temas_nombres()
+        tema_actual = tema_manager.tema_actual()
+        
+        dialog = QDialog(self)
+        dialog.setWindowTitle("🎨 Cambiar tema")
+        dialog.setFixedSize(400, 300)
+        
+        layout = QVBoxLayout(dialog)
+        
+        # Título
+        titulo = QLabel("Selecciona un tema:")
+        titulo.setStyleSheet("font-size: 14px; font-weight: bold;")
+        layout.addWidget(titulo)
+        
+        # Botones de temas
+        grupo = QButtonGroup(dialog)
+        botones_layout = QVBoxLayout()
+        
+        for tema_id, tema_nombre in temas.items():
+            btn = QPushButton(tema_nombre)
+            btn.setCheckable(True)
+            btn.setChecked(tema_id == tema_actual)
+            btn.setProperty("tema_id", tema_id)
+            btn.clicked.connect(lambda checked, tid=tema_id: self._cambiar_tema(tid))
+            
+            grupo.addButton(btn)
+            botones_layout.addWidget(btn)
+        
+        layout.addLayout(botones_layout)
+        layout.addStretch()
+        
+        # Botones de acción
+        btn_layout = QHBoxLayout()
+        btn_aceptar = QPushButton("Aceptar")
+        btn_aceptar.clicked.connect(dialog.accept)
+        btn_cancelar = QPushButton("Cancelar")
+        btn_cancelar.clicked.connect(dialog.reject)
+        
+        btn_layout.addStretch()
+        btn_layout.addWidget(btn_aceptar)
+        btn_layout.addWidget(btn_cancelar)
+        layout.addLayout(btn_layout)
+        
+        dialog.exec()
 
     # -- Toolbar ---------------------------------------------------------------
     def _crear_toolbar(self):

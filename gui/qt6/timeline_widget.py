@@ -626,12 +626,23 @@ class TimelineScene(QGraphicsScene):
             self._snap_line.setPen(QPen(QColor("#3498DB"), 2, Qt.PenStyle.DashLine))
             self._snap_line.setZValue(999)
             self.addItem(self._snap_line)
-        if x is not None:
-            h = height if height > 0 else (self.sceneRect().height() if self.sceneRect().height() > 0 else 1000)
-            self._snap_line.setLine(x, 0, x, h)
-            self._snap_line.setVisible(True)
-        else:
-            self._snap_line.setVisible(False)
+        try:
+            # Check if object is deleted using sip directly or catching the error
+            import sip
+            if sip.isdeleted(self._snap_line):
+                self._snap_line = None
+                return self.update_snap_line(x, height)
+                
+            if x is not None:
+                h = height if height > 0 else (self.sceneRect().height() if self.sceneRect().height() > 0 else 1000)
+                self._snap_line.setLine(x, 0, x, h)
+                self._snap_line.setVisible(True)
+            else:
+                self._snap_line.setVisible(False)
+        except RuntimeError:
+            self._snap_line = None
+            if x is not None:
+                self.update_snap_line(x, height)
 
     def crear_playhead(self, height: float):
         """Crea el indicador de playhead."""
@@ -925,6 +936,13 @@ class TimelineWidget(QWidget):
                 if guide.scene() == self._scene:
                     self._scene.removeItem(guide)
         
+        # Destruir snap_line explicitly para evitar C++ obj deleted errors
+        if hasattr(self._scene, '_snap_line') and self._scene._snap_line:
+            self._scene._snap_line = None
+            
+        if hasattr(self._scene, '_playhead') and self._scene._playhead:
+            self._scene._playhead = None
+            
         self._scene.clear()
         self._scene._clip_items.clear()
 

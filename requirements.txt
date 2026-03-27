@@ -1,27 +1,21 @@
-# Soundvi v4.8 -- Dependencias
-# ==============================
-
-# GUI
+# Dependencias principales de Soundvi
 PyQt6>=6.5.0
-
-# Video y procesamiento de imagen
 opencv-python>=4.8.0
 numpy>=1.24.0
+librosa>=0.10.0
+pygame-ce>=2.5.0
+pydub>=0.25.0
+
+# Dependencias para procesamiento de audio/video
+scipy>=1.10.0
 pillow>=10.0.0
+matplotlib>=3.7.0  # Para visualizaciones
 
-# Audio
-pygame-ce>=2.4.0        # Reproducción de audio
-scipy>=1.11.0
-pydub>=0.25.1
-soundfile>=0.12.0
+# Dependencias opcionales (mejoran funcionalidad)
+scikit-learn>=1.3.0  # Para análisis de audio avanzado
+numba>=0.57.0        # Para aceleración de librosa
+audioread>=3.0.0     # Para más formatos de audio
 
-# Procesamiento paralelo
-threadpoolctl>=3.2.0
-joblib>=1.3.0
-
-# Dependencias opcionales (instalar solo si se necesitan)
-# librosa>=0.10.0         # Análisis avanzado de audio
-# vosk>=0.3.45            # Subtítulos con IA (modelo offline)
-# moviepy>=1.0.3          # Edición de video avanzada
-# numba>=0.58.0           # Aceleración JIT
-# matplotlib>=3.7.0       # Visualizaciones (espectrogramas)
+# Utilidades
+tqdm>=4.65.0         # Para barras de progreso
+colorama>=0.4.6      # Para colores en consola

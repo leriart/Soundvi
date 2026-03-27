@@ -837,29 +837,61 @@ class VentanaPrincipalQt6(QMainWindow):
 
     def _on_modulo_aplicado(self, type_key: str):
         """Aplica un modulo al clip seleccionado desde la sidebar."""
+        import time
+        
         if self._module_manager is None:
             self._status.showMessage("Gestor de modulos no disponible", 3000)
             return
-
+        
+        # Obtener clips seleccionados
+        clips_sel = self._panel_timeline.get_selected_clips()
+        if len(clips_sel) == 0:
+            self._status.showMessage("Selecciona un clip para aplicar el modulo", 3000)
+            return
+        
+        clip = clips_sel[0]
+        
         # Crear instancia del modulo
         try:
             mod = self._module_manager.create_module_instance(type_key)
             if mod is not None:
                 mod.habilitado = True
                 self._module_manager.add_module_instance(mod)
+                
+                # También aplicar efecto al clip seleccionado
+                effect_dict = {
+                    "type": type_key,
+                    "name": getattr(mod, 'nombre', type_key),
+                    "clip_id": clip.id,
+                    "timestamp": time.time(),
+                    "applied": True
+                }
+                
+                # Añadir configuración del módulo si existe
+                if hasattr(mod, '_config'):
+                    effect_dict.update(mod._config)
+                
+                # Aplicar al clip
+                clip.add_module(effect_dict)
+                
+                # Actualizar timeline para mostrar indicador
+                self._panel_timeline._refrescar_completo()
+                
                 self._status.showMessage(
-                    f"Modulo añadido: {mod.nombre} ({type_key})", 3000)
+                    f"Modulo '{mod.nombre}' aplicado a '{clip.name}'", 3000)
+                
                 # Refrescar sidebar para mostrar el estado actualizado
                 self._panel_sidebar.refrescar()
                 # Actualizar preview
                 self._actualizar_preview()
+                
+                print(f"[DEBUG] Módulo aplicado: {type_key} -> clip '{clip.name}'")
             else:
                 self._status.showMessage(
                     f"No se pudo crear modulo: {type_key}", 3000)
         except Exception as e:
             log.error("Error aplicando modulo %s: %s", type_key, e)
             self._status.showMessage(f"Error al aplicar modulo: {e}", 3000)
-
     def _on_media_agregar_timeline(self, ruta: str):
         """Agrega un archivo de medios al timeline en la posicion del playhead."""
         from core.video_clip import VideoClip, detect_source_type

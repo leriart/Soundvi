@@ -576,3 +576,65 @@ def detect_source_type(filepath: str) -> str:
     elif ext in audio_exts:
         return 'audio'
     return 'video'  # Por defecto
+
+    def _apply_effect(self, frame, effect):
+        """Aplica un efecto al frame."""
+        import cv2
+        import numpy as np
+        
+        effect_type = effect.get('type', 'unknown')
+        
+        if effect_type == 'waveform' or effect_type == 'waveform_module_WaveformModule':
+            # Efecto de waveform visual
+            h, w = frame.shape[:2]
+            
+            # Crear overlay de barras de audio
+            overlay = np.zeros((h, w, 3), dtype=np.uint8)
+            
+            # Dibujar barras verticales
+            bar_width = max(2, w // 40)
+            spacing = bar_width // 2
+            
+            for i in range(0, w - bar_width, bar_width + spacing):
+                # Altura aleatoria para simular audio
+                import random
+                bar_height = random.randint(h//10, h//3)
+                y1 = h//2 - bar_height//2
+                y2 = h//2 + bar_height//2
+                
+                # Color del efecto waveform (amarillo/anaranjado)
+                color = (0, 200, 255)  # BGR: amarillo
+                cv2.rectangle(overlay, (i, y1), (i + bar_width, y2), color, -1)
+            
+            # Mezclar con frame original
+            frame = cv2.addWeighted(frame, 0.7, overlay, 0.3, 0)
+            
+        elif effect_type == 'transition' or 'fade' in str(effect_type).lower():
+            # Efecto de transición (fade in/out)
+            subtype = effect.get('subtype', 'fade_in')
+            
+            # Para simplificar, aplicamos un fade general
+            if 'in' in subtype:
+                # Fade in: aplicar opacidad basada en tiempo
+                opacity = effect.get('opacity', 0.7)
+                frame = (frame.astype(np.float32) * opacity).astype(np.uint8)
+            elif 'out' in subtype:
+                # Fade out
+                opacity = effect.get('opacity', 0.7)
+                frame = (frame.astype(np.float32) * opacity).astype(np.uint8)
+                
+        elif effect_type == 'color_grading' or effect_type == 'color_grading_module_ColorGradingModule':
+            # Ajuste de color simple
+            brightness = effect.get('brightness', 10)
+            contrast = effect.get('contrast', 1.1)
+            
+            frame = cv2.convertScaleAbs(frame, alpha=contrast, beta=brightness)
+            
+        elif effect_type == 'blur' or effect_type == 'blur_module_BlurModule':
+            # Desenfoque simple
+            blur_amount = effect.get('amount', 5)
+            if blur_amount > 0:
+                blur_amount = blur_amount if blur_amount % 2 == 1 else blur_amount + 1
+                frame = cv2.GaussianBlur(frame, (blur_amount, blur_amount), 0)
+        
+        return frame

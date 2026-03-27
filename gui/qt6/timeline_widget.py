@@ -627,12 +627,7 @@ class TimelineScene(QGraphicsScene):
             self._snap_line.setZValue(999)
             self.addItem(self._snap_line)
         try:
-            # Check if object is deleted using sip directly or catching the error
-            import sip
-            if sip.isdeleted(self._snap_line):
-                self._snap_line = None
-                return self.update_snap_line(x, height)
-                
+            # Verificacion simple nativa en Python/Qt para evitar module sip no encontrado
             if x is not None:
                 h = height if height > 0 else (self.sceneRect().height() if self.sceneRect().height() > 0 else 1000)
                 self._snap_line.setLine(x, 0, x, h)

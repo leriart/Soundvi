@@ -1,0 +1,172 @@
+{
+  "_comentario": "Configuracion de perfiles de Soundvi 5.0. Cada perfil define que modulos y paneles estan disponibles.",
+  "perfiles": {
+    "basico": {
+      "nombre": "Novato",
+      "descripcion": "Interfaz simplificada con guías paso a paso. Solo las herramientas esenciales.",
+      "icono": "🎬",
+      "modulos_permitidos": {
+        "tipos": ["video"],
+        "categorias": ["filters", "generators"],
+        "clases_especificas": ["CropModule", "SpeedModule", "TextGeneratorModule"]
+      },
+      "paneles_visibles": ["preview", "timeline", "media_library"],
+      "paneles_ocultos": ["inspector", "audio_mixer", "modules_sidebar", "keyframes", "transitions", "scripting"],
+      "funciones": {
+        "corte": true,
+        "trim": true,
+        "transiciones": false,
+        "efectos_video": false,
+        "audio_reactivo": false,
+        "keyframes": false,
+        "color_grading": false,
+        "subtitulos_ia": false,
+        "gpu": false,
+        "exportacion_avanzada": false
+      },
+      "menu_items_ocultos": ["Modules", "Audio Reactivo", "GPU Settings", "Keyframes"],
+      "max_pistas_audio": 1,
+      "max_capas_video": 1,
+      "ui_config": {
+        "font_size_base": 12,
+        "toolbar_icon_size": 32,
+        "toolbar_text_visible": true,
+        "mostrar_ayuda_contextual": true,
+        "animaciones_ui": true,
+        "confirmar_acciones_destructivas": true,
+        "mostrar_wizard_inicio": true,
+        "mostrar_panel_primeros_pasos": true,
+        "tooltips_detallados": true,
+        "barra_estado_detallada": true,
+        "simplificar_menus": true
+      }
+    },
+    "creador": {
+      "nombre": "Intermedio",
+      "descripcion": "Para creadores de contenido: transiciones, efectos, audio y subtítulos.",
+      "icono": "🎨",
+      "modulos_permitidos": {
+        "tipos": ["video", "audio", "text"],
+        "categorias": ["effects", "filters", "generators", "visualization", "subtitles"],
+        "clases_especificas": [
+          "CropModule", "SpeedModule", "TextGeneratorModule", "ShapeModule",
+          "BlurModule", "TransitionModule", "ColorGradingModule",
+          "WaveformModule", "SpectrumModule", "VUMeterModule",
+          "SubtitlesModule", "SubAutoModule"
+        ]
+      },
+      "paneles_visibles": ["preview", "timeline", "media_library", "modules_sidebar", "inspector", "transitions"],
+      "paneles_ocultos": ["audio_mixer", "scripting"],
+      "funciones": {
+        "corte": true,
+        "trim": true,
+        "transiciones": true,
+        "efectos_video": true,
+        "audio_reactivo": false,
+        "keyframes": false,
+        "color_grading": true,
+        "subtitulos_ia": true,
+        "gpu": false,
+        "exportacion_avanzada": false
+      },
+      "menu_items_ocultos": ["GPU Settings", "Keyframes"],
+      "max_pistas_audio": 3,
+      "max_capas_video": 5,
+      "ui_config": {
+        "font_size_base": 11,
+        "toolbar_icon_size": 28,
+        "toolbar_text_visible": true,
+        "mostrar_ayuda_contextual": false,
+        "animaciones_ui": true,
+        "confirmar_acciones_destructivas": true,
+        "mostrar_wizard_inicio": false,
+        "mostrar_panel_primeros_pasos": false,
+        "tooltips_detallados": false,
+        "barra_estado_detallada": false,
+        "simplificar_menus": false
+      }
+    },
+    "profesional": {
+      "nombre": "Profesional",
+      "descripcion": "Todo desbloqueado. Keyframes, audio reactivo, GPU, sin restricciones.",
+      "icono": "⚡",
+      "modulos_permitidos": {
+        "tipos": ["video", "audio", "text", "utility", "export"],
+        "categorias": ["*"],
+        "clases_especificas": ["*"]
+      },
+      "paneles_visibles": ["*"],
+      "paneles_ocultos": [],
+      "funciones": {
+        "corte": true,
+        "trim": true,
+        "transiciones": true,
+        "efectos_video": true,
+        "audio_reactivo": true,
+        "keyframes": true,
+        "color_grading": true,
+        "subtitulos_ia": true,
+        "gpu": true,
+        "exportacion_avanzada": true
+      },
+      "menu_items_ocultos": [],
+      "max_pistas_audio": -1,
+      "max_capas_video": -1,
+      "ui_config": {
+        "font_size_base": 10,
+        "toolbar_icon_size": 24,
+        "toolbar_text_visible": false,
+        "mostrar_ayuda_contextual": false,
+        "animaciones_ui": false,
+        "confirmar_acciones_destructivas": false,
+        "mostrar_wizard_inicio": false,
+        "mostrar_panel_primeros_pasos": false,
+        "tooltips_detallados": false,
+        "barra_estado_detallada": false,
+        "simplificar_menus": false
+      }
+    },
+    "personalizado": {
+      "nombre": "Personalizado",
+      "descripcion": "Tú decides qué módulos y paneles usar. Control total.",
+      "icono": "⚙️",
+      "modulos_permitidos": {
+        "tipos": ["video", "audio", "text", "utility", "export"],
+        "categorias": ["*"],
+        "clases_especificas": []
+      },
+      "paneles_visibles": ["preview", "timeline", "media_library", "modules_sidebar", "inspector"],
+      "paneles_ocultos": [],
+      "funciones": {
+        "corte": true,
+        "trim": true,
+        "transiciones": true,
+        "efectos_video": true,
+        "audio_reactivo": true,
+        "keyframes": true,
+        "color_grading": true,
+        "subtitulos_ia": true,
+        "gpu": true,
+        "exportacion_avanzada": true
+      },
+      "menu_items_ocultos": [],
+      "max_pistas_audio": -1,
+      "max_capas_video": -1,
+      "ui_config": {
+        "font_size_base": 11,
+        "toolbar_icon_size": 28,
+        "toolbar_text_visible": true,
+        "mostrar_ayuda_contextual": false,
+        "animaciones_ui": true,
+        "confirmar_acciones_destructivas": true,
+        "mostrar_wizard_inicio": false,
+        "mostrar_panel_primeros_pasos": false,
+        "tooltips_detallados": false,
+        "barra_estado_detallada": false,
+        "simplificar_menus": false
+      }
+    }
+  },
+  "perfil_defecto": "creador",
+  "version_esquema": "2.0"
+}

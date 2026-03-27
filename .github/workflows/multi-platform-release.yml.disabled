@@ -1,0 +1,287 @@
+name: Multi-Platform Release Builder
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version del release (ej: 4.8.0)'
+        required: true
+        default: '4.8.0'
+        type: string
+      platforms:
+        description: 'Plataformas a construir'
+        required: true
+        default: 'windows,linux'
+        type: choice
+        options:
+          - windows
+          - linux
+          - windows,linux
+          - windows,linux,macos
+      mode:
+        description: 'Modo de build'
+        required: true
+        default: 'onefile'
+        type: choice
+        options:
+          - onefile
+          - onedir
+      create_release:
+        description: 'Crear release en GitHub?'
+        required: true
+        default: true
+        type: boolean
+      prerelease:
+        description: 'Es un prerelease?'
+        required: true
+        default: false
+        type: boolean
+
+permissions:
+  contents: write
+
+jobs:
+  build-windows:
+    if: contains(inputs.platforms, 'windows')
+    runs-on: windows-latest
+    name: Build Windows
+    
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v5
+    
+    - name: Setup Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.11'
+        cache: pip
+    
+    - name: Install FFmpeg (Windows)
+      run: |
+        choco install ffmpeg --no-progress
+        echo "C:\ProgramData\chocolatey\bin" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+    
+    - name: Install Python dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+        pip install pyinstaller
+        # Instalar dependencias opcionales que pueden faltar
+        pip install librosa moviepy pydub soundfile numba
+        echo "=== Dependencias instaladas ==="
+        pip list | findstr /i "PyQt numpy opencv librosa moviepy pyinstaller"
+    
+    - name: Build Windows executable
+      run: |
+        $buildArgs = "--platform windows --version ${{ inputs.version }} --clean"
+        if ("${{ inputs.mode }}" -eq "onefile") { $buildArgs += " --onefile" }
+        Write-Host "Ejecutando: python build.py $buildArgs"
+        python build.py $buildArgs
+        if ($LASTEXITCODE -ne 0) { exit 1 }
+        Write-Host "=== Verificando archivos generados ==="
+        Get-ChildItem -Path . -Recurse -Filter "dist" -Directory | ForEach-Object { Get-ChildItem $_.FullName }
+        if (Test-Path "dist") {
+          Get-ChildItem -Path "dist" -Recurse -File | ForEach-Object { Write-Host "  - $($_.FullName)" }
+        }
+    
+    - name: Upload Windows artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: soundvi-windows-${{ inputs.version }}
+        path: dist/*
+        retention-days: 1
+
+  build-linux:
+    if: contains(inputs.platforms, 'linux')
+    runs-on: ubuntu-latest
+    name: Build Linux
+    
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v5
+    
+    - name: Setup Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.11'
+        cache: pip
+    
+    - name: Install system dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y ffmpeg libxcb-cursor0 libportaudio2 portaudio19-dev
+    
+    - name: Install Python dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+        pip install pyinstaller
+        # Instalar dependencias opcionales que pueden faltar
+        pip install librosa moviepy pydub soundfile numba || true
+        echo "=== Dependencias instaladas ==="
+        pip list | grep -E "(PyQt|numpy|opencv|librosa|moviepy|pyinstaller)"
+    
+    - name: Build Linux executable
+      run: |
+        args="--platform linux --version ${{ inputs.version }} --clean"
+        if [ "${{ inputs.mode }}" = "onefile" ]; then
+          args="$args --onefile"
+        fi
+        echo "Ejecutando: python build.py $args"
+        python build.py $args || exit 1
+        echo "=== Verificando archivos generados ==="
+        find . -name "dist" -type d | xargs ls -la 2>/dev/null || true
+        find dist/ -type f 2>/dev/null | while read f; do echo "  - $f"; done || true
+    
+    - name: Upload Linux artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: soundvi-linux-${{ inputs.version }}
+        path: dist/*
+        retention-days: 1
+
+  build-macos:
+    if: contains(inputs.platforms, 'macos')
+    runs-on: macos-latest
+    name: Build macOS
+    
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v5
+    
+    - name: Setup Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.11'
+        cache: pip
+    
+    - name: Install FFmpeg (macOS)
+      run: brew install ffmpeg
+    
+    - name: Install Python dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+        pip install pyinstaller
+    
+    - name: Build macOS executable
+      run: |
+        args="--platform macos --version ${{ inputs.version }} --clean"
+        if [ "${{ inputs.mode }}" = "onefile" ]; then
+          args="$args --onefile"
+        fi
+        echo "Ejecutando: python build.py $args"
+        python build.py $args
+    
+    - name: Upload macOS artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: soundvi-macos-${{ inputs.version }}
+        path: dist/*
+        retention-days: 1
+
+  create-release:
+    needs: [build-windows, build-linux, build-macos]
+    if: ${{ inputs.create_release }}
+    runs-on: ubuntu-latest
+    name: Create Release
+    permissions:
+      contents: write
+    
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v5
+    
+    - name: Download all artifacts
+      run: |
+        mkdir -p release_artifacts
+      
+    - name: Download Windows artifacts
+      if: contains(inputs.platforms, 'windows')
+      uses: actions/download-artifact@v4
+      with:
+        name: soundvi-windows-${{ inputs.version }}
+        path: release_artifacts/windows
+    
+    - name: Download Linux artifacts
+      if: contains(inputs.platforms, 'linux')
+      uses: actions/download-artifact@v4
+      with:
+        name: soundvi-linux-${{ inputs.version }}
+        path: release_artifacts/linux
+    
+    - name: Download macOS artifacts
+      if: contains(inputs.platforms, 'macos')
+      uses: actions/download-artifact@v4
+      with:
+        name: soundvi-macos-${{ inputs.version }}
+        path: release_artifacts/macos
+    
+    - name: List artifacts for debugging
+      run: |
+        echo "=== Artifacts disponibles ==="
+        find release_artifacts -type f -name "*" | while read file; do
+          size=$(du -h "$file" | cut -f1)
+          echo "- $(basename "$file") ($size)"
+        done
+    
+    - name: Create Release
+      uses: softprops/action-gh-release@v2
+      with:
+        name: Soundvi v${{ inputs.version }}
+        tag_name: v${{ inputs.version }}
+        body: |
+          ## Soundvi v${{ inputs.version }}
+          
+          ### 🚀 Build Multiplataforma
+          Ejecutables generados para: ${{ inputs.platforms }}
+          
+          ### 📦 Contenido del Release
+          ```bash
+          # Windows
+          Soundvi-${{ inputs.version }}.exe          # Ejecutable principal
+          
+          # Linux  
+          Soundvi-${{ inputs.version }}              # Ejecutable ELF
+          # O AppImage si se configuró
+          
+          # macOS
+          Soundvi-${{ inputs.version }}.app          # Bundle de aplicación
+          ```
+          
+          ### 🛠️ Cómo Usar
+          1. **Descarga** el ejecutable para tu sistema operativo
+          2. **Ejecuta** directamente (no requiere Python instalado)
+          3. **O instala desde código fuente:**
+          ```bash
+          pip install -r requirements.txt
+          python main.py --qt6
+          ```
+          
+          ### 📊 Detalles Técnicos
+          - **Modo:** ${{ inputs.mode }}
+          - **Plataformas:** ${{ inputs.platforms }}
+          - **Python:** 3.11
+          - **GUI:** PyQt6 completa
+          - **Build:** PyInstaller optimizado
+          
+          ### 🔗 Más Información
+          - [Repositorio](https://github.com/leriart/Soundvi)
+          - [Documentación](https://github.com/leriart/Soundvi#readme)
+          - [Issues](https://github.com/leriart/Soundvi/issues)
+        draft: false
+        prerelease: ${{ inputs.prerelease }}
+        files: |
+          release_artifacts/**/*
+    
+    - name: Generate release summary
+      run: |
+        echo "## Release v${{ inputs.version }} Created Successfully" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "### Platforms Built:" >> $GITHUB_STEP_SUMMARY
+        echo "- ${{ inputs.platforms }}" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "### Mode: ${{ inputs.mode }}" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "### Release Link:" >> $GITHUB_STEP_SUMMARY
+        echo "https://github.com/leriart/Soundvi/releases/tag/v${{ inputs.version }}" >> $GITHUB_STEP_SUMMARY

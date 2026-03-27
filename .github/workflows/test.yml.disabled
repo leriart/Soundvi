@@ -1,0 +1,90 @@
+name: Tests
+
+on:
+  workflow_dispatch:
+    inputs:
+      python_version:
+        description: 'Version de Python'
+        required: true
+        default: '3.11'
+        type: choice
+        options:
+          - '3.10'
+          - '3.11'
+          - '3.12'
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+
+    - name: Setup Python ${{ inputs.python_version }}
+      uses: actions/setup-python@v5
+      with:
+        python-version: ${{ inputs.python_version }}
+        cache: pip
+
+    - name: Install system dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y ffmpeg libxcb-cursor0 xvfb
+
+    - name: Install Python dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+        pip install pytest pytest-cov
+
+    - name: Verify imports
+      run: |
+        python -c "from core.profiles import ProfileManager; pm = ProfileManager(); pm.cargar(); print('ProfileManager OK')"
+        python -c "from gui.qt6.base import PanelBase, FabricaWidgets; print('Qt6 base OK')"
+        python -c "from gui.qt6.theme import AdministradorTemas, DARKLY; print('Qt6 theme OK')"
+        python -c "from gui.qt6.plugin_system import RegistroPlugins; print('Plugin system OK')"
+
+    - name: Test profile system
+      run: |
+        python -c "
+        from core.profiles import ProfileManager
+        pm = ProfileManager()
+        assert pm.cargar(), 'Fallo cargando perfiles'
+        assert 'basico' in pm.perfiles_disponibles
+        assert 'creador' in pm.perfiles_disponibles
+        assert 'profesional' in pm.perfiles_disponibles
+        assert 'personalizado' in pm.perfiles_disponibles
+        pm.seleccionar_perfil('basico')
+        assert pm.perfil_activo.clave == 'basico'
+        assert pm.funcion_habilitada('corte') == True
+        assert pm.funcion_habilitada('keyframes') == False
+        pm.seleccionar_perfil('profesional')
+        assert pm.funcion_habilitada('keyframes') == True
+        print('Todos los tests de perfiles pasaron.')
+        "
+
+    - name: Test Qt6 GUI initialization (headless)
+      run: |
+        xvfb-run python -c "
+        import sys
+        from PyQt6.QtWidgets import QApplication
+        app = QApplication(sys.argv)
+        from core.profiles import ProfileManager
+        from gui.qt6.theme import AdministradorTemas
+        from gui.qt6.main_window import VentanaPrincipalQt6
+        pm = ProfileManager()
+        pm.cargar()
+        pm.seleccionar_perfil('profesional')
+        temas = AdministradorTemas()
+        temas.aplicar_tema('darkly', app)
+        ventana = VentanaPrincipalQt6(pm)
+        ventana.show()
+        app.processEvents()
+        assert ventana.isVisible()
+        ventana.close()
+        print('GUI Qt6 inicializada correctamente.')
+        "
+
+    - name: Generate icons
+      run: python scripts/generate_icons.py

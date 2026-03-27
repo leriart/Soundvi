@@ -1,0 +1,309 @@
+name: MASTER BUILD - Soundvi CI/CD
+
+on:
+  workflow_dispatch:
+    inputs:
+      action:
+        description: 'What do you want to do?'
+        required: true
+        default: 'build'
+        type: choice
+        options:
+          - build
+          - build-and-release
+          - test
+      platform:
+        description: 'Platform to build for'
+        required: true
+        default: 'linux'
+        type: choice
+        options:
+          - linux
+          - windows
+          - macos
+      version:
+        description: 'Version number (e.g., 4.8.0)'
+        required: true
+        default: '4.8.0'
+        type: string
+      mode:
+        description: 'Build mode'
+        required: true
+        default: 'onefile'
+        type: choice
+        options:
+          - onefile
+          - onedir
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+  PYTHON_VERSION: '3.11'
+
+jobs:
+  setup:
+    runs-on: ubuntu-latest
+    outputs:
+      should_build: ${{ steps.check.outputs.should_build }}
+      should_test: ${{ steps.check.outputs.should_test }}
+      should_release: ${{ steps.check.outputs.should_release }}
+    
+    steps:
+    - name: Check action type
+      id: check
+      run: |
+        echo "Action requested: ${{ inputs.action }}"
+        echo "should_build=${{ inputs.action == 'build' || inputs.action == 'build-and-release' }}" >> $GITHUB_OUTPUT
+        echo "should_test=${{ inputs.action == 'test' }}" >> $GITHUB_OUTPUT
+        echo "should_release=${{ inputs.action == 'build-and-release' }}" >> $GITHUB_OUTPUT
+
+  build:
+    needs: setup
+    if: needs.setup.outputs.should_build == 'true'
+    runs-on: ${{ inputs.platform == 'windows' && 'windows-latest' || inputs.platform == 'macos' && 'macos-latest' || 'ubuntu-latest' }}
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+    
+    - name: Setup Python ${{ env.PYTHON_VERSION }}
+      uses: actions/setup-python@v5
+      with:
+        python-version: ${{ env.PYTHON_VERSION }}
+        cache: pip
+    
+    - name: Create virtual environment
+      run: |
+        python -m venv venv
+        if [ "${{ runner.os }}" = "Windows" ]; then
+          echo "VENV_PATH=venv\Scripts" >> $GITHUB_ENV
+        else
+          echo "VENV_PATH=venv/bin" >> $GITHUB_ENV
+        fi
+    
+    - name: Install system dependencies
+      run: |
+        if [ "${{ runner.os }}" = "Linux" ]; then
+          sudo apt-get update
+          sudo apt-get install -y ffmpeg libxcb-cursor0
+        elif [ "${{ runner.os }}" = "macOS" ]; then
+          brew install ffmpeg
+        elif [ "${{ runner.os }}" = "Windows" ]; then
+          choco install ffmpeg --no-progress
+          echo "C:\ProgramData\chocolatey\bin" >> $env:GITHUB_PATH
+        fi
+    
+    - name: Install Python dependencies
+      run: |
+        source $VENV_PATH/activate
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+        pip install pyinstaller
+        # Install optional dependencies
+        pip install librosa moviepy pydub soundfile numba || echo "Optional deps failed"
+        echo "=== Installed packages ==="
+        pip list | grep -E "(PyQt|numpy|opencv|librosa|moviepy|pyinstaller)" || true
+    
+    - name: Run build
+      run: |
+        source $VENV_PATH/activate
+        echo "=== Building Soundvi ==="
+        echo "Platform: ${{ inputs.platform }}"
+        echo "Version: ${{ inputs.version }}"
+        echo "Mode: ${{ inputs.mode }}"
+        
+        # Build command
+        CMD="python build.py --platform ${{ inputs.platform }} --version ${{ inputs.version }} --clean"
+        if [ "${{ inputs.mode }}" = "onefile" ]; then
+          CMD="$CMD --onefile"
+        fi
+        
+        echo "Command: $CMD"
+        eval $CMD
+    
+    - name: Verify build output
+      run: |
+        echo "=== Build verification ==="
+        if [ -d "dist" ]; then
+          echo "SUCCESS: dist/ directory created successfully"
+          echo "Files in dist/:"
+          find dist -type f | while read f; do
+            if command -v du >/dev/null 2>&1; then
+              size=$(du -h "$f" 2>/dev/null | cut -f1 || echo "N/A")
+              echo "  - $f ($size)"
+            else
+              echo "  - $f"
+            fi
+          done
+          
+          # Generate checksums
+          (cd dist && sha256sum * > SHA256SUMS 2>/dev/null || true)
+          echo "SUCCESS: Checksums generated"
+        else
+          echo "ERROR: dist/ directory not found!"
+          echo "Current directory:"
+          pwd
+          ls -la
+          exit 1
+        fi
+    
+    - name: Upload artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: soundvi-${{ inputs.platform }}-${{ inputs.version }}-${{ inputs.mode }}
+        path: dist/
+        if-no-files-found: error
+
+  test:
+    needs: setup
+    if: needs.setup.outputs.should_test == 'true'
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+    
+    - name: Setup Python ${{ env.PYTHON_VERSION }}
+      uses: actions/setup-python@v5
+      with:
+        python-version: ${{ env.PYTHON_VERSION }}
+        cache: pip
+    
+    - name: Create virtual environment
+      run: |
+        python -m venv venv
+        source venv/bin/activate
+    
+    - name: Install dependencies
+      run: |
+        source venv/bin/activate
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+        pip install pytest pytest-cov
+    
+    - name: Run tests
+      run: |
+        source venv/bin/activate
+        echo "=== Running tests ==="
+        
+        # Test imports
+        python -c "
+        try:
+            from core.profiles import ProfileManager
+            print('SUCCESS: ProfileManager import OK')
+            
+            from gui.qt6.theme import AdministradorTemas
+            print('SUCCESS: ThemeManager import OK')
+            
+            print('SUCCESS: All imports successful')
+        except Exception as e:
+            print(f'ERROR: Import error: {e}')
+            raise
+        "
+        
+        # Test profile system
+        python -c "
+        from core.profiles import ProfileManager
+        pm = ProfileManager()
+        pm.cargar()
+        assert 'basico' in pm.perfiles_disponibles
+        assert 'creador' in pm.perfiles_disponibles
+        assert 'profesional' in pm.perfiles_disponibles
+        print('SUCCESS: Profile system test passed')
+        "
+
+  release:
+    needs: [build, test]
+    if: needs.setup.outputs.should_release == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+    
+    - name: Download build artifacts
+      run: |
+        mkdir -p release_files
+      
+    - name: Download artifact
+      uses: actions/download-artifact@v4
+      with:
+        name: soundvi-${{ inputs.platform }}-${{ inputs.version }}-${{ inputs.mode }}
+        path: release_files
+    
+    - name: Create GitHub Release
+      uses: softprops/action-gh-release@v2
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        tag_name: v${{ inputs.version }}
+        name: Soundvi v${{ inputs.version }} (${{ inputs.platform }})
+        body: |
+          ## Soundvi v${{ inputs.version }}
+          
+          ### Build Details
+          - **Platform:** ${{ inputs.platform }}
+          - **Mode:** ${{ inputs.mode }}
+          - **Build Date:** ${{ github.workflow_run.created_at }}
+          - **Python:** ${{ env.PYTHON_VERSION }}
+          
+          ### Installation
+          1. **Download** the executable for your platform
+          2. **Run directly** (no Python required)
+          3. **Or install from source:**
+          ```bash
+          pip install -r requirements.txt
+          python main.py --qt6
+          ```
+          
+          ### Build Command
+          ```bash
+          python build.py --platform ${{ inputs.platform }} --version ${{ inputs.version }} --clean ${{ inputs.mode == 'onefile' && '--onefile' || '' }}
+          ```
+          
+          ### Links
+          - [Repository](https://github.com/leriart/Soundvi)
+          - [Documentation](https://github.com/leriart/Soundvi#readme)
+          - [Issues](https://github.com/leriart/Soundvi/issues)
+          
+          ---
+          
+          *Built automatically with GitHub Actions CI/CD*
+        draft: false
+        prerelease: ${{ !contains(inputs.version, 'stable') }}
+        files: release_files/**/*
+
+  summary:
+    needs: [build, test, release]
+    runs-on: ubuntu-latest
+    if: always()
+    
+    steps:
+    - name: Generate summary
+      run: |
+        echo "## Soundvi CI/CD Summary" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "### Job Results:" >> $GITHUB_STEP_SUMMARY
+        echo "- **Build:** ${{ needs.build.result || 'skipped' }}" >> $GITHUB_STEP_SUMMARY
+        echo "- **Test:** ${{ needs.test.result || 'skipped' }}" >> $GITHUB_STEP_SUMMARY
+        echo "- **Release:** ${{ needs.release.result || 'skipped' }}" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "### Configuration:" >> $GITHUB_STEP_SUMMARY
+        echo "- **Action:** ${{ inputs.action }}" >> $GITHUB_STEP_SUMMARY
+        echo "- **Platform:** ${{ inputs.platform }}" >> $GITHUB_STEP_SUMMARY
+        echo "- **Version:** ${{ inputs.version }}" >> $GITHUB_STEP_SUMMARY
+        echo "- **Mode:** ${{ inputs.mode }}" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        
+        if [ "${{ needs.build.result }}" = "success" ]; then
+          echo "SUCCESS: **Build successful!**" >> $GITHUB_STEP_SUMMARY
+          echo "Artifacts are available for download." >> $GITHUB_STEP_SUMMARY
+        elif [ "${{ needs.build.result }}" = "failure" ]; then
+          echo "ERROR: **Build failed.** Check the build logs for details." >> $GITHUB_STEP_SUMMARY
+        fi
+        
+        if [ "${{ needs.release.result }}" = "success" ]; then
+          echo "SUCCESS: **Release created!**" >> $GITHUB_STEP_SUMMARY
+          echo "Download from: https://github.com/leriart/Soundvi/releases/tag/v${{ inputs.version }}" >> $GITHUB_STEP_SUMMARY
+        fi

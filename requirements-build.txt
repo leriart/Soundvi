@@ -1,0 +1,2 @@
+# Dependencias para generar ejecutables
+pyinstaller>=6.0

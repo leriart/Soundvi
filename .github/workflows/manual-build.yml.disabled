@@ -1,0 +1,110 @@
+name: Manual Build
+
+on:
+  workflow_dispatch:
+    inputs:
+      platform:
+        description: 'Plataforma objetivo'
+        required: true
+        default: 'windows'
+        type: choice
+        options:
+          - windows
+          - linux
+          - macos
+      mode:
+        description: 'Modo de build'
+        required: true
+        default: 'onefile'
+        type: choice
+        options:
+          - onefile
+          - onedir
+      version:
+        description: 'Versión del build'
+        required: false
+        default: '5.1.0'
+        type: string
+      clean:
+        description: 'Limpiar builds previos'
+        required: true
+        default: true
+        type: boolean
+      debug:
+        description: 'Modo debug'
+        required: true
+        default: false
+        type: boolean
+
+jobs:
+  build:
+    runs-on: ${{ inputs.platform == 'windows' && 'windows-latest' || inputs.platform == 'macos' && 'macos-latest' || 'ubuntu-latest' }}
+    
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+
+    - name: Setup Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.11'
+        cache: pip
+
+    - name: Install system dependencies
+      run: |
+        if [ "${{ inputs.platform }}" = "linux" ]; then
+          sudo apt-get update
+          sudo apt-get install -y ffmpeg libxcb-cursor0
+        elif [ "${{ inputs.platform }}" = "macos" ]; then
+          brew install ffmpeg
+        elif [ "${{ inputs.platform }}" = "windows" ]; then
+          choco install ffmpeg --no-progress
+          echo "C:\ProgramData\chocolatey\bin" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+        fi
+
+    - name: Install Python dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+        pip install pyinstaller
+
+    - name: Build executable
+      run: |
+        BUILD_ARGS="--platform ${{ inputs.platform }} --version ${{ inputs.version }}"
+        
+        if [ "${{ inputs.mode }}" = "onefile" ]; then
+          BUILD_ARGS="$BUILD_ARGS --onefile"
+        fi
+        
+        if ${{ inputs.clean }}; then
+          BUILD_ARGS="$BUILD_ARGS --clean"
+        fi
+        
+        if ${{ inputs.debug }}; then
+          BUILD_ARGS="$BUILD_ARGS --debug"
+        fi
+        
+        echo "Ejecutando: python build.py $BUILD_ARGS"
+        python build.py $BUILD_ARGS
+
+    - name: Upload artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: soundvi-${{ inputs.platform }}-${{ inputs.mode }}-${{ inputs.version }}
+        path: dist/
+        retention-days: 30
+
+    - name: Generate build info
+      run: |
+        echo "## Build Information" >> $GITHUB_STEP_SUMMARY
+        echo "- **Plataforma:** ${{ inputs.platform }}" >> $GITHUB_STEP_SUMMARY
+        echo "- **Modo:** ${{ inputs.mode }}" >> $GITHUB_STEP_SUMMARY
+        echo "- **Versión:** ${{ inputs.version }}" >> $GITHUB_STEP_SUMMARY
+        echo "- **Clean:** ${{ inputs.clean }}" >> $GITHUB_STEP_SUMMARY
+        echo "- **Debug:** ${{ inputs.debug }}" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "### Archivos generados:" >> $GITHUB_STEP_SUMMARY
+        find dist/ -type f -name "*" | while read file; do
+          size=$(du -h "$file" | cut -f1)
+          echo "- \`$(basename "$file")\` ($size)" >> $GITHUB_STEP_SUMMARY
+        done

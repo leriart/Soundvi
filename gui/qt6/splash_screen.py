@@ -111,12 +111,12 @@ class SoundviSplashScreen(QSplashScreen):
         # Subtitulo
         import random
         subtitulos = [
-            "v5.0 -- Editor de video para zombies con buen gusto",
-            "v5.0 -- Donde los bugs son features™",
-            "v5.0 -- Probablemente funcione (no garantizado)",
-            "v5.0 -- Hecho con café y desesperación",
-            "v5.0 -- 'It compiles, ship it' Edition",
-            "v5.0 -- May contain traces of sanity",
+            "v4.8 -- Editor de video para zombies con buen gusto",
+            "v4.8 -- Donde los bugs son features™",
+            "v4.8 -- Probablemente funcione (no garantizado)",
+            "v4.8 -- Hecho con café y desesperación",
+            "v4.8 -- 'It compiles, ship it' Edition",
+            "v4.8 -- May contain traces of sanity",
         ]
         font_sub = QFont("Arial", 11)
         painter.setFont(font_sub)

@@ -1,5 +1,5 @@
 {
-  "_comentario": "Configuracion de perfiles de Soundvi 5.0. Cada perfil define que modulos y paneles estan disponibles.",
+  "_comentario": "Configuracion de perfiles de Soundvi 4.8. Cada perfil define que modulos y paneles estan disponibles.",
   "perfiles": {
     "basico": {
       "nombre": "Novato",

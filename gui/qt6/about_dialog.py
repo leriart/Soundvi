@@ -79,7 +79,7 @@ class AboutDialog(QDialog):
         lbl_titulo.setStyleSheet("color: #E8842C;")
         info_layout.addWidget(lbl_titulo)
 
-        lbl_version = QLabel("v5.1 — Edición 'It compiles, ship it' 27A1")
+        lbl_version = QLabel("v4.8 — Edición 'It compiles, ship it' 27A1")
         lbl_version.setFont(QFont("Consolas", 10))
         lbl_version.setStyleSheet("color: #8CD47E;")
         info_layout.addWidget(lbl_version)

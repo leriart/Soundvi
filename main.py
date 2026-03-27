@@ -130,7 +130,7 @@ def run_app(perfil: str = ""):
 
     app = QApplication(sys.argv)
     app.setApplicationName("Soundvi")
-    app.setApplicationVersion("5.1")
+    app.setApplicationVersion("4.8")
     app.setOrganizationName("Soundvi")
 
     # Inicializar sistema de configuracion persistente
@@ -222,7 +222,7 @@ Ejemplos:
                         choices=["darkly", "claro"],
                         help="Tema visual")
     parser.add_argument("--version", action="version",
-                        version="Soundvi v5.1")
+                        version="Soundvi v4.8")
     return parser.parse_args()
 
 # -----------------------------------------------------------------------------

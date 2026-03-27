@@ -1,4 +1,4 @@
-# Soundvi v5.1 -- Dependencias
+# Soundvi v4.8 -- Dependencias
 # ==============================
 
 # GUI

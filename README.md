@@ -414,7 +414,7 @@ python build.py --platform windows
 python build.py --platform linux
 
 # Build con version especifica
-python build.py --version 5.1.0
+python build.py --version 4.8.0
 
 # Ejecutable unico (mas portable, mas lento en iniciar)
 python build.py --onefile

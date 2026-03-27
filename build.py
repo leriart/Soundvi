@@ -10,7 +10,7 @@ Uso:
     python build.py                       # Build para la plataforma actual
     python build.py --platform windows    # Build para Windows
     python build.py --platform linux      # Build para Linux
-    python build.py --version 5.1.0       # Con version custom
+    python build.py --version 4.8.0       # Con version custom
     python build.py --onefile             # Ejecutable unico
     python build.py --clean               # Limpiar build previos
     python build.py --appimage            # (Linux) Generar AppImage
@@ -31,7 +31,7 @@ _RAIZ = os.path.dirname(os.path.abspath(__file__))
 _DIST = os.path.join(_RAIZ, "dist")
 _BUILD = os.path.join(_RAIZ, "build")
 
-VERSION_DEFECTO = "5.1.0"
+VERSION_DEFECTO = "4.8.0"
 NOMBRE_APP = "Soundvi"
 
 # ---------------------------------------------------------------------------
@@ -471,7 +471,7 @@ Ejemplos:
   python build.py --platform linux        # Build para Linux
   python build.py --onefile               # Ejecutable único
   python build.py --appimage              # Generar AppImage (Linux)
-  python build.py --version 5.1.0         # Con versión específica
+  python build.py --version 4.8.0         # Con versión específica
   python build.py --clean                 # Solo limpiar
         """
     )

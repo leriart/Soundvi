@@ -28,7 +28,7 @@ log = logging.getLogger("soundvi.config")
 
 DEFAULT_CONFIG: Dict[str, Any] = {
     # -- Aplicacion --
-    "version": "5.1",
+    "version": "4.8",
     "video_library": "moviepy",
     "theme": "darkly",
     "idioma": "Espanol",

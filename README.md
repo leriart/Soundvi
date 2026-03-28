@@ -56,13 +56,6 @@ proyecto.soundvi (cifrado con PBKDF2-HMAC-SHA256 + XOR)
         └── actions.json       # Historial undo/redo
 ```
 
-### Cifrado
-
-- **Algoritmo**: XOR con clave derivada de PBKDF2-HMAC-SHA256 (100,000 iteraciones)
-- **Integridad**: HMAC-SHA256 para verificar que los datos no fueron alterados
-- **Salt**: 16 bytes aleatorios por archivo
-- **Header**: `SNDV` (magic bytes) + versión + salt + HMAC + datos cifrados
-
 ### Uso
 
 ```python

@@ -336,13 +336,15 @@ class Timeline:
             new_start = self._snap_time(new_start, clip_id)
         
         if new_track_index is not None and new_track_index != current_track.index:
-            # Mover a otro track
-            current_track.remove_clip(clip_id)
-            clip.start_time = new_start
+            # Mover a otro track - validate track type compatibility
             target_track = self.get_track(new_track_index)
             if target_track is None:
-                current_track.add_clip(clip)
                 return False
+            # Only allow moving between tracks of the same type
+            if target_track.track_type != current_track.track_type:
+                return False
+            current_track.remove_clip(clip_id)
+            clip.start_time = new_start
             if not target_track.add_clip(clip):
                 current_track.add_clip(clip)
                 return False

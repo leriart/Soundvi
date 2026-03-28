@@ -523,9 +523,6 @@ class VentanaPrincipalQt6(QMainWindow):
         # que los cambios de parámetros (pos_x, pos_y, etc.) se apliquen.
         self._panel_inspector.preview_requested.connect(self._invalidar_cache_y_preview)
 
-        # Inspector -> Apply Changes: forzar refresco completo del timeline y preview
-        self._panel_inspector.apply_requested.connect(self._on_apply_changes)
-
         # Inspector -> Timeline: refrescar al cambiar propiedades de clip
         self._panel_inspector.property_changed.connect(
             lambda p, v: self._panel_timeline.refrescar())
@@ -990,17 +987,6 @@ class VentanaPrincipalQt6(QMainWindow):
             log.debug("Error invalidando cache: %s", e)
         self._actualizar_preview()
 
-    def _on_apply_changes(self):
-        """
-        Aplica todos los cambios del inspector: refresca el timeline visual,
-        invalida caches y actualiza el preview.
-        """
-        log.info("Aplicando cambios desde el inspector...")
-        # Invalidar cache para que los cambios se apliquen
-        self._invalidar_cache_y_preview()
-        # Refrescar la representación visual del timeline
-        self._panel_timeline.refrescar()
-
     # FIX BUG 3: flag y timer para evitar renders simultáneos /
     # acumulados que hacen que el preview "avance" al aplicar rápido.
     _rendering: bool = False
@@ -1091,7 +1077,11 @@ class VentanaPrincipalQt6(QMainWindow):
         return mod_instance
 
     def _prepare_module_audio(self, mod_instance, mod_item):
-        """Prepara el audio de un módulo que lo requiera (ej: waveform)."""
+        """Prepara el audio de un módulo que lo requiera (ej: waveform).
+        
+        Synchronizes the audio data with the module's position in the timeline
+        so that the module renders audio-reactive effects at the correct offset.
+        """
         try:
             # Buscar clips de audio activos en el rango del módulo
             audio_clips = self._timeline.get_audio_clips_at_time(mod_item.start_time)
@@ -1104,27 +1094,58 @@ class VentanaPrincipalQt6(QMainWindow):
                                 'path': clip.source_path,
                                 'clip_start': clip.start_time,
                                 'clip_duration': clip.duration,
+                                'trim_start': getattr(clip, 'trim_start', 0.0),
                             }]
                             break
                     if audio_clips:
                         break
             
             if audio_clips:
-                audio_path = audio_clips[0]['path']
+                audio_info = audio_clips[0]
+                audio_path = audio_info['path']
                 fps = getattr(self._preview, '_fps', 30)
                 duration = mod_item.duration
+                
+                # Calculate the audio offset: where in the audio file does the module start
+                # The module starts at mod_item.start_time in timeline coords
+                # The audio clip starts at clip_start in timeline coords
+                clip_start = audio_info.get('clip_start', 0.0)
+                trim_start = audio_info.get('trim_start', 0.0)
+                # Audio file position = trim_start + (module_start - clip_start)
+                audio_offset = trim_start + max(0.0, mod_item.start_time - clip_start)
+                
                 try:
+                    # Try passing audio_offset for proper synchronization
                     mod_instance.prepare_audio(
                         audio_path=audio_path,
                         mel_data=None,
                         sr=None,
                         hop=None,
                         duration=duration,
-                        fps=fps
+                        fps=fps,
+                        audio_offset=audio_offset
                     )
+                except TypeError:
+                    # Fallback if module doesn't support audio_offset parameter
+                    try:
+                        mod_instance.prepare_audio(
+                            audio_path=audio_path,
+                            mel_data=None,
+                            sr=None,
+                            hop=None,
+                            duration=duration,
+                            fps=fps
+                        )
+                    except Exception as e:
+                        log.debug("Error preparando audio para módulo '%s': %s",
+                                 mod_item.module_type, e)
                 except Exception as e:
                     log.debug("Error preparando audio para módulo '%s': %s",
                              mod_item.module_type, e)
+                
+                # Store the audio offset on the module instance for render-time use
+                mod_instance._audio_timeline_offset = audio_offset
+                mod_instance._module_timeline_start = mod_item.start_time
         except Exception as e:
             log.debug("Error buscando audio para módulo: %s", e)
 

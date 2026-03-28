@@ -56,7 +56,6 @@ class InspectorWidget(QWidget):
     # Senales
     property_changed = pyqtSignal(str, object)  # nombre_propiedad, nuevo_valor
     preview_requested = pyqtSignal()
-    apply_requested = pyqtSignal()  # Emitida cuando el usuario hace clic en "Aplicar Cambios"
 
     def __init__(self, command_manager: Optional[CommandManager] = None,
                  profile_manager: Optional[ProfileManager] = None,
@@ -92,24 +91,6 @@ class InspectorWidget(QWidget):
         header_layout.addWidget(self._lbl_titulo)
 
         header_layout.addStretch()
-
-        # Boton Apply Changes
-        self._btn_apply = QPushButton("✔ Aplicar Cambios")
-        self._btn_apply.setToolTip("Aplicar los cambios de posición y propiedades al módulo")
-        self._btn_apply.setFixedHeight(22)
-        self._btn_apply.setStyleSheet("""
-            QPushButton {
-                background-color: #00BC8C; color: #FFFFFF;
-                border: none; border-radius: 3px;
-                padding: 2px 8px; font-size: 10px;
-                font-weight: bold;
-            }
-            QPushButton:hover { background-color: #00D6A1; }
-            QPushButton:pressed { background-color: #009E75; }
-        """)
-        self._btn_apply.clicked.connect(self._apply_changes)
-        self._btn_apply.setVisible(False)
-        header_layout.addWidget(self._btn_apply)
 
         # Boton reset
         self._btn_reset = QPushButton("\u21BA Reset")
@@ -160,7 +141,6 @@ class InspectorWidget(QWidget):
         self._limpiar_contenido()
         self._lbl_titulo.setText("Inspector")
         self._btn_reset.setVisible(False)
-        self._btn_apply.setVisible(False)
 
         lbl = QLabel("Selecciona un elemento en el\ntimeline para ver sus propiedades.")
         lbl.setWordWrap(True)
@@ -182,7 +162,6 @@ class InspectorWidget(QWidget):
         self._limpiar_contenido()
         self._lbl_titulo.setText(f"Clip: {clip.name}")
         self._btn_reset.setVisible(True)
-        self._btn_apply.setVisible(True)
 
         # -- Seccion: Informacion general --
         grupo_info = PropertyGroup("Informacion", expandido=True)
@@ -569,7 +548,6 @@ class InspectorWidget(QWidget):
         self._limpiar_contenido()
         self._lbl_titulo.setText(f"Módulo: {mod_item.name}")
         self._btn_reset.setVisible(True)
-        self._btn_apply.setVisible(True)
 
         # -- Sección: Información general del módulo --
         grupo_info = PropertyGroup("Información", expandido=True)
@@ -739,24 +717,10 @@ class InspectorWidget(QWidget):
         mod_item.params[param] = valor
         # Aplicar a la instancia real si existe
         if mod_instance is not None:
-            # Use _update_config if available (propagates to engine, e.g. Wav2BarEngine)
-            if hasattr(mod_instance, '_update_config') and callable(mod_instance._update_config):
-                # Create a minimal proxy app for _update_config callbacks
-                class _ProxyApp:
-                    def __init__(self, inspector):
-                        self._inspector = inspector
-                    def trigger_auto_save(self):
-                        pass
-                    def update_preview(self):
-                        self._inspector.preview_requested.emit()
-                proxy = _ProxyApp(self)
-                mod_instance._update_config(param, valor, proxy)
-            else:
-                # Fallback: direct config update
-                if hasattr(mod_instance, '_config'):
-                    mod_instance._config[param] = valor
-                if hasattr(mod_instance, 'set_config'):
-                    mod_instance.set_config({param: valor})
+            if hasattr(mod_instance, '_config'):
+                mod_instance._config[param] = valor
+            if hasattr(mod_instance, 'set_config'):
+                mod_instance.set_config({param: valor})
         self.property_changed.emit(param, valor)
         self.preview_requested.emit()
 
@@ -767,25 +731,6 @@ class InspectorWidget(QWidget):
         self._cmd.execute(cmd)
         self.property_changed.emit(prop, valor)
         self.preview_requested.emit()
-
-    # -- Apply Changes ---------------------------------------------------------
-    def _apply_changes(self):
-        """Aplica todos los cambios pendientes del inspector al timeline y preview."""
-        obj = self._objeto_actual
-        if obj is None:
-            return
-
-        log.info("Aplicando cambios del inspector al objeto: %s", type(obj).__name__)
-
-        # Emitir señales para que el timeline y preview se actualicen
-        self.apply_requested.emit()
-        self.preview_requested.emit()
-
-        # Si es un ModuleTimelineItem, emitir property_changed para forzar refresh
-        if isinstance(obj, ModuleTimelineItem):
-            self.property_changed.emit("_apply_all", None)
-        elif isinstance(obj, VideoClip):
-            self.property_changed.emit("_apply_all", None)
 
     # -- Reset -----------------------------------------------------------------
     def _reset_defaults(self):

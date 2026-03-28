@@ -238,10 +238,20 @@ class ClipItem(QGraphicsRectItem):
             else:
                 self._drag_start_pos = event.scenePos()
                 self._drag_start_time = self.clip.start_time
+                self._drag_start_track_y = self._track_y
+                self._drag_original_track_index = self.clip.track_index
         super().mousePressEvent(event)
 
+    def _get_timeline_widget(self):
+        """Helper to get parent TimelineWidget."""
+        scene = self.scene()
+        if not scene:
+            return None
+        view = scene.views()[0] if scene.views() else None
+        return view.parent() if view else None
+
     def mouseMoveEvent(self, event):
-        """Arrastre del clip o redimensionado."""
+        """Arrastre del clip o redimensionado, including cross-track movement."""
         if self._resizing:
             delta_x = event.scenePos().x() - self._drag_start_pos.x()
             delta_time = delta_x / self._pps
@@ -267,11 +277,8 @@ class ClipItem(QGraphicsRectItem):
                 new_duration = self._drag_start_duration + delta_time
                 
                 # Para el borde derecho, podemos snap el final del clip
-                # Calcular posición X del final del clip
                 clip_end_x = HEADER_WIDTH + (self.clip.start_time + new_duration) * self._pps
-                # Aplicar snap basado en la posición del mouse (que está en el borde derecho)
                 snapped_end_x = self._apply_alignment_snap_edge(clip_end_x, event.scenePos().x())
-                # Convertir de vuelta a duración
                 if snapped_end_x != clip_end_x:
                     new_duration = (snapped_end_x - HEADER_WIDTH) / self._pps - self.clip.start_time
                 
@@ -289,10 +296,36 @@ class ClipItem(QGraphicsRectItem):
             new_start = self._apply_alignment_snap(new_start, event.scenePos().x(), check_end=True)
             
             self.clip.start_time = new_start
+            
+            # Cross-track vertical movement: detect target track
+            tw = self._get_timeline_widget()
+            if tw and hasattr(tw, '_timeline'):
+                mouse_y = event.scenePos().y() - RULER_HEIGHT
+                target_track_idx = int(mouse_y / TRACK_HEIGHT)
+                if 0 <= target_track_idx < len(tw._timeline.tracks):
+                    target_track = tw._timeline.tracks[target_track_idx]
+                    # Only allow moving to same type tracks
+                    if target_track.track_type == self.track_type and not target_track.locked:
+                        new_y = RULER_HEIGHT + target_track_idx * TRACK_HEIGHT
+                        self._track_y = new_y
+                        self.clip.track_index = target_track_idx
+            
             self._actualizar_geometria()
         super().mouseMoveEvent(event)
 
     def mouseReleaseEvent(self, event):
+        """Finaliza arrastre, commit cross-track move if needed."""
+        if not self._resizing and self._drag_start_pos is not None:
+            orig_idx = getattr(self, '_drag_original_track_index', self.clip.track_index)
+            if orig_idx != self.clip.track_index:
+                # Commit the cross-track move via Timeline.move_clip
+                tw = self._get_timeline_widget()
+                if tw and hasattr(tw, '_timeline'):
+                    tw._timeline.move_clip(
+                        self.clip.clip_id, self.clip.start_time, self.clip.track_index
+                    )
+                    tw._refrescar_completo()
+                    tw.clips_changed.emit()
         self._resizing = False
         self._drag_start_pos = None
         if hasattr(self.scene(), 'update_snap_line'):
@@ -310,10 +343,6 @@ class ClipItem(QGraphicsRectItem):
                     if c.clip_id != self.clip.clip_id:
                         snap_times.append(c.start_time)
                         snap_times.append(c.end_time)
-            # También snap a módulos del timeline
-            for m in timeline_widget._timeline.module_items:
-                snap_times.append(m.start_time)
-                snap_times.append(m.end_time)
         return snap_times
 
     def _apply_alignment_snap(self, proposed_start: float, mouse_x: float, check_end: bool = True) -> float:
@@ -668,6 +697,14 @@ class ModuleTimelineGraphicsItem(QGraphicsRectItem):
                 self._drag_start_time = self.module_item.start_time
         super().mousePressEvent(event)
 
+    def _get_timeline_widget(self):
+        """Helper to get parent TimelineWidget."""
+        scene = self.scene()
+        if not scene:
+            return None
+        view = scene.views()[0] if scene.views() else None
+        return view.parent() if view else None
+
     def mouseMoveEvent(self, event):
         if self._resizing and self._drag_start_pos:
             delta_x = event.scenePos().x() - self._drag_start_pos.x()
@@ -675,191 +712,45 @@ class ModuleTimelineGraphicsItem(QGraphicsRectItem):
             if self._resize_edge == "left":
                 new_start = max(0, self._drag_start_time + delta_time)
                 new_dur = self._drag_start_duration - delta_time
-                
-                # Aplicar snap al inicio
-                new_start = self._apply_module_snap(new_start, check_end=False)
-                new_dur = self._drag_start_duration - (new_start - self._drag_start_time)
-                
-                if new_dur >= 0.1 and new_start >= 0.0:
+                if new_dur >= 0.1:
                     self.module_item.start_time = new_start
                     self.module_item.duration = new_dur
                     self._actualizar_geometria()
             elif self._resize_edge == "right":
                 new_dur = self._drag_start_duration + delta_time
-                
-                # Aplicar snap al final
-                proposed_end = self.module_item.start_time + new_dur
-                snapped_end = self._apply_module_snap_end(proposed_end)
-                if snapped_end != proposed_end:
-                    new_dur = snapped_end - self.module_item.start_time
-                
                 if new_dur >= 0.1:
                     self.module_item.duration = new_dur
                     self._actualizar_geometria()
         elif self._drag_start_pos is not None:
             delta_x = event.scenePos().x() - self._drag_start_pos.x()
             delta_time = delta_x / self._pps
-            new_start = max(0, self._drag_start_time + delta_time)
+            self.module_item.start_time = max(0, self._drag_start_time + delta_time)
             
-            # Aplicar snap al mover
-            new_start = self._apply_module_snap(new_start, check_end=True)
+            # Cross-track vertical movement for modules (effect-to-effect only)
+            tw = self._get_timeline_widget()
+            if tw and hasattr(tw, '_timeline'):
+                mouse_y = event.scenePos().y() - RULER_HEIGHT
+                target_track_idx = int(mouse_y / TRACK_HEIGHT)
+                if 0 <= target_track_idx < len(tw._timeline.tracks):
+                    target_track = tw._timeline.tracks[target_track_idx]
+                    if target_track.track_type == 'effect' and not target_track.locked:
+                        new_y = RULER_HEIGHT + target_track_idx * TRACK_HEIGHT
+                        self._track_y = new_y
+                        self.module_item.track_index = target_track_idx
             
-            self.module_item.start_time = new_start
             self._actualizar_geometria()
         super().mouseMoveEvent(event)
 
     def mouseReleaseEvent(self, event):
+        if not self._resizing and self._drag_start_pos is not None:
+            # Refresh timeline to commit track change
+            tw = self._get_timeline_widget()
+            if tw:
+                tw._refrescar_completo()
+                tw.clips_changed.emit()
         self._resizing = False
         self._drag_start_pos = None
-        if hasattr(self.scene(), 'update_snap_line'):
-            self.scene().update_snap_line(None)
         super().mouseReleaseEvent(event)
-
-    def _get_snap_times(self, timeline_widget) -> list:
-        """Obtiene todos los puntos de tiempo a los que se puede hacer snap."""
-        snap_times = [0.0]
-        if hasattr(timeline_widget, '_timeline') and timeline_widget._timeline:
-            snap_times.append(timeline_widget._timeline.playhead)
-            # Snap a clips
-            for track in timeline_widget._timeline.tracks:
-                for c in track.clips:
-                    snap_times.append(c.start_time)
-                    snap_times.append(c.end_time)
-            # Snap a otros módulos
-            for m in timeline_widget._timeline.module_items:
-                if m.item_id != self.module_item.item_id:
-                    snap_times.append(m.start_time)
-                    snap_times.append(m.end_time)
-        return snap_times
-
-    def _apply_module_snap(self, proposed_start: float, check_end: bool = True) -> float:
-        """Aplica magnetismo (snap) para módulos, similar a ClipItem."""
-        scene = self.scene()
-        if not scene:
-            return proposed_start
-        view = scene.views()[0] if scene.views() else None
-        timeline_widget = view.parent() if view else None
-        if not timeline_widget:
-            return proposed_start
-
-        # Verificar si snap está activo
-        snap_active = False
-        if hasattr(timeline_widget, '_timeline') and timeline_widget._timeline.snap_enabled:
-            snap_active = True
-        elif hasattr(timeline_widget, '_btn_alignment') and timeline_widget._btn_alignment.isChecked():
-            snap_active = True
-
-        if not snap_active:
-            if hasattr(scene, 'update_snap_line'):
-                scene.update_snap_line(None)
-            return proposed_start
-
-        SNAP_THRESHOLD_PX = 8
-        threshold_time = SNAP_THRESHOLD_PX / self._pps
-
-        best_start = proposed_start
-        min_dist = threshold_time
-        snapped_time_point = None
-
-        snap_times = self._get_snap_times(timeline_widget)
-        proposed_end = proposed_start + self.module_item.duration
-
-        for t in snap_times:
-            dist_start = abs(proposed_start - t)
-            if dist_start < min_dist:
-                min_dist = dist_start
-                best_start = t
-                snapped_time_point = t
-
-            if check_end:
-                dist_end = abs(proposed_end - t)
-                if dist_end < min_dist:
-                    min_dist = dist_end
-                    best_start = t - self.module_item.duration
-                    snapped_time_point = t
-
-        # También snap a guías de alineación
-        if hasattr(timeline_widget, '_alignment_guides') and hasattr(timeline_widget, '_btn_alignment') and timeline_widget._btn_alignment.isChecked():
-            prop_x_start = HEADER_WIDTH + proposed_start * self._pps
-            prop_x_end = HEADER_WIDTH + proposed_end * self._pps
-            for guide in timeline_widget._alignment_guides[:9]:
-                if guide.isVisible():
-                    guide_x = guide.line().x1()
-                    dist_start_px = abs(prop_x_start - guide_x)
-                    if dist_start_px < SNAP_THRESHOLD_PX and (dist_start_px / self._pps) < min_dist:
-                        min_dist = dist_start_px / self._pps
-                        best_start = (guide_x - HEADER_WIDTH) / self._pps
-                        snapped_time_point = best_start
-
-                    if check_end:
-                        dist_end_px = abs(prop_x_end - guide_x)
-                        if dist_end_px < SNAP_THRESHOLD_PX and (dist_end_px / self._pps) < min_dist:
-                            min_dist = dist_end_px / self._pps
-                            best_start = ((guide_x - HEADER_WIDTH) / self._pps) - self.module_item.duration
-                            snapped_time_point = (guide_x - HEADER_WIDTH) / self._pps
-
-        if snapped_time_point is not None and hasattr(scene, 'update_snap_line'):
-            scene.update_snap_line(HEADER_WIDTH + snapped_time_point * self._pps)
-        elif hasattr(scene, 'update_snap_line'):
-            scene.update_snap_line(None)
-
-        return max(0.0, best_start)
-
-    def _apply_module_snap_end(self, proposed_end: float) -> float:
-        """Aplica snap para el final del módulo durante redimensionado."""
-        scene = self.scene()
-        if not scene:
-            return proposed_end
-        view = scene.views()[0] if scene.views() else None
-        timeline_widget = view.parent() if view else None
-        if not timeline_widget:
-            return proposed_end
-
-        snap_active = False
-        if hasattr(timeline_widget, '_timeline') and timeline_widget._timeline.snap_enabled:
-            snap_active = True
-        elif hasattr(timeline_widget, '_btn_alignment') and timeline_widget._btn_alignment.isChecked():
-            snap_active = True
-
-        if not snap_active:
-            if hasattr(scene, 'update_snap_line'):
-                scene.update_snap_line(None)
-            return proposed_end
-
-        SNAP_THRESHOLD_PX = 8
-        threshold_time = SNAP_THRESHOLD_PX / self._pps
-
-        best_end = proposed_end
-        min_dist = threshold_time
-        snapped_time_point = None
-
-        snap_times = self._get_snap_times(timeline_widget)
-
-        for t in snap_times:
-            dist = abs(proposed_end - t)
-            if dist < min_dist:
-                min_dist = dist
-                best_end = t
-                snapped_time_point = t
-
-        # Snap a guías
-        if hasattr(timeline_widget, '_alignment_guides') and hasattr(timeline_widget, '_btn_alignment') and timeline_widget._btn_alignment.isChecked():
-            proposed_x = HEADER_WIDTH + proposed_end * self._pps
-            for guide in timeline_widget._alignment_guides[:9]:
-                if guide.isVisible():
-                    guide_x = guide.line().x1()
-                    dist_px = abs(proposed_x - guide_x)
-                    if dist_px < SNAP_THRESHOLD_PX and (dist_px / self._pps) < min_dist:
-                        min_dist = dist_px / self._pps
-                        best_end = (guide_x - HEADER_WIDTH) / self._pps
-                        snapped_time_point = best_end
-
-        if snapped_time_point is not None and hasattr(scene, 'update_snap_line'):
-            scene.update_snap_line(HEADER_WIDTH + snapped_time_point * self._pps)
-        elif hasattr(scene, 'update_snap_line'):
-            scene.update_snap_line(None)
-
-        return best_end
 
     def set_pixels_per_second(self, pps: float):
         self._pps = pps
@@ -1158,14 +1049,6 @@ class TimelineScene(QGraphicsScene):
             if isinstance(item, ClipItem):
                 clips.append(item.clip)
         return clips
-
-    def get_selected_modules(self) -> List[ModuleTimelineItem]:
-        """Retorna los módulos actualmente seleccionados en el timeline."""
-        modules = []
-        for item in self.selectedItems():
-            if isinstance(item, ModuleTimelineGraphicsItem):
-                modules.append(item.module_item)
-        return modules
 
     def mousePressEvent(self, event):
         """Click en area vacia mueve el playhead."""
@@ -1540,20 +1423,21 @@ class TimelineWidget(QWidget):
             y += TRACK_HEIGHT
             total_h += TRACK_HEIGHT
 
-        # Dibujar módulos del timeline en el track de efectos
-        effect_track_y = None
+        # Dibujar módulos del timeline en sus respectivos effect tracks
+        # Build a map of effect track indices to their Y positions
+        effect_tracks_y = {}
+        first_effect_y = y  # fallback: bottom of all tracks
         for i, track in enumerate(self._timeline.tracks):
             if track.track_type == 'effect':
-                effect_track_y = RULER_HEIGHT + i * TRACK_HEIGHT
-                break
-        
-        if effect_track_y is None:
-            # Si no hay track de efectos, usar la parte inferior
-            effect_track_y = y
+                effect_tracks_y[i] = RULER_HEIGHT + i * TRACK_HEIGHT
+                if first_effect_y == y:
+                    first_effect_y = effect_tracks_y[i]
         
         for mod_item in self._timeline.module_items:
+            # Place module on its assigned track, or first effect track as fallback
+            mod_y = effect_tracks_y.get(mod_item.track_index, first_effect_y)
             mod_gfx = ModuleTimelineGraphicsItem(
-                mod_item, self._pps, effect_track_y, TRACK_HEIGHT
+                mod_item, self._pps, mod_y, TRACK_HEIGHT
             )
             self._scene.addItem(mod_gfx)
 
@@ -1817,11 +1701,55 @@ class TimelineWidget(QWidget):
         from core.video_clip import detect_source_type
         
         from core.commands import AddClipCommand
+        target_track = self._timeline.tracks[track_index]
+        
         for url in urls:
             from core.video_clip import VideoClip
+            source_type = detect_source_type(url)
+            
+            # Validate content type matches track type
+            # Audio content should only go on audio tracks
+            # Video/image/gif content should only go on video tracks
+            if target_track.track_type == 'video' and source_type == 'audio':
+                logger.warning("Cannot place audio file '%s' on video track '%s'", 
+                             os.path.basename(url), target_track.name)
+                # Try to find an audio track instead
+                audio_track_index = None
+                for i, t in enumerate(self._timeline.tracks):
+                    if t.track_type == 'audio' and not t.locked:
+                        audio_track_index = i
+                        break
+                if audio_track_index is not None:
+                    track_index = audio_track_index
+                    logger.info("Redirecting audio to audio track %d", track_index)
+                else:
+                    logger.warning("No audio track available, skipping file '%s'", url)
+                    continue
+            elif target_track.track_type == 'audio' and source_type in ('video', 'image', 'gif'):
+                logger.warning("Cannot place %s file '%s' on audio track '%s'", 
+                             source_type, os.path.basename(url), target_track.name)
+                # Try to find a video track instead
+                video_track_index = None
+                for i, t in enumerate(self._timeline.tracks):
+                    if t.track_type == 'video' and not t.locked:
+                        video_track_index = i
+                        break
+                if video_track_index is not None:
+                    track_index = video_track_index
+                    logger.info("Redirecting video/image to video track %d", track_index)
+                else:
+                    logger.warning("No video track available, skipping file '%s'", url)
+                    continue
+            elif target_track.track_type == 'effect':
+                logger.warning("Cannot place media files on effect track, skipping '%s'", url)
+                continue
+            elif target_track.track_type == 'subtitle':
+                logger.warning("Cannot place media files on subtitle track, skipping '%s'", url)
+                continue
+            
             clip = VideoClip(
                 source_path=url,
-                source_type=detect_source_type(url),
+                source_type=source_type,
                 track_index=track_index,
                 start_time=tiempo
             )
@@ -1911,21 +1839,34 @@ class TimelineWidget(QWidget):
         
         tiempo = (x - HEADER_WIDTH) / self._pps
         
+        # Detect which track was targeted by the Y position
+        y = pos.y() - RULER_HEIGHT
+        target_track_index = int(y / TRACK_HEIGHT) if y >= 0 else -1
+        
+        # Validate it's an effect track, otherwise find the closest effect track
+        target_is_effect = False
+        if 0 <= target_track_index < len(self._timeline.tracks):
+            if self._timeline.tracks[target_track_index].track_type == 'effect':
+                target_is_effect = True
+        
+        if not target_is_effect:
+            # Fall back to first effect track
+            target_track_index = -1
+            for i, track in enumerate(self._timeline.tracks):
+                if track.track_type == 'effect':
+                    target_track_index = i
+                    break
+        
         # Crear ModuleTimelineItem
         item = ModuleTimelineItem(
             module_type=mod_type,
             start_time=max(0.0, tiempo),
             duration=5.0,
+            track_index=target_track_index,
         )
         
-        # Buscar track de efectos
-        for i, track in enumerate(self._timeline.tracks):
-            if track.track_type == 'effect':
-                item.track_index = i
-                break
-        
         self._timeline.add_module_item(item)
-        logger.info("Módulo '%s' añadido al timeline en t=%.1fs", mod_type, tiempo)
+        logger.info("Módulo '%s' añadido al timeline en t=%.1fs, track=%d", mod_type, tiempo, target_track_index)
         
         self._refrescar_completo()
         self.clips_changed.emit()
@@ -1944,44 +1885,17 @@ class TimelineWidget(QWidget):
     def eliminar_clip_seleccionado(self):
         """Elimina el o los clips seleccionados del timeline."""
         clips_sel = self.get_selected_clips()
-        modules_sel = self.get_selected_modules()
-        
-        if not clips_sel and not modules_sel:
+        if not clips_sel:
             return
-
-        # Eliminar clips seleccionados
-        if clips_sel:
-            from core.commands import RemoveClipCommand
-            for clip in clips_sel:
-                cmd = RemoveClipCommand(self._timeline, clip.clip_id)
-                self._cmd.execute(cmd)
-
-        # Eliminar módulos seleccionados
-        if modules_sel:
-            for mod_item in modules_sel:
-                self._timeline.remove_module_item(mod_item.item_id)
-                logger.info("Módulo '%s' eliminado del timeline", mod_item.name)
+            
+        from core.commands import RemoveClipCommand
+        for clip in clips_sel:
+            cmd = RemoveClipCommand(self._timeline, clip.clip_id)
+            self._cmd.execute(cmd)
             
         self._refrescar_completo()
         self.clip_selected.emit(None)
-        self.module_selected.emit(None)
         self.clips_changed.emit()
-
-    def eliminar_modulo_seleccionado(self):
-        """Elimina el o los módulos seleccionados del timeline."""
-        modules_sel = self.get_selected_modules()
-        if not modules_sel:
-            return
-        for mod_item in modules_sel:
-            self._timeline.remove_module_item(mod_item.item_id)
-            logger.info("Módulo '%s' eliminado del timeline", mod_item.name)
-        self._refrescar_completo()
-        self.module_selected.emit(None)
-        self.clips_changed.emit()
-
-    def get_selected_modules(self) -> List[ModuleTimelineItem]:
-        """Retorna los módulos seleccionados del timeline."""
-        return self._scene.get_selected_modules()
 
     def copiar_seleccion(self):
         """Copia los clips seleccionados al clipboard interno."""
@@ -2032,24 +1946,6 @@ class TimelineWidget(QWidget):
         """)
 
         clips_sel = self._scene.get_selected_clips()
-        modules_sel = self._scene.get_selected_modules()
-
-        if modules_sel:
-            # Menú contextual para módulos seleccionados
-            for mod_item in modules_sel:
-                menu.addAction(f"⚡ {mod_item.name}")
-            menu.addSeparator()
-            menu.addAction(f"{ICONOS_UNICODE['trash']} Eliminar módulo(s)",
-                           self.eliminar_modulo_seleccionado)
-            if modules_sel[0].enabled:
-                menu.addAction("⊘ Deshabilitar módulo",
-                               lambda: self._toggle_module_enabled(modules_sel[0], False))
-            else:
-                menu.addAction("✓ Habilitar módulo",
-                               lambda: self._toggle_module_enabled(modules_sel[0], True))
-            menu.addSeparator()
-            menu.addAction("Propiedades...",
-                           lambda: self.module_selected.emit(modules_sel[0]))
 
         if clips_sel:
             menu.addAction(f"{ICONOS_UNICODE['cut']} Dividir en playhead",
@@ -2112,7 +2008,7 @@ class TimelineWidget(QWidget):
             
             menu.addSeparator()
             menu.addAction("Propiedades...", lambda: self.clip_selected.emit(clips_sel[0]))
-        if not clips_sel and not modules_sel:
+        else:
             menu.addAction(f"{ICONOS_UNICODE['paste']} Pegar", self.pegar_clips)
             menu.addSeparator()
             for tipo, nombre in [("video", "Video"), ("audio", "Audio"),
@@ -2188,12 +2084,6 @@ class TimelineWidget(QWidget):
             clip.transition_out = None
         
         logger.info("Transición (%s) quitada de '%s'", position, clip.name)
-        self._refrescar_completo()
-        self.clips_changed.emit()
-
-    def _toggle_module_enabled(self, mod_item: ModuleTimelineItem, enabled: bool):
-        """Habilita o deshabilita un módulo del timeline."""
-        mod_item.enabled = enabled
         self._refrescar_completo()
         self.clips_changed.emit()
 

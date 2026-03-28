@@ -94,6 +94,7 @@ class SliderWithLabel(QWidget):
     """Slider horizontal con etiqueta, valor numerico y rango configurable."""
 
     value_changed = pyqtSignal(float)
+    slider_released = pyqtSignal(float)  # Emitted only when the user releases the slider
 
     def __init__(self, label: str, minimo: float = 0.0, maximo: float = 1.0,
                  valor: float = 0.5, decimales: int = 2, paso: int = 100,
@@ -116,6 +117,8 @@ class SliderWithLabel(QWidget):
         self._slider.setRange(0, paso)
         self._slider.setValue(self._valor_a_slider(valor))
         self._slider.valueChanged.connect(self._on_slider_changed)
+   
+        self._slider.sliderReleased.connect(self._on_slider_released)
         layout.addWidget(self._slider)
 
         self._lbl_valor = QLabel(f"{valor:.{decimales}f}")
@@ -131,6 +134,10 @@ class SliderWithLabel(QWidget):
 
     def _slider_a_valor(self, pos: int) -> float:
         return self._min + (pos / self._paso) * (self._max - self._min)
+
+    def _on_slider_released(self):
+        val = self._slider_a_valor(self._slider.value())
+        self.slider_released.emit(val)
 
     def _on_slider_changed(self, pos: int):
         val = self._slider_a_valor(pos)

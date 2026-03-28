@@ -588,8 +588,8 @@ class InspectorWidget(QWidget):
 
         dur_slider = SliderWithLabel("Duración", 0.1, 300.0, mod_item.duration,
                                       decimales=2, paso=3000)
-        dur_slider.value_changed.connect(
-            lambda v: self._cambiar_propiedad_modulo_tl(mod_item, "duration", v))
+        dur_slider.slider_released.connect(lambda v: self._cambiar_propiedad_modulo_tl(mod_item, "duration", v))
+        dur_slider.value_changed.connect(lambda v: self.preview_requested.emit())
         grupo_tiempo.agregar_widget(dur_slider)
 
         self._contenido_layout.addWidget(grupo_tiempo)

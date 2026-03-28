@@ -55,10 +55,11 @@ class CircularBarModule(Module):
             "power_scale": 0.4,
         }
 
-    def prepare_audio(self, audio_path, mel_data, sr, hop, duration, fps):
+    def prepare_audio(self, audio_path, mel_data, sr, hop, duration, fps, **kwargs):
         try:
             import librosa
-            y, sr = librosa.load(audio_path, sr=22050, mono=True)
+            offset = kwargs.get('audio_offset', 0.0)
+            y, sr = librosa.load(audio_path, sr=22050, mono=True, offset=offset, duration=duration)
             S = np.abs(librosa.stft(y, n_fft=2048, hop_length=512))
             freqs = librosa.fft_frequencies(sr=sr, n_fft=2048)
             n_bars = self._config.get("n_bars", 64)

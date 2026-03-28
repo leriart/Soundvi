@@ -62,11 +62,12 @@ class StraightBarModule(Module):
             "power_scale": 0.4,
         }
 
-    def prepare_audio(self, audio_path, mel_data, sr, hop, duration, fps):
+    def prepare_audio(self, audio_path, mel_data, sr, hop, duration, fps, **kwargs):
         """Pre-procesa el audio para la visualización."""
         try:
             import librosa
-            y, sr = librosa.load(audio_path, sr=22050, mono=True)
+            offset = kwargs.get('audio_offset', 0.0)
+            y, sr = librosa.load(audio_path, sr=22050, mono=True, offset=offset, duration=duration)
             n_fft = 2048
             hop_length = 512
             S = np.abs(librosa.stft(y, n_fft=n_fft, hop_length=hop_length))

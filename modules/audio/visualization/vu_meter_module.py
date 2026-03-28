@@ -35,10 +35,11 @@ class VUMeterModule(Module):
             "pos_x": 20, "pos_y": 20, "style": "horizontal",
         }
 
-    def prepare_audio(self, audio_path, *args):
+    def prepare_audio(self, audio_path, mel_data=None, sr=None, hop=None, duration=None, fps=None, **kwargs):
         try:
             import librosa
-            y, sr = librosa.load(audio_path, sr=22050, mono=True)
+            offset = kwargs.get('audio_offset', 0.0)
+            y, sr = librosa.load(audio_path, sr=22050, mono=True, offset=offset, duration=duration)
             hop = 512
             rms = librosa.feature.rms(y=y, hop_length=hop)[0]
             mx = np.max(rms)

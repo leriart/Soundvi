@@ -629,8 +629,8 @@ class VentanaPrincipalQt6(QMainWindow):
         self._panel_inspector.preview_requested.connect(self._invalidar_cache_y_preview)
 
         # Inspector -> Timeline: refrescar al cambiar propiedades de clip
-        self._panel_inspector.property_changed.connect(
-            lambda p, v: self._panel_timeline.refrescar())
+        # Solo refrescar timeline si cambia una propiedad estructural
+        self._panel_inspector.property_changed.connect(self._on_property_changed)
 
         # Transiciones -> Timeline: aplicar transicion
         self._panel_transiciones.transition_applied.connect(self._on_transicion_aplicada)
@@ -894,7 +894,19 @@ class VentanaPrincipalQt6(QMainWindow):
         else:
             self._panel_inspector.limpiar()
 
-    def _on_transicion_aplicada(self, tipo: str, duracion: float):
+        def _on_property_changed(self, prop, valor):
+        """Maneja cambios de propiedades desde el inspector."""
+        if prop in ("start_time", "duration", "enabled", "name"):
+            self._panel_timeline.refrescar()
+            
+            # Si cambia start_time o duration, invalidar cache del módulo actual
+            # para que re-procese el audio en su nueva posición temporal
+            if prop in ("start_time", "duration"):
+                obj = self._panel_inspector.objeto_actual
+                if hasattr(obj, 'item_id') and hasattr(self, '_timeline_module_cache'):
+                    self._timeline_module_cache.pop(obj.item_id, None)
+
+def _on_transicion_aplicada(self, tipo: str, duracion: float):
         """Aplica una transición al clip seleccionado en el timeline."""
         clips_sel = self._panel_timeline.get_selected_clips()
         
@@ -1083,11 +1095,10 @@ class VentanaPrincipalQt6(QMainWindow):
                 cache.clear_clip(clip_id)
             else:
                 cache.clear_all()
-            # Si es un ModuleTimelineItem, borrar su instancia cacheada
-            # para que se recree con los params actualizados.
-            if isinstance(obj, ModuleTimelineItem):
-                item_id = obj.item_id
-                self._timeline_module_cache.pop(item_id, None)
+            # Si es un ModuleTimelineItem, NO borrar su instancia cacheada
+            # por defecto. set_config se encarga de aplicar los params en tiempo
+            # real sin recrear (y sin volver a cargar el audio con librosa).
+            # Solo se recrea si cambia algo estructural (start_time, etc).
         except Exception as e:
             log.debug("Error invalidando cache: %s", e)
         self._actualizar_preview()
@@ -1202,8 +1213,14 @@ class VentanaPrincipalQt6(QMainWindow):
             
             if audio_clips:
                 audio_path = audio_clips[0]['path']
+                clip_start = audio_clips[0]['clip_start']
+                trim_start = audio_clips[0].get('trim_start', 0.0)
                 fps = getattr(self._preview, '_fps', 30)
                 duration = mod_item.duration
+                
+                # Calcular el offset del audio en base a la posición del módulo respecto al clip
+                audio_offset = trim_start + max(0, mod_item.start_time - clip_start)
+                
                 try:
                     mod_instance.prepare_audio(
                         audio_path=audio_path,
@@ -1211,7 +1228,8 @@ class VentanaPrincipalQt6(QMainWindow):
                         sr=None,
                         hop=None,
                         duration=duration,
-                        fps=fps
+                        fps=fps,
+                        audio_offset=audio_offset
                     )
                 except Exception as e:
                     log.debug("Error preparando audio para módulo '%s': %s",

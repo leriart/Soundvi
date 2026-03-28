@@ -44,7 +44,7 @@ class WaveformModule(Module):
             "bar_width_ratio": 0.98,
         }
 
-    def prepare_audio(self, audio_path, mel_data, sr, hop, duration, fps):
+    def prepare_audio(self, audio_path, mel_data, sr, hop, duration, fps, **kwargs):
         try:
             from core.wav2bar_engine import Wav2BarEngine
             if self.engine is None:

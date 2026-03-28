@@ -739,10 +739,24 @@ class InspectorWidget(QWidget):
         mod_item.params[param] = valor
         # Aplicar a la instancia real si existe
         if mod_instance is not None:
-            if hasattr(mod_instance, '_config'):
-                mod_instance._config[param] = valor
-            if hasattr(mod_instance, 'set_config'):
-                mod_instance.set_config({param: valor})
+            # Use _update_config if available (propagates to engine, e.g. Wav2BarEngine)
+            if hasattr(mod_instance, '_update_config') and callable(mod_instance._update_config):
+                # Create a minimal proxy app for _update_config callbacks
+                class _ProxyApp:
+                    def __init__(self, inspector):
+                        self._inspector = inspector
+                    def trigger_auto_save(self):
+                        pass
+                    def update_preview(self):
+                        self._inspector.preview_requested.emit()
+                proxy = _ProxyApp(self)
+                mod_instance._update_config(param, valor, proxy)
+            else:
+                # Fallback: direct config update
+                if hasattr(mod_instance, '_config'):
+                    mod_instance._config[param] = valor
+                if hasattr(mod_instance, 'set_config'):
+                    mod_instance.set_config({param: valor})
         self.property_changed.emit(param, valor)
         self.preview_requested.emit()
 

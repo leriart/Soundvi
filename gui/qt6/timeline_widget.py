@@ -1325,9 +1325,11 @@ class TimelineWidget(QWidget):
         self._track_headers: List[TrackHeaderWidget] = []
         self._clipboard: List[VideoClip] = []
         
-        # Configuración de tamaño flexible
+        # Configuración de editor de video profesional
+        # Timeline es el elemento principal, debe expandirse
         self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
-        self.setMinimumHeight(180)  # Altura mínima para ser usable
+        self.setMinimumHeight(250)  # Altura mínima suficiente para ver tracks
+        self.setMinimumWidth(800)   # Ancho mínimo para timeline extenso
 
         self._construir_ui()
         self._refrescar_completo()
@@ -1486,11 +1488,19 @@ class TimelineWidget(QWidget):
         self._headers_container.setStyleSheet("background-color: #212529;")
         area.addWidget(self._headers_container)
 
-        # Vista grafica (escena)
+        # Vista grafica (escena) - Timeline "infinito"
         self._scene = TimelineScene()
         self._view = TimelineView(self._scene)
-        self._view.setMinimumHeight(80)
+        self._view.setMinimumHeight(150)  # Más altura para ver mejor
         self._view.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
+        
+        # Configurar scroll horizontal infinito
+        self._view.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
+        self._view.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
+        
+        # Área de escena muy grande para timeline "infinito"
+        self._scene.setSceneRect(0, 0, 10000, 1000)  # 10,000px de ancho "infinito"
+        
         area.addWidget(self._view)
 
         # Conectar senales de la escena
@@ -1510,6 +1520,18 @@ class TimelineWidget(QWidget):
         log = logging.getLogger("soundvi.qt6.timeline")
         log.info("Refrescando timeline - Tracks: %d, Módulos: %d", 
                 len(self._timeline.tracks), len(self._timeline.module_items))
+        
+        # Calcular ancho total necesario para timeline "infinito"
+        # Basado en la duración máxima del proyecto
+        max_duration = max(30.0, self._timeline.duration + 10.0)  # Mínimo 30s, +10s extra
+        total_width_px = HEADER_WIDTH + (max_duration * self._pps)
+        
+        # Ajustar área de escena para timeline extenso
+        total_height_px = RULER_HEIGHT + (len(self._timeline.tracks) * TRACK_HEIGHT) + 100
+        self._scene.setSceneRect(0, 0, total_width_px, total_height_px)
+        
+        log.info("Timeline extenso configurado: %.1fs -> %dpx, altura: %dpx", 
+                max_duration, total_width_px, total_height_px)
         
         # Guardar estado del asistente de alineación antes de limpiar
         alignment_enabled = False

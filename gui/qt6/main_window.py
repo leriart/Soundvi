@@ -505,25 +505,35 @@ class VentanaPrincipalQt6(QMainWindow):
         
         # Configuración específica por área
         if area == Qt.DockWidgetArea.BottomDockWidgetArea:
-            # Para docks inferiores (timeline, mixer, keyframes)
-            dock.setMinimumHeight(180)  # Altura mínima suficiente para ver contenido
+            # Para docks inferiores
+            dock.setMinimumHeight(180)
             widget.setMinimumHeight(150)
             
-            # Timeline necesita más espacio y comportamiento especial
+            # TIMELINE - ELEMENTO PRINCIPAL DEL EDITOR DE VIDEO
             if titulo == "Timeline":
-                dock.setMinimumHeight(220)  # Aumentado para asegurar visibilidad
-                widget.setMinimumHeight(200)
-                # Asegurar que el timeline sea visible por defecto
+                # Timeline más grande y prominente
+                dock.setMinimumHeight(300)  # Mucho más alto para ser principal
+                dock.setMaximumHeight(600)  # Pero con límite máximo
+                widget.setMinimumHeight(280)
+                
+                # Timeline siempre visible y con prioridad
                 dock.setVisible(True)
-                # Permitir que el timeline se expanda más
+                dock.raise_()  # Traer al frente si está tabulado
+                
+                # Características especiales para timeline
                 dock.setFeatures(
                     QDockWidget.DockWidgetFeature.DockWidgetMovable |
                     QDockWidget.DockWidgetFeature.DockWidgetClosable |
                     QDockWidget.DockWidgetFeature.DockWidgetFloatable
                 )
+                
+                # Timeline obtiene más espacio por defecto
+                log.info("Timeline configurado como elemento principal (300-600px)")
         else:
-            # Para docks laterales
-            dock.setMinimumWidth(200)
+            # Para docks laterales (sidebar, inspector, etc.)
+            # Se adaptan al timeline, no al revés
+            dock.setMinimumWidth(180)
+            dock.setMaximumWidth(350)  # Limitar ancho para no robar espacio
             dock.setMinimumHeight(80)
         
         self.addDockWidget(area, dock)
@@ -540,48 +550,47 @@ class VentanaPrincipalQt6(QMainWindow):
         """Ajusta el tamaño del timeline después de la inicialización."""
         try:
             if hasattr(self, '_dock_timeline') and self._dock_timeline.isVisible():
-                # Forzar tamaño inicial
-                self._dock_timeline.setMinimumHeight(250)
-                self._dock_timeline.setMaximumHeight(400)
+                # Timeline como elemento principal - tamaño generoso
+                total_height = self.height()
+                timeline_height = int(max(300, total_height * 0.4))  # 40% mínimo de la ventana
+                
+                self._dock_timeline.setMinimumHeight(timeline_height)
                 
                 widget = self._dock_timeline.widget()
                 if widget:
-                    widget.setMinimumHeight(200)
-                    widget.setMaximumHeight(350)
+                    widget.setMinimumHeight(timeline_height - 20)
                     
                     # Forzar actualización
                     widget.update()
                     widget.repaint()
                     
-                    log.info("Timeline ajustado inicialmente - Dock: %dpx, Widget: %dpx",
-                            self._dock_timeline.height(), widget.height())
+                    log.info("Timeline configurado como principal: %dpx (40%% ventana)",
+                            timeline_height)
         except Exception as e:
             log.warning("Error ajustando timeline inicial: %s", e)
     
-    def _ajustar_timeline_tamano(self):
-        """Ajusta el tamaño del timeline basado en el espacio disponible."""
+    def resizeEvent(self, event):
+        """Maneja el redimensionamiento de la ventana principal."""
+        super().resizeEvent(event)
+        
+        # Al redimensionar, asegurar que el timeline mantenga buen tamaño
         try:
-            # Solo ajustar si el timeline existe y está visible
             if hasattr(self, '_dock_timeline') and self._dock_timeline.isVisible():
-                # Obtener tamaño de la ventana
                 total_height = self.height()
                 
-                # Calcular altura para timeline (25-35% de la ventana)
-                timeline_height = int(max(220, min(400, total_height * 0.3)))
+                # Timeline debe mantener al menos 35-45% de la altura
+                min_timeline_height = int(total_height * 0.35)
+                max_timeline_height = int(total_height * 0.55)
                 
-                # Ajustar dock
-                self._dock_timeline.setMinimumHeight(timeline_height)
-                
-                # Ajustar widget interno
-                widget = self._dock_timeline.widget()
-                if widget:
-                    widget.setMinimumHeight(max(180, timeline_height - 40))
+                # Ajustar si está fuera de rango
+                current_height = self._dock_timeline.height()
+                if current_height < min_timeline_height or current_height > max_timeline_height:
+                    target_height = int(total_height * 0.4)  # 40% ideal
+                    self._dock_timeline.setMinimumHeight(target_height)
                     
-                    # Forzar actualización
-                    widget.updateGeometry()
-                    QApplication.processEvents()
+                    log.debug("Timeline ajustado al redimensionar: %dpx", target_height)
         except Exception as e:
-            # Log error silenciosamente
+            # Silenciar errores en resize
             pass
 
     # -- Conectar senales entre widgets ----------------------------------------

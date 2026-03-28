@@ -295,12 +295,9 @@ class ClipItem(QGraphicsRectItem):
     def mouseReleaseEvent(self, event):
         self._resizing = False
         self._drag_start_pos = None
-        try:
-            if hasattr(self.scene(), 'update_snap_line'):
-                self.scene().update_snap_line(None)
-            super().mouseReleaseEvent(event)
-        except RuntimeError:
-            pass
+        if hasattr(self.scene(), 'update_snap_line'):
+            self.scene().update_snap_line(None)
+        super().mouseReleaseEvent(event)
     
     def _get_snap_times(self, timeline_widget) -> list:
         """Obtiene todos los puntos de tiempo a los que se puede hacer snap."""
@@ -641,87 +638,218 @@ class ModuleTimelineGraphicsItem(QGraphicsRectItem):
             painter.drawLine(rect.topLeft().toPoint(), rect.bottomRight().toPoint())
 
     def hoverMoveEvent(self, event):
-        try:
-            x = event.pos().x()
-            if x < 6 or x > self.rect().width() - 6:
-                self.setCursor(Qt.CursorShape.SizeHorCursor)
-            else:
-                self.setCursor(Qt.CursorShape.PointingHandCursor)
-            super().hoverMoveEvent(event)
-        except RuntimeError:
-            pass
-
-    def _is_cpp_alive(self) -> bool:
-        """Check if the underlying C++ QGraphicsRectItem is still valid."""
-        try:
-            # Accessing a simple Qt property will raise RuntimeError
-            # if the C++ object has been deleted.
-            self.flags()
-            return True
-        except RuntimeError:
-            return False
+        x = event.pos().x()
+        if x < 6 or x > self.rect().width() - 6:
+            self.setCursor(Qt.CursorShape.SizeHorCursor)
+        else:
+            self.setCursor(Qt.CursorShape.PointingHandCursor)
+        super().hoverMoveEvent(event)
 
     def mousePressEvent(self, event):
-        if not self._is_cpp_alive():
-            return
-        try:
-            if event.button() == Qt.MouseButton.LeftButton:
-                x = event.pos().x()
-                if x < 6:
-                    self._resizing = True
-                    self._resize_edge = "left"
-                    self._drag_start_pos = event.scenePos()
-                    self._drag_start_time = self.module_item.start_time
-                    self._drag_start_duration = self.module_item.duration
-                elif x > self.rect().width() - 6:
-                    self._resizing = True
-                    self._resize_edge = "right"
-                    self._drag_start_pos = event.scenePos()
-                    self._drag_start_duration = self.module_item.duration
-                else:
-                    self._drag_start_pos = event.scenePos()
-                    self._drag_start_time = self.module_item.start_time
-            super().mousePressEvent(event)
-        except RuntimeError:
-            pass
+        if event.button() == Qt.MouseButton.LeftButton:
+            x = event.pos().x()
+            if x < 6:
+                self._resizing = True
+                self._resize_edge = "left"
+                self._drag_start_pos = event.scenePos()
+                self._drag_start_time = self.module_item.start_time
+                self._drag_start_duration = self.module_item.duration
+            elif x > self.rect().width() - 6:
+                self._resizing = True
+                self._resize_edge = "right"
+                self._drag_start_pos = event.scenePos()
+                self._drag_start_duration = self.module_item.duration
+            else:
+                self._drag_start_pos = event.scenePos()
+                self._drag_start_time = self.module_item.start_time
+        super().mousePressEvent(event)
+
+    def _get_snap_times(self, timeline_widget) -> list:
+        """Obtiene todos los puntos de tiempo a los que se puede hacer snap."""
+        snap_times = [0.0]
+        if hasattr(timeline_widget, '_timeline') and timeline_widget._timeline:
+            snap_times.append(timeline_widget._timeline.playhead)
+            for track in timeline_widget._timeline.tracks:
+                for c in track.clips:
+                    snap_times.append(c.start_time)
+                    snap_times.append(c.end_time)
+            # Snap a otros módulos
+            for m in timeline_widget._timeline.module_items:
+                if m.item_id != self.module_item.item_id:
+                    snap_times.append(m.start_time)
+                    snap_times.append(m.start_time + m.duration)
+        return snap_times
+
+    def _apply_alignment_snap(self, proposed_start: float, mouse_x: float, check_end: bool = True) -> float:
+        """Aplica magnetismo (snap) a otros clips, módulos, playhead y guías."""
+        scene = self.scene()
+        if not scene:
+            return proposed_start
+        view = scene.views()[0] if scene.views() else None
+        timeline_widget = view.parent() if view else None
+        if not timeline_widget:
+            return proposed_start
+
+        snap_active = False
+        if hasattr(timeline_widget, '_timeline') and timeline_widget._timeline.snap_enabled:
+            snap_active = True
+        elif hasattr(timeline_widget, '_btn_alignment') and timeline_widget._btn_alignment.isChecked():
+            snap_active = True
+
+        if not snap_active:
+            if hasattr(scene, 'update_snap_line'):
+                scene.update_snap_line(None)
+            return proposed_start
+
+        SNAP_THRESHOLD_PX = 8
+        threshold_time = SNAP_THRESHOLD_PX / self._pps
+
+        best_start = proposed_start
+        min_dist = threshold_time
+        snapped_time_point = None
+
+        snap_times = self._get_snap_times(timeline_widget)
+        proposed_end = proposed_start + self.module_item.duration
+
+        for t in snap_times:
+            dist_start = abs(proposed_start - t)
+            if dist_start < min_dist:
+                min_dist = dist_start
+                best_start = t
+                snapped_time_point = t
+
+            if check_end:
+                dist_end = abs(proposed_end - t)
+                if dist_end < min_dist:
+                    min_dist = dist_end
+                    best_start = t - self.module_item.duration
+                    snapped_time_point = t
+
+        # Snap a guías de alineación
+        if hasattr(timeline_widget, '_alignment_guides') and hasattr(timeline_widget, '_btn_alignment') and timeline_widget._btn_alignment.isChecked():
+            prop_x_start = HEADER_WIDTH + proposed_start * self._pps
+            prop_x_end = HEADER_WIDTH + proposed_end * self._pps
+            for guide in timeline_widget._alignment_guides[:9]:
+                if guide.isVisible():
+                    guide_x = guide.line().x1()
+                    dist_start_px = abs(prop_x_start - guide_x)
+                    if dist_start_px < SNAP_THRESHOLD_PX and (dist_start_px / self._pps) < min_dist:
+                        min_dist = dist_start_px / self._pps
+                        best_start = (guide_x - HEADER_WIDTH) / self._pps
+                        snapped_time_point = best_start
+                    if check_end:
+                        dist_end_px = abs(prop_x_end - guide_x)
+                        if dist_end_px < SNAP_THRESHOLD_PX and (dist_end_px / self._pps) < min_dist:
+                            min_dist = dist_end_px / self._pps
+                            best_start = ((guide_x - HEADER_WIDTH) / self._pps) - self.module_item.duration
+                            snapped_time_point = (guide_x - HEADER_WIDTH) / self._pps
+
+        if snapped_time_point is not None and hasattr(scene, 'update_snap_line'):
+            scene.update_snap_line(HEADER_WIDTH + snapped_time_point * self._pps)
+        elif hasattr(scene, 'update_snap_line'):
+            scene.update_snap_line(None)
+
+        return max(0.0, best_start)
+
+    def _apply_alignment_snap_edge(self, proposed_x: float, mouse_x: float) -> float:
+        """Aplica snap para el borde derecho del módulo durante el redimensionado."""
+        scene = self.scene()
+        if not scene:
+            return proposed_x
+        view = scene.views()[0] if scene.views() else None
+        timeline_widget = view.parent() if view else None
+        if not timeline_widget:
+            return proposed_x
+
+        snap_active = False
+        if hasattr(timeline_widget, '_timeline') and timeline_widget._timeline.snap_enabled:
+            snap_active = True
+        elif hasattr(timeline_widget, '_btn_alignment') and timeline_widget._btn_alignment.isChecked():
+            snap_active = True
+
+        if not snap_active:
+            if hasattr(scene, 'update_snap_line'):
+                scene.update_snap_line(None)
+            return proposed_x
+
+        SNAP_THRESHOLD_PX = 8
+        proposed_end_time = (proposed_x - HEADER_WIDTH) / self._pps
+        best_end_time = proposed_end_time
+        min_dist = SNAP_THRESHOLD_PX / self._pps
+        snapped_time_point = None
+
+        snap_times = self._get_snap_times(timeline_widget)
+        for t in snap_times:
+            dist = abs(proposed_end_time - t)
+            if dist < min_dist:
+                min_dist = dist
+                best_end_time = t
+                snapped_time_point = t
+
+        # Snap a guías de alineación
+        if hasattr(timeline_widget, '_alignment_guides') and hasattr(timeline_widget, '_btn_alignment') and timeline_widget._btn_alignment.isChecked():
+            for guide in timeline_widget._alignment_guides[:9]:
+                if guide.isVisible():
+                    guide_x = guide.line().x1()
+                    dist_px = abs(proposed_x - guide_x)
+                    if dist_px < SNAP_THRESHOLD_PX and (dist_px / self._pps) < min_dist:
+                        min_dist = dist_px / self._pps
+                        best_end_time = (guide_x - HEADER_WIDTH) / self._pps
+                        snapped_time_point = best_end_time
+
+        if snapped_time_point is not None and hasattr(scene, 'update_snap_line'):
+            scene.update_snap_line(HEADER_WIDTH + snapped_time_point * self._pps)
+        elif hasattr(scene, 'update_snap_line'):
+            scene.update_snap_line(None)
+
+        return HEADER_WIDTH + best_end_time * self._pps
 
     def mouseMoveEvent(self, event):
-        if not self._is_cpp_alive():
-            return
-        try:
-            if self._resizing and self._drag_start_pos:
-                delta_x = event.scenePos().x() - self._drag_start_pos.x()
-                delta_time = delta_x / self._pps
-                if self._resize_edge == "left":
-                    new_start = max(0, self._drag_start_time + delta_time)
-                    new_dur = self._drag_start_duration - delta_time
-                    if new_dur >= 0.1:
-                        self.module_item.start_time = new_start
-                        self.module_item.duration = new_dur
-                        self._actualizar_geometria()
-                elif self._resize_edge == "right":
-                    new_dur = self._drag_start_duration + delta_time
-                    if new_dur >= 0.1:
-                        self.module_item.duration = new_dur
-                        self._actualizar_geometria()
-            elif self._drag_start_pos is not None:
-                delta_x = event.scenePos().x() - self._drag_start_pos.x()
-                delta_time = delta_x / self._pps
-                self.module_item.start_time = max(0, self._drag_start_time + delta_time)
-                self._actualizar_geometria()
-            super().mouseMoveEvent(event)
-        except RuntimeError:
-            pass
+        if self._resizing and self._drag_start_pos:
+            delta_x = event.scenePos().x() - self._drag_start_pos.x()
+            delta_time = delta_x / self._pps
+            if self._resize_edge == "left":
+                new_start = self._drag_start_time + delta_time
+                new_dur = self._drag_start_duration - delta_time
+
+                # Aplicar snap al borde izquierdo
+                new_start = self._apply_alignment_snap(new_start, event.scenePos().x(), check_end=False)
+                new_dur = self._drag_start_duration - (new_start - self._drag_start_time)
+
+                if new_dur >= 0.1 and new_start >= 0.0:
+                    self.module_item.start_time = new_start
+                    self.module_item.duration = new_dur
+                    self._actualizar_geometria()
+            elif self._resize_edge == "right":
+                new_dur = self._drag_start_duration + delta_time
+
+                # Aplicar snap al borde derecho
+                mod_end_x = HEADER_WIDTH + (self.module_item.start_time + new_dur) * self._pps
+                snapped_end_x = self._apply_alignment_snap_edge(mod_end_x, event.scenePos().x())
+                if snapped_end_x != mod_end_x:
+                    new_dur = (snapped_end_x - HEADER_WIDTH) / self._pps - self.module_item.start_time
+
+                if new_dur >= 0.1:
+                    self.module_item.duration = new_dur
+                    self._actualizar_geometria()
+        elif self._drag_start_pos is not None:
+            delta_x = event.scenePos().x() - self._drag_start_pos.x()
+            delta_time = delta_x / self._pps
+            new_start = max(0, self._drag_start_time + delta_time)
+
+            # Aplicar snap a clips, módulos, playhead y guías
+            new_start = self._apply_alignment_snap(new_start, event.scenePos().x(), check_end=True)
+
+            self.module_item.start_time = new_start
+            self._actualizar_geometria()
+        super().mouseMoveEvent(event)
 
     def mouseReleaseEvent(self, event):
         self._resizing = False
         self._drag_start_pos = None
-        if not self._is_cpp_alive():
-            return
-        try:
-            super().mouseReleaseEvent(event)
-        except RuntimeError:
-            pass
+        if hasattr(self.scene(), 'update_snap_line'):
+            self.scene().update_snap_line(None)
+        super().mouseReleaseEvent(event)
 
     def set_pixels_per_second(self, pps: float):
         self._pps = pps
@@ -768,30 +896,21 @@ class PlayheadItem(QGraphicsLineItem):
     
     def mouseReleaseEvent(self, event):
         """Termina arrastre del playhead."""
-        try:
-            if event.button() == Qt.MouseButton.LeftButton and hasattr(self, '_dragging'):
-                self._dragging = False
-                event.accept()
-            else:
-                super().mouseReleaseEvent(event)
-        except RuntimeError:
-            pass
+        if event.button() == Qt.MouseButton.LeftButton and hasattr(self, '_dragging'):
+            self._dragging = False
+            event.accept()
+        else:
+            super().mouseReleaseEvent(event)
     
     def hoverEnterEvent(self, event):
         """Cambia cursor al pasar sobre playhead."""
-        try:
-            self.setCursor(Qt.CursorShape.SizeHorCursor)
-            super().hoverEnterEvent(event)
-        except RuntimeError:
-            pass
+        self.setCursor(Qt.CursorShape.SizeHorCursor)
+        super().hoverEnterEvent(event)
     
     def hoverLeaveEvent(self, event):
         """Restaura cursor al salir del playhead."""
-        try:
-            self.setCursor(Qt.CursorShape.ArrowCursor)
-            super().hoverLeaveEvent(event)
-        except RuntimeError:
-            pass
+        self.setCursor(Qt.CursorShape.ArrowCursor)
+        super().hoverLeaveEvent(event)
 
     def set_height(self, h: float):
         self._height = h
@@ -969,24 +1088,14 @@ class TimelineScene(QGraphicsScene):
 
     def _on_selection_changed(self):
         """Detecta qué tipo de item fue seleccionado y emite la señal apropiada."""
-        try:
-            selected = self.selectedItems()
-        except RuntimeError:
-            return
+        selected = self.selectedItems()
         if not selected:
             return
         item = selected[0]
-        try:
-            if isinstance(item, ModuleTimelineGraphicsItem):
-                # Verify the C++ object is still alive before accessing attributes
-                item.flags()  # Will raise RuntimeError if deleted
-                self.module_selected.emit(item.module_item)
-            elif isinstance(item, ClipItem):
-                item.flags()
-                self.clip_selected.emit(item.clip)
-        except RuntimeError:
-            # The underlying C++ object was deleted (e.g. during scene.clear())
-            pass
+        if isinstance(item, ModuleTimelineGraphicsItem):
+            self.module_selected.emit(item.module_item)
+        elif isinstance(item, ClipItem):
+            self.clip_selected.emit(item.clip)
 
     def update_snap_line(self, x: float = None, height: float = 0.0):
         """Muestra o oculta la linea indicadora de snap magnetico."""
@@ -1039,6 +1148,14 @@ class TimelineScene(QGraphicsScene):
             if isinstance(item, ClipItem):
                 clips.append(item.clip)
         return clips
+
+    def get_selected_modules(self) -> List[ModuleTimelineItem]:
+        """Retorna los módulos actualmente seleccionados."""
+        modules = []
+        for item in self.selectedItems():
+            if isinstance(item, ModuleTimelineGraphicsItem):
+                modules.append(item.module_item)
+        return modules
 
     def mousePressEvent(self, event):
         """Click en area vacia mueve el playhead."""
@@ -1331,14 +1448,8 @@ class TimelineWidget(QWidget):
             
         if hasattr(self._scene, '_playhead') and self._scene._playhead:
             self._scene._playhead = None
-
-        # Block selectionChanged signal during clear() to prevent accessing
-        # deleted C++ objects (fixes RuntimeError crash in mouseReleaseEvent)
-        self._scene.blockSignals(True)
-        try:
-            self._scene.clear()
-        finally:
-            self._scene.blockSignals(False)
+            
+        self._scene.clear()
         self._scene._clip_items.clear()
 
         # Restaurar guías si estaban activas
@@ -1820,6 +1931,25 @@ class TimelineWidget(QWidget):
             self._refrescar_completo()
             self.clips_changed.emit()
 
+    def eliminar_modulo_seleccionado(self) -> bool:
+        """Elimina el o los módulos seleccionados del timeline.
+        
+        Returns:
+            True si se eliminó al menos un módulo, False si no había módulos seleccionados.
+        """
+        mods_sel = self._scene.get_selected_modules()
+        if not mods_sel:
+            return False
+            
+        for mod in mods_sel:
+            self._timeline.remove_module_item(mod.item_id)
+            logger.info("Módulo '%s' eliminado del timeline", mod.name)
+            
+        self._refrescar_completo()
+        self.module_selected.emit(None)
+        self.clips_changed.emit()
+        return True
+
     def eliminar_clip_seleccionado(self):
         """Elimina el o los clips seleccionados del timeline."""
         clips_sel = self.get_selected_clips()
@@ -1960,7 +2090,11 @@ class TimelineWidget(QWidget):
     def keyPressEvent(self, event: QKeyEvent):
         """Manejo de atajos de teclado del timeline."""
         if event.key() == Qt.Key.Key_Delete or event.key() == Qt.Key.Key_Backspace:
-            self.eliminar_clip_seleccionado()
+            # Primero intentar eliminar módulos seleccionados
+            mods_deleted = self.eliminar_modulo_seleccionado()
+            if not mods_deleted:
+                # Si no hay módulos seleccionados, eliminar clips
+                self.eliminar_clip_seleccionado()
         elif event.key() == Qt.Key.Key_S and event.modifiers() & Qt.KeyboardModifier.ControlModifier:
             self.dividir_clip_en_playhead()
         elif event.key() == Qt.Key.Key_C and event.modifiers() & Qt.KeyboardModifier.ControlModifier:

@@ -1212,6 +1212,8 @@ class VentanaPrincipalQt6(QMainWindow):
                 self._preview.set_timeline(self._timeline)
             self._actualizar_duracion_preview()
             self._actualizar_titulo_ventana()
+            # Restaurar módulos desde el estado guardado
+            self._restaurar_modulos_desde_proyecto()
             # Registrar en historial y actualizar menu
             project_history.add_project(ruta, self._project_manager.project_name)
             self._actualizar_menu_recientes()
@@ -1223,11 +1225,62 @@ class VentanaPrincipalQt6(QMainWindow):
                 f"No se pudo abrir el proyecto:\n{ruta}\n\n"
                 "Revisa que el archivo no esté corrupto.")
 
+    def _sincronizar_modules_state(self):
+        """Sincroniza el estado de los módulos activos al ProjectManager antes de guardar."""
+        if self._module_manager is not None:
+            try:
+                modules_state = []
+                for mod in self._module_manager.get_active_modules():
+                    mod_type = None
+                    for t_name, t_class in self._module_manager._module_types.items():
+                        if isinstance(mod, t_class):
+                            mod_type = t_name
+                            break
+                    if mod_type:
+                        modules_state.append({
+                            "type": mod_type,
+                            "name": getattr(mod, 'nombre', ''),
+                            "enabled": getattr(mod, 'habilitado', True),
+                            "layer": getattr(mod, 'capa', 0),
+                            "config": mod.get_config() if hasattr(mod, 'get_config') else {},
+                        })
+                self._project_manager.modules_state = modules_state
+            except Exception as e:
+                log.warning("Error sincronizando estado de módulos: %s", e)
+
+    def _restaurar_modulos_desde_proyecto(self):
+        """Restaura instancias de módulos desde el estado guardado en el proyecto."""
+        if self._module_manager is None:
+            return
+        try:
+            modules_state = self._project_manager.modules_state
+            if not modules_state:
+                return
+            for mod_data in modules_state:
+                mod_type = mod_data.get("type", "")
+                if not mod_type:
+                    continue
+                mod = self._module_manager.create_module_instance(mod_type)
+                if mod:
+                    mod.nombre = mod_data.get("name", mod.nombre)
+                    mod.habilitado = mod_data.get("enabled", True)
+                    mod.capa = mod_data.get("layer", 0)
+                    config = mod_data.get("config", {})
+                    if config and hasattr(mod, 'set_config'):
+                        mod.set_config(config)
+                    self._module_manager.add_module_instance(mod)
+            log.info("Restaurados %d módulos desde el proyecto", len(modules_state))
+        except Exception as e:
+            log.warning("Error restaurando módulos desde proyecto: %s", e)
+
     def _guardar_proyecto(self):
         """Guarda el proyecto actual en formato .soundvi."""
         if not self._project_manager.project_path:
             self._guardar_como()
             return
+        
+        # Sincronizar módulos antes de guardar
+        self._sincronizar_modules_state()
         
         # Guardar directamente sin preguntar (Ctrl+S rápido)
         # embed_media=False por defecto para guardado rápido
@@ -1306,6 +1359,9 @@ class VentanaPrincipalQt6(QMainWindow):
             
             embed_media = (reply == QMessageBox.StandardButton.Yes)
         
+        # Sincronizar módulos antes de guardar
+        self._sincronizar_modules_state()
+        
         # Guardar proyecto
         ok = self._project_manager.save_project(ruta, embed_media=embed_media)
         if ok:
@@ -1379,6 +1435,8 @@ class VentanaPrincipalQt6(QMainWindow):
                 self._preview.set_timeline(self._timeline)
             self._actualizar_duracion_preview()
             self._actualizar_titulo_ventana()
+            # Restaurar módulos desde el estado guardado
+            self._restaurar_modulos_desde_proyecto()
             project_history.add_project(ruta, self._project_manager.project_name)
             self._actualizar_menu_recientes()
             self._status.showMessage(

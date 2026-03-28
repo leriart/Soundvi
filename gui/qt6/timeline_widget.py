@@ -1200,6 +1200,7 @@ class TimelineWidget(QWidget):
         self._pm = profile_manager
         self._pps: float = 100.0  # pixeles por segundo
         self._clipboard: List[VideoClip] = []
+        self._last_selected_module_id: Optional[str] = None  # Para mantener selección entre refrescos
         
         # Configuración de editor de video profesional
         # Timeline es el elemento principal, debe expandirse
@@ -1207,6 +1208,7 @@ class TimelineWidget(QWidget):
         self.setMinimumHeight(150)  # Altura mínima reducida para dar espacio al inspector y preview
         self.setMinimumWidth(800)   # Ancho mínimo para timeline extenso
         self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)  # Para recibir eventos de teclado
+        self.setContextMenuPolicy(Qt.ContextMenuPolicy.DefaultContextMenu)  # Para recibir eventos de menú contextual
 
         self._construir_ui()
         self._refrescar_completo()
@@ -1402,6 +1404,7 @@ class TimelineWidget(QWidget):
         # Conectar senales de la escena
         self._scene.clip_selected.connect(self.clip_selected.emit)
         self._scene.module_selected.connect(self.module_selected.emit)
+        self._scene.module_selected.connect(self._on_module_selected_from_scene)
         self._scene.playhead_moved.connect(self._on_playhead_scene_click)
         self._view.zoom_changed.connect(self._on_zoom_changed)
         self._view.files_dropped.connect(self._on_files_dropped)
@@ -1561,6 +1564,11 @@ class TimelineWidget(QWidget):
             mod_gfx.setPos(HEADER_WIDTH + mod_item.start_time * self._pps, effect_track_y)
             print(f"DEBUG_CREATE: Created item at position {HEADER_WIDTH + mod_item.start_time * self._pps}, {effect_track_y}")
             self._scene.addItem(mod_gfx)
+            
+            # Si este módulo era el último seleccionado, seleccionarlo gráficamente
+            if hasattr(self, '_last_selected_module_id') and self._last_selected_module_id == mod_item.item_id:
+                print(f"DEBUG_SELECTION: Restoring selection for module {mod_item.name}")
+                mod_gfx.setSelected(True)
 
         # Headers ahora están en la escena, no en layout separado
 
@@ -2187,6 +2195,17 @@ class TimelineWidget(QWidget):
         """
         mods_sel = self._scene.get_selected_modules()
         
+        # Si no hay módulos seleccionados en la escena (porque se refrescó),
+        # intentar usar el último módulo seleccionado
+        if not mods_sel and self._last_selected_module_id:
+            print(f"DEBUG_DEL: No modules selected in scene, using last selected ID: {self._last_selected_module_id}")
+            # Buscar el módulo por ID en timeline
+            for mod_item in self._timeline.module_items:
+                if mod_item.item_id == self._last_selected_module_id:
+                    mods_sel = [mod_item]
+                    print(f"DEBUG_DEL: Found module by ID: {mod_item.name}")
+                    break
+        
         # Debug: mostrar qué módulos están seleccionados
         log = logging.getLogger("soundvi.qt6.timeline")
         log.debug("Módulos seleccionados para eliminar: %d", len(mods_sel))
@@ -2201,6 +2220,9 @@ class TimelineWidget(QWidget):
             self._timeline.remove_module_item(mod.item_id)
             logger.info("Módulo '%s' eliminado del timeline", mod.name)
             
+        # Limpiar última selección
+        self._last_selected_module_id = None
+        
         self._refrescar_completo()
         self.module_selected.emit(None)
         self.clips_changed.emit()
@@ -2251,6 +2273,15 @@ class TimelineWidget(QWidget):
         self._timeline.set_playhead(tiempo)
         self._scene.actualizar_playhead(tiempo)
 
+    def _on_module_selected_from_scene(self, module_item):
+        """Guarda el último módulo seleccionado para que DEL funcione entre refrescos."""
+        if module_item:
+            self._last_selected_module_id = module_item.item_id
+            print(f"DEBUG_SELECTION: Module selected, saved ID: {module_item.item_id}")
+        else:
+            self._last_selected_module_id = None
+            print("DEBUG_SELECTION: Module selection cleared")
+
     def _on_playhead_scene_click(self, tiempo: float):
         """Callback cuando se hace click en la escena para mover playhead."""
         self._timeline.set_playhead(tiempo)
@@ -2260,6 +2291,12 @@ class TimelineWidget(QWidget):
     # -- Menu contextual -------------------------------------------------------
     def contextMenuEvent(self, event):
         """Menu contextual del timeline."""
+        # DEBUG PRINT - WILL ALWAYS SHOW
+        print("DEBUG_TIMELINE: contextMenuEvent START - TimelineWidget")
+        print(f"DEBUG_TIMELINE: Event global pos: {event.globalPos()}")
+        print(f"DEBUG_TIMELINE: Event local pos: {event.pos()}")
+        print(f"DEBUG_TIMELINE: Event reason: {event.reason()}")
+        
         log = logging.getLogger("soundvi.qt6.timeline")
         log.debug("Context menu event triggered at %s", event.globalPos())
         log.debug("Event type: context menu, widget: TimelineWidget")
@@ -2276,6 +2313,16 @@ class TimelineWidget(QWidget):
 
         clips_sel = self._scene.get_selected_clips()
         mods_sel = self._scene.get_selected_modules()
+        
+        # Si no hay módulos seleccionados en la escena pero tenemos último ID seleccionado,
+        # usarlo para mostrar opciones del menú
+        if not mods_sel and self._last_selected_module_id:
+            print(f"DEBUG_MENU: No modules selected in scene, using last selected ID: {self._last_selected_module_id}")
+            for mod_item in self._timeline.module_items:
+                if mod_item.item_id == self._last_selected_module_id:
+                    mods_sel = [mod_item]
+                    print(f"DEBUG_MENU: Found module by ID: {mod_item.name}")
+                    break
         
         log.debug("Context menu - Clips selected: %d, Modules selected: %d", 
                  len(clips_sel), len(mods_sel))
@@ -2396,6 +2443,10 @@ class TimelineWidget(QWidget):
     # -- Atajos de teclado -----------------------------------------------------
     def keyPressEvent(self, event: QKeyEvent):
         """Manejo de atajos de teclado del timeline."""
+        # DEBUG PRINT - WILL ALWAYS SHOW
+        print(f"DEBUG_KEY: Key pressed: {event.key()}, text: '{event.text()}'")
+        print(f"DEBUG_KEY: Modifiers: {event.modifiers()}")
+        
         log = logging.getLogger("soundvi.qt6.timeline")
         
         if event.key() == Qt.Key.Key_Delete or event.key() == Qt.Key.Key_Backspace:

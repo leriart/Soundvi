@@ -1367,6 +1367,7 @@ class TimelineWidget(QWidget):
         self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
         self.setMinimumHeight(150)  # Altura mínima reducida para dar espacio al inspector y preview
         self.setMinimumWidth(800)   # Ancho mínimo para timeline extenso
+        self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)  # Para recibir eventos de teclado
 
         self._construir_ui()
         self._refrescar_completo()

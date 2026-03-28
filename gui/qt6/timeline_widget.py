@@ -1496,10 +1496,8 @@ class TimelineWidget(QWidget):
         # Headers se manejan DENTRO de la escena, no como widget separado
         # Esto asegura que se alineen con el sidebar
         
-        # Conectar señal para centrar en contenido cuando se agregue
-        self._timeline.track_added.connect(self._centrar_en_contenido)
-        self._timeline.clip_added.connect(self._centrar_en_contenido)
-        self._timeline.module_item_added.connect(self._centrar_en_contenido)
+        # Timeline no tiene señales PyQt, el centrado se maneja en los métodos
+        # que agregan contenido (_agregar_clip, _agregar_track, etc.)
 
         # Conectar senales de la escena
         self._scene.clip_selected.connect(self.clip_selected.emit)
@@ -2109,6 +2107,9 @@ class TimelineWidget(QWidget):
         self._timeline.add_track(track_type=tipo, name=name)
         self._refrescar_completo()
         self.clips_changed.emit()
+        
+        # Centrar en contenido después de agregar track
+        QTimer.singleShot(50, self._centrar_en_contenido)
 
     def _eliminar_track(self, track_id: str):
         """Elimina un track por su ID."""

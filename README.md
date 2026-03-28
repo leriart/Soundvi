@@ -6,7 +6,7 @@
 
 **Soundvi** es una aplicación de escritorio para generar videos reactivos al audio, diseñada con una arquitectura modular "Plug and Play" basada en PyQt6.
 
-## 🚀 Características principales
+## Características principales
 
 - **Arquitectura modular**: Sistema de módulos categorizados (audio, video, texto, utilidades, exportación)
 - **Visualizadores wav2bar-reborn**: Módulos de visualización de audio de alta calidad
@@ -16,7 +16,7 @@
 - **Undo/Redo**: Sistema de comandos para deshacer/rehacer acciones
 - **Exportación flexible**: Múltiples formatos y configuraciones de render
 
-## 🎨 Módulos de Visualización (wav2bar-reborn)
+## Módulos de Visualización (wav2bar-reborn)
 
 Módulos inspirados en el proyecto [wav2bar-reborn](https://github.com/wav2bar-reborn):
 
@@ -113,24 +113,6 @@ python main.py --profile profesional
 python main.py --profile personalizado
 ```
 
-## 🧪 Testing
-
-```bash
-# Ejecutar suite de tests completa
-python tests/test_soundvi_project.py
-```
-
-La suite incluye:
-- Tests de cifrado/descifrado
-- Tests de creación/carga de proyectos
-- Tests de medios embebidos
-- Tests del ProjectManager
-- Tests de proyectos vacíos y corruptos
-- Tests de conversión de formatos
-- Tests de módulos wav2bar-reborn
-- Tests de renderizado básico
-- Test de estrés con proyectos grandes
-
 ## 📁 Estructura del Proyecto
 
 ```
@@ -174,10 +156,3 @@ Soundvi/
 
 Soundvi es un proyecto de código abierto.
 
-## 🙏 Créditos
-
-- **Soundvi Team** — Desarrollo principal
-- **wav2bar-reborn** — Inspiración para los módulos de visualización de audio
-- **PyQt6** — Framework de interfaz gráfica
-- **OpenCV** — Procesamiento de video
-- **librosa** — Análisis de audio

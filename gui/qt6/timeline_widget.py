@@ -2437,6 +2437,11 @@ class TimelineWidget(QWidget):
             menu.addAction(f"{ICONOS_UNICODE['trash']} Eliminar",
                            self.eliminar_clip_seleccionado)
             menu.addSeparator()
+        
+        if mods_sel:
+            menu.addAction(f"{ICONOS_UNICODE['trash']} Eliminar módulo(s)",
+                           self.eliminar_modulo_seleccionado)
+            menu.addSeparator()
 
             # Submenu de transiciones
             trans_menu = menu.addMenu("⇄ Transiciones")

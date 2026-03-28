@@ -523,6 +523,9 @@ class VentanaPrincipalQt6(QMainWindow):
         # que los cambios de parámetros (pos_x, pos_y, etc.) se apliquen.
         self._panel_inspector.preview_requested.connect(self._invalidar_cache_y_preview)
 
+        # Inspector -> Apply Changes: forzar refresco completo del timeline y preview
+        self._panel_inspector.apply_requested.connect(self._on_apply_changes)
+
         # Inspector -> Timeline: refrescar al cambiar propiedades de clip
         self._panel_inspector.property_changed.connect(
             lambda p, v: self._panel_timeline.refrescar())
@@ -986,6 +989,17 @@ class VentanaPrincipalQt6(QMainWindow):
         except Exception as e:
             log.debug("Error invalidando cache: %s", e)
         self._actualizar_preview()
+
+    def _on_apply_changes(self):
+        """
+        Aplica todos los cambios del inspector: refresca el timeline visual,
+        invalida caches y actualiza el preview.
+        """
+        log.info("Aplicando cambios desde el inspector...")
+        # Invalidar cache para que los cambios se apliquen
+        self._invalidar_cache_y_preview()
+        # Refrescar la representación visual del timeline
+        self._panel_timeline.refrescar()
 
     # FIX BUG 3: flag y timer para evitar renders simultáneos /
     # acumulados que hacen que el preview "avance" al aplicar rápido.

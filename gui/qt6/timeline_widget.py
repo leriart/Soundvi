@@ -1371,6 +1371,7 @@ class TimelineWidget(QWidget):
         self._pps: float = 100.0  # pixeles por segundo
         self._clipboard: List[VideoClip] = []
         self._last_selected_module_id: Optional[str] = None  # Para mantener selección entre refrescos
+        self._refreshing: bool = False  # Para evitar refrescos recursivos
         
         # Configuración de editor de video profesional
         # Timeline es el elemento principal, debe expandirse
@@ -1586,6 +1587,9 @@ class TimelineWidget(QWidget):
     # -- Gestion de tracks -----------------------------------------------------
     def _refrescar_completo(self):
         """Reconstruye toda la representacion visual del timeline."""
+        if self._refreshing:
+            return
+        self._refreshing = True
         log = logging.getLogger("soundvi.qt6.timeline")
         log.info("Refrescando timeline - Tracks: %d, Módulos: %d", 
                 len(self._timeline.tracks), len(self._timeline.module_items))
@@ -1770,6 +1774,8 @@ class TimelineWidget(QWidget):
         # Actualizar guías de alineación si están activas
         if hasattr(self, '_btn_alignment') and self._btn_alignment.isChecked():
             self._actualizar_guias_alineacion()
+        
+        self._refreshing = False
 
     def _dibujar_regla(self):
         """Dibuja la regla temporal en la parte superior."""

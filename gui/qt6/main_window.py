@@ -63,6 +63,7 @@ from core.commands import CommandManager
 from core.keyframes import KeyframeAnimator
 from core.project_manager import ProjectManager
 from core.project_history import project_history
+from core.video_clip import VideoClip
 
 log = logging.getLogger("soundvi.qt6.main")
 

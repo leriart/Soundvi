@@ -1331,6 +1331,11 @@ class TimelineWidget(QWidget):
 
         self._construir_ui()
         self._refrescar_completo()
+        
+        # Asegurar que el widget sea visible
+        log = logging.getLogger("soundvi.qt6.timeline")
+        log.info("TimelineWidget inicializado - Altura: %d, Tracks: %d", 
+                self.height(), len(self._timeline.tracks))
 
     def _construir_ui(self):
         """Construye la interfaz del timeline."""
@@ -1502,6 +1507,10 @@ class TimelineWidget(QWidget):
     # -- Gestion de tracks -----------------------------------------------------
     def _refrescar_completo(self):
         """Reconstruye toda la representacion visual del timeline."""
+        log = logging.getLogger("soundvi.qt6.timeline")
+        log.info("Refrescando timeline - Tracks: %d, Módulos: %d", 
+                len(self._timeline.tracks), len(self._timeline.module_items))
+        
         # Guardar estado del asistente de alineación antes de limpiar
         alignment_enabled = False
         if hasattr(self, '_btn_alignment') and self._btn_alignment:

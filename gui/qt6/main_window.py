@@ -462,6 +462,17 @@ class VentanaPrincipalQt6(QMainWindow):
         )
         self._dock_timeline = self._crear_dock("Timeline", self._panel_timeline,
                                                 Qt.DockWidgetArea.BottomDockWidgetArea)
+        
+        # Asegurar que el timeline sea visible y tenga tamaño adecuado
+        log.info("Timeline dock creado - Altura mínima: %d", self._dock_timeline.minimumHeight())
+        log.info("Timeline widget altura mínima: %d", self._panel_timeline.minimumHeight())
+        
+        # Forzar tamaño inicial y visibilidad
+        self._dock_timeline.show()
+        self._panel_timeline.show()
+        
+        # Usar timer para ajustar tamaño después de que la ventana se muestre
+        QTimer.singleShot(100, self._ajustar_timeline_inicial)
 
         # -- Dock: Audio Mixer (abajo, tabulado con timeline) --
         self._panel_mixer = AudioMixerWidget(self._pm)
@@ -495,13 +506,15 @@ class VentanaPrincipalQt6(QMainWindow):
         # Configuración específica por área
         if area == Qt.DockWidgetArea.BottomDockWidgetArea:
             # Para docks inferiores (timeline, mixer, keyframes)
-            dock.setMinimumHeight(150)  # Altura mínima suficiente
-            widget.setMinimumHeight(120)
+            dock.setMinimumHeight(180)  # Altura mínima suficiente para ver contenido
+            widget.setMinimumHeight(150)
             
             # Timeline necesita más espacio y comportamiento especial
             if titulo == "Timeline":
-                dock.setMinimumHeight(200)
-                widget.setMinimumHeight(180)
+                dock.setMinimumHeight(220)  # Aumentado para asegurar visibilidad
+                widget.setMinimumHeight(200)
+                # Asegurar que el timeline sea visible por defecto
+                dock.setVisible(True)
                 # Permitir que el timeline se expanda más
                 dock.setFeatures(
                     QDockWidget.DockWidgetFeature.DockWidgetMovable |
@@ -515,58 +528,61 @@ class VentanaPrincipalQt6(QMainWindow):
         
         self.addDockWidget(area, dock)
         
-        # Conectar señal de cambio de visibilidad para ajustar layout
-        dock.visibilityChanged.connect(lambda visible: self._ajustar_layout_dinamico())
-        
         return dock
     
     def resizeEvent(self, event):
         """Maneja el redimensionamiento de la ventana principal."""
         super().resizeEvent(event)
-        self._ajustar_layout_dinamico()
+        # Ajustar timeline después de redimensionar
+        self._ajustar_timeline_tamano()
     
-    def _ajustar_layout_dinamico(self):
-        """Ajusta dinámicamente el layout cuando cambia la visibilidad de docks o tamaño."""
-        # Recalcular tamaños preferidos
-        self._actualizar_tamanos_preferidos()
-    
-    def _actualizar_tamanos_preferidos(self):
-        """Actualiza los tamaños preferidos de los docks basado en el espacio disponible."""
+    def _ajustar_timeline_inicial(self):
+        """Ajusta el tamaño del timeline después de la inicialización."""
         try:
-            # Obtener tamaño total de la ventana
-            total_width = self.width()
-            total_height = self.height()
-            
-            # Calcular espacio disponible para docks inferiores
-            # Cuando el sidebar está expandido, dar más espacio al timeline
-            sidebar_width = 0
-            if hasattr(self, '_dock_sidebar') and self._dock_sidebar.isVisible():
-                sidebar_width = self._dock_sidebar.width()
-            
-            # Más espacio horizontal disponible = más altura para timeline
-            available_horizontal_ratio = (total_width - sidebar_width) / total_width if total_width > 0 else 1.0
-            available_bottom_height = int(max(200, total_height * 0.25 * (1.0 + available_horizontal_ratio)))
-            
-            # Ajustar timeline si está visible
             if hasattr(self, '_dock_timeline') and self._dock_timeline.isVisible():
-                # Dar más altura al timeline cuando hay espacio
-                timeline_height = int(max(200, min(500, available_bottom_height)))
+                # Forzar tamaño inicial
+                self._dock_timeline.setMinimumHeight(250)
+                self._dock_timeline.setMaximumHeight(400)
                 
-                # Ajustar el dock (necesita entero)
+                widget = self._dock_timeline.widget()
+                if widget:
+                    widget.setMinimumHeight(200)
+                    widget.setMaximumHeight(350)
+                    
+                    # Forzar actualización
+                    widget.update()
+                    widget.repaint()
+                    
+                    log.info("Timeline ajustado inicialmente - Dock: %dpx, Widget: %dpx",
+                            self._dock_timeline.height(), widget.height())
+        except Exception as e:
+            log.warning("Error ajustando timeline inicial: %s", e)
+    
+    def _ajustar_timeline_tamano(self):
+        """Ajusta el tamaño del timeline basado en el espacio disponible."""
+        try:
+            # Solo ajustar si el timeline existe y está visible
+            if hasattr(self, '_dock_timeline') and self._dock_timeline.isVisible():
+                # Obtener tamaño de la ventana
+                total_height = self.height()
+                
+                # Calcular altura para timeline (25-35% de la ventana)
+                timeline_height = int(max(220, min(400, total_height * 0.3)))
+                
+                # Ajustar dock
                 self._dock_timeline.setMinimumHeight(timeline_height)
                 
-                # Ajustar también el widget interno
-                timeline_widget = self._dock_timeline.widget()
-                if timeline_widget and hasattr(timeline_widget, 'setMinimumHeight'):
-                    timeline_widget.setMinimumHeight(max(100, timeline_height - 40))
-                
-                # Forzar actualización del layout
-                if timeline_widget:
-                    timeline_widget.updateGeometry()
+                # Ajustar widget interno
+                widget = self._dock_timeline.widget()
+                if widget:
+                    widget.setMinimumHeight(max(180, timeline_height - 40))
+                    
+                    # Forzar actualización
+                    widget.updateGeometry()
+                    QApplication.processEvents()
         except Exception as e:
-            # Log error pero no crashear
-            import logging
-            logging.getLogger("soundvi.qt6.main").warning(f"Error ajustando tamaños: {e}")
+            # Log error silenciosamente
+            pass
 
     # -- Conectar senales entre widgets ----------------------------------------
     def _conectar_senales(self):

@@ -519,7 +519,9 @@ class VentanaPrincipalQt6(QMainWindow):
         self._preview.tiempo_cambiado.connect(self._actualizar_preview)
 
         # Inspector -> Preview: actualizar preview al cambiar propiedades
-        self._panel_inspector.preview_requested.connect(self._actualizar_preview)
+        # FIX BUG 2: invalidar cache de módulos antes de re-renderizar para
+        # que los cambios de parámetros (pos_x, pos_y, etc.) se apliquen.
+        self._panel_inspector.preview_requested.connect(self._invalidar_cache_y_preview)
 
         # Inspector -> Timeline: refrescar al cambiar propiedades de clip
         self._panel_inspector.property_changed.connect(
@@ -959,21 +961,74 @@ class VentanaPrincipalQt6(QMainWindow):
                 track.solo = solo
                 break
 
-    def _actualizar_preview(self):
-        """Actualiza el frame del preview con el estado actual."""
+    def _invalidar_cache_y_preview(self):
+        """
+        FIX BUG 2: Invalida el cache de módulos del timeline para el objeto
+        actualmente inspeccionado y luego refresca el preview.  Esto garantiza
+        que cualquier cambio de parámetro (pos_x, pos_y, color, etc.) se
+        refleje de inmediato porque la instancia del módulo se recrea con los
+        nuevos valores almacenados en ``mod_item.params``.
+        """
+        try:
+            from core.video_cache import get_global_cache
+            cache = get_global_cache()
+            obj = self._panel_inspector.objeto_actual
+            if isinstance(obj, VideoClip):
+                clip_id = getattr(obj, 'clip_id', str(id(obj)))
+                cache.clear_clip(clip_id)
+            else:
+                cache.clear_all()
+            # Si es un ModuleTimelineItem, borrar su instancia cacheada
+            # para que se recree con los params actualizados.
+            if isinstance(obj, ModuleTimelineItem):
+                item_id = obj.item_id
+                self._timeline_module_cache.pop(item_id, None)
+        except Exception as e:
+            log.debug("Error invalidando cache: %s", e)
+        self._actualizar_preview()
+
+    # FIX BUG 3: flag y timer para evitar renders simultáneos /
+    # acumulados que hacen que el preview "avance" al aplicar rápido.
+    _rendering: bool = False
+    _preview_pending: bool = False
+
+    def _actualizar_preview(self, *_args):
+        """Actualiza el frame del preview con el estado actual.
+
+        Incluye protección contra re-entrancia y debounce: si ya hay un
+        render en curso, se marca como pendiente y se ejecutará una sola
+        vez al terminar.  Esto evita que múltiples clics rápidos acumulen
+        renders que hagan parecer que el preview se reproduce.
+        """
         if not hasattr(self, '_preview') or not self._preview:
             return
-            
-        # Obtener el tiempo actual de la preview
-        tiempo_actual = 0.0
-        if hasattr(self._preview, 'get_tiempo_actual'):
-            tiempo_actual = self._preview.get_tiempo_actual()
-        
-        # Renderizar el frame compuesto para este tiempo
-        frame = self._render_frame_composito(tiempo_actual)
-        
-        if frame is not None and hasattr(self._preview, 'mostrar_frame'):
-            self._preview.mostrar_frame(frame)
+
+        # Si ya estamos renderizando, solo marcar como pendiente
+        if self._rendering:
+            self._preview_pending = True
+            return
+
+        self._rendering = True
+        self._preview_pending = False
+        try:
+            # Siempre usar el tiempo ACTUAL del playhead (no incremental)
+            tiempo_actual = 0.0
+            if hasattr(self._preview, 'get_tiempo_actual'):
+                tiempo_actual = self._preview.get_tiempo_actual()
+
+            # Renderizar el frame compuesto para este tiempo
+            frame = self._render_frame_composito(tiempo_actual)
+
+            if frame is not None and hasattr(self._preview, 'mostrar_frame'):
+                self._preview.mostrar_frame(frame)
+        finally:
+            self._rendering = False
+
+        # Si quedó un render pendiente, ejecutarlo *una sola vez* tras
+        # un breve delay para que la UI respire.
+        if self._preview_pending:
+            self._preview_pending = False
+            QTimer.singleShot(50, self._actualizar_preview)
     
     def _get_or_create_timeline_module(self, mod_item):
         """
@@ -1080,34 +1135,37 @@ class VentanaPrincipalQt6(QMainWindow):
                 tiempo, preview_width, preview_height
             )
             
-            # Verificar si hay contenido real (no todo negro)
-            has_content = np.any(frame_composito > 0)
-            
-            if has_content:
-                # Aplicar módulos globales activos (del ModuleManager)
-                if self._module_manager is not None:
+            # FIX BUG 2: Eliminado el gate ``has_content`` que impedía que los
+            # módulos (globales y de timeline) se renderizaran cuando el frame
+            # base era negro (sin clips de video).  Ahora los módulos siempre
+            # se aplican, lo que permite que generen contenido propio (formas,
+            # texto, waveforms, etc.) y que los cambios de pos_x/pos_y se
+            # reflejen inmediatamente.
+
+            # Aplicar módulos globales activos (del ModuleManager)
+            if self._module_manager is not None:
+                try:
+                    frame_composito = self._module_manager.render_all(
+                        frame_composito, tiempo, fps=self._preview._fps
+                    )
+                except Exception as e:
+                    log.warning("Error aplicando modulos globales: %s", e)
+
+            # Aplicar módulos posicionados en el timeline
+            active_tl_modules = self._timeline.get_active_modules_at_time(tiempo)
+            if active_tl_modules and self._module_manager is not None:
+                for mod_item in active_tl_modules:
                     try:
-                        frame_composito = self._module_manager.render_all(
-                            frame_composito, tiempo, fps=self._preview._fps
-                        )
+                        mod_instance = self._get_or_create_timeline_module(mod_item)
+                        if mod_instance and hasattr(mod_instance, 'render'):
+                            # Tiempo relativo dentro del módulo
+                            mod_time = tiempo - mod_item.start_time
+                            frame_composito = mod_instance.render(
+                                frame_composito, mod_time, fps=self._preview._fps
+                            )
                     except Exception as e:
-                        log.warning("Error aplicando modulos globales: %s", e)
-                
-                # Aplicar módulos posicionados en el timeline
-                active_tl_modules = self._timeline.get_active_modules_at_time(tiempo)
-                if active_tl_modules and self._module_manager is not None:
-                    for mod_item in active_tl_modules:
-                        try:
-                            mod_instance = self._get_or_create_timeline_module(mod_item)
-                            if mod_instance and hasattr(mod_instance, 'render'):
-                                # Tiempo relativo dentro del módulo
-                                mod_time = tiempo - mod_item.start_time
-                                frame_composito = mod_instance.render(
-                                    frame_composito, mod_time, fps=self._preview._fps
-                                )
-                        except Exception as e:
-                            log.debug("Error aplicando módulo timeline '%s': %s",
-                                     mod_item.module_type, e)
+                        log.debug("Error aplicando módulo timeline '%s': %s",
+                                 mod_item.module_type, e)
             
             return frame_composito
             

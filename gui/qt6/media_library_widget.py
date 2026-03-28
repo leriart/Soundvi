@@ -237,6 +237,11 @@ class MediaLibraryWidget(QFrame):
         self._lista.setSpacing(6)
         self._lista.setWrapping(True)
         self._lista.setWordWrap(True)
+        # FIX BUG 1: Evitar que los items se muevan libremente fuera de la
+        # cuadrícula.  Movement.Static mantiene los items anclados al grid;
+        # UniformItemSizes garantiza tamaño homogéneo para un layout correcto.
+        self._lista.setMovement(QListWidget.Movement.Static)
+        self._lista.setUniformItemSizes(True)
         self._lista.setDragEnabled(True)
         self._lista.setSelectionMode(QAbstractItemView.SelectionMode.ExtendedSelection)
         self._lista.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)

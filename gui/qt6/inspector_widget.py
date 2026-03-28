@@ -92,22 +92,6 @@ class InspectorWidget(QWidget):
 
         header_layout.addStretch()
 
-        # Botón Aplicar
-        self._btn_aplicar = QPushButton("✔ Aplicar")
-        self._btn_aplicar.setToolTip("Aplicar cambios al preview")
-        self._btn_aplicar.setFixedHeight(22)
-        self._btn_aplicar.setStyleSheet("""
-            QPushButton {
-                background-color: #00865f; color: #FFFFFF;
-                border: none; border-radius: 3px;
-                padding: 2px 8px; font-size: 10px; font-weight: bold;
-            }
-            QPushButton:hover { background-color: #00BC8C; }
-        """)
-        self._btn_aplicar.clicked.connect(self._aplicar_cambios)
-        self._btn_aplicar.setVisible(False)
-        header_layout.addWidget(self._btn_aplicar)
-
         # Boton reset
         self._btn_reset = QPushButton("\u21BA Reset")
         self._btn_reset.setToolTip("Restaurar valores por defecto")
@@ -156,7 +140,6 @@ class InspectorWidget(QWidget):
         """Muestra mensaje cuando no hay seleccion."""
         self._limpiar_contenido()
         self._lbl_titulo.setText("Inspector")
-        self._btn_aplicar.setVisible(False)
         self._btn_reset.setVisible(False)
 
         lbl = QLabel("Selecciona un elemento en el\ntimeline para ver sus propiedades.")
@@ -178,7 +161,6 @@ class InspectorWidget(QWidget):
         self._objeto_actual = clip
         self._limpiar_contenido()
         self._lbl_titulo.setText(f"Clip: {clip.name}")
-        self._btn_aplicar.setVisible(True)
         self._btn_reset.setVisible(True)
 
         # -- Seccion: Informacion general --
@@ -391,6 +373,7 @@ class InspectorWidget(QWidget):
                 clip.transition_in = trans_data
             else:
                 clip.transition_out = trans_data
+        self.preview_requested.emit()
         self.property_changed.emit(f"transition_{position}", trans_type)
 
     def _set_transition_duration(self, clip: VideoClip, position: str, duration: float):
@@ -398,6 +381,7 @@ class InspectorWidget(QWidget):
         trans = clip.transition_in if position == 'in' else clip.transition_out
         if trans:
             trans['duration'] = duration
+            self.preview_requested.emit()
             self.property_changed.emit(f"transition_{position}_duration", str(duration))
 
     # -- Mostrar propiedades de Track ------------------------------------------
@@ -406,7 +390,6 @@ class InspectorWidget(QWidget):
         self._objeto_actual = track
         self._limpiar_contenido()
         self._lbl_titulo.setText(f"Track: {track.name}")
-        self._btn_aplicar.setVisible(True)
         self._btn_reset.setVisible(True)
 
         # -- Seccion: Informacion --
@@ -491,7 +474,6 @@ class InspectorWidget(QWidget):
 
         nombre = getattr(modulo, "nombre", type(modulo).__name__)
         self._lbl_titulo.setText(f"Modulo: {nombre}")
-        self._btn_aplicar.setVisible(True)
         self._btn_reset.setVisible(True)
 
         grupo_mod = PropertyGroup("Parametros del modulo", expandido=True)
@@ -565,7 +547,6 @@ class InspectorWidget(QWidget):
         self._objeto_actual = mod_item
         self._limpiar_contenido()
         self._lbl_titulo.setText(f"Módulo: {mod_item.name}")
-        self._btn_aplicar.setVisible(True)
         self._btn_reset.setVisible(True)
 
         # -- Sección: Información general del módulo --
@@ -710,8 +691,7 @@ class InspectorWidget(QWidget):
                     def trigger_auto_save(self):
                         pass
                     def update_preview(self):
-                        # No auto-refresh; user must click "Aplicar"
-                        pass
+                        self._inspector.preview_requested.emit()
 
                 proxy = _AppProxy(self)
                 config_widget = mod_instance.get_config_widgets(
@@ -729,6 +709,7 @@ class InspectorWidget(QWidget):
         """Cambia una propiedad directa del ModuleTimelineItem."""
         setattr(mod_item, prop, valor)
         self.property_changed.emit(prop, valor)
+        self.preview_requested.emit()
 
     def _cambiar_param_modulo_tl(self, mod_item, mod_instance, param: str, valor):
         """Cambia un parámetro del módulo y lo sincroniza con el ModuleTimelineItem."""
@@ -741,6 +722,7 @@ class InspectorWidget(QWidget):
             if hasattr(mod_instance, 'set_config'):
                 mod_instance.set_config({param: valor})
         self.property_changed.emit(param, valor)
+        self.preview_requested.emit()
 
     # -- Cambiar propiedades con Undo/Redo -------------------------------------
     def _cambiar_propiedad(self, obj: Any, prop: str, valor: Any, desc: str = ""):
@@ -748,10 +730,6 @@ class InspectorWidget(QWidget):
         cmd = ChangePropertyCommand(obj, prop, valor, desc)
         self._cmd.execute(cmd)
         self.property_changed.emit(prop, valor)
-
-    # -- Aplicar cambios -------------------------------------------------------
-    def _aplicar_cambios(self):
-        """Aplica los cambios actuales al preview (invalida caché y refresca)."""
         self.preview_requested.emit()
 
     # -- Reset -----------------------------------------------------------------

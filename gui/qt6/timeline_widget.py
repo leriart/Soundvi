@@ -238,20 +238,10 @@ class ClipItem(QGraphicsRectItem):
             else:
                 self._drag_start_pos = event.scenePos()
                 self._drag_start_time = self.clip.start_time
-                self._drag_start_track_y = self._track_y
-                self._drag_original_track_index = self.clip.track_index
         super().mousePressEvent(event)
 
-    def _get_timeline_widget(self):
-        """Helper to get parent TimelineWidget."""
-        scene = self.scene()
-        if not scene:
-            return None
-        view = scene.views()[0] if scene.views() else None
-        return view.parent() if view else None
-
     def mouseMoveEvent(self, event):
-        """Arrastre del clip o redimensionado, including cross-track movement."""
+        """Arrastre del clip o redimensionado."""
         if self._resizing:
             delta_x = event.scenePos().x() - self._drag_start_pos.x()
             delta_time = delta_x / self._pps
@@ -277,8 +267,11 @@ class ClipItem(QGraphicsRectItem):
                 new_duration = self._drag_start_duration + delta_time
                 
                 # Para el borde derecho, podemos snap el final del clip
+                # Calcular posición X del final del clip
                 clip_end_x = HEADER_WIDTH + (self.clip.start_time + new_duration) * self._pps
+                # Aplicar snap basado en la posición del mouse (que está en el borde derecho)
                 snapped_end_x = self._apply_alignment_snap_edge(clip_end_x, event.scenePos().x())
+                # Convertir de vuelta a duración
                 if snapped_end_x != clip_end_x:
                     new_duration = (snapped_end_x - HEADER_WIDTH) / self._pps - self.clip.start_time
                 
@@ -296,41 +289,18 @@ class ClipItem(QGraphicsRectItem):
             new_start = self._apply_alignment_snap(new_start, event.scenePos().x(), check_end=True)
             
             self.clip.start_time = new_start
-            
-            # Cross-track vertical movement: detect target track
-            tw = self._get_timeline_widget()
-            if tw and hasattr(tw, '_timeline'):
-                mouse_y = event.scenePos().y() - RULER_HEIGHT
-                target_track_idx = int(mouse_y / TRACK_HEIGHT)
-                if 0 <= target_track_idx < len(tw._timeline.tracks):
-                    target_track = tw._timeline.tracks[target_track_idx]
-                    # Only allow moving to same type tracks
-                    if target_track.track_type == self.track_type and not target_track.locked:
-                        new_y = RULER_HEIGHT + target_track_idx * TRACK_HEIGHT
-                        self._track_y = new_y
-                        self.clip.track_index = target_track_idx
-            
             self._actualizar_geometria()
         super().mouseMoveEvent(event)
 
     def mouseReleaseEvent(self, event):
-        """Finaliza arrastre, commit cross-track move if needed."""
-        if not self._resizing and self._drag_start_pos is not None:
-            orig_idx = getattr(self, '_drag_original_track_index', self.clip.track_index)
-            if orig_idx != self.clip.track_index:
-                # Commit the cross-track move via Timeline.move_clip
-                tw = self._get_timeline_widget()
-                if tw and hasattr(tw, '_timeline'):
-                    tw._timeline.move_clip(
-                        self.clip.clip_id, self.clip.start_time, self.clip.track_index
-                    )
-                    tw._refrescar_completo()
-                    tw.clips_changed.emit()
         self._resizing = False
         self._drag_start_pos = None
-        if hasattr(self.scene(), 'update_snap_line'):
-            self.scene().update_snap_line(None)
-        super().mouseReleaseEvent(event)
+        try:
+            if hasattr(self.scene(), 'update_snap_line'):
+                self.scene().update_snap_line(None)
+            super().mouseReleaseEvent(event)
+        except RuntimeError:
+            pass
     
     def _get_snap_times(self, timeline_widget) -> list:
         """Obtiene todos los puntos de tiempo a los que se puede hacer snap."""
@@ -671,86 +641,87 @@ class ModuleTimelineGraphicsItem(QGraphicsRectItem):
             painter.drawLine(rect.topLeft().toPoint(), rect.bottomRight().toPoint())
 
     def hoverMoveEvent(self, event):
-        x = event.pos().x()
-        if x < 6 or x > self.rect().width() - 6:
-            self.setCursor(Qt.CursorShape.SizeHorCursor)
-        else:
-            self.setCursor(Qt.CursorShape.PointingHandCursor)
-        super().hoverMoveEvent(event)
+        try:
+            x = event.pos().x()
+            if x < 6 or x > self.rect().width() - 6:
+                self.setCursor(Qt.CursorShape.SizeHorCursor)
+            else:
+                self.setCursor(Qt.CursorShape.PointingHandCursor)
+            super().hoverMoveEvent(event)
+        except RuntimeError:
+            pass
+
+    def _is_cpp_alive(self) -> bool:
+        """Check if the underlying C++ QGraphicsRectItem is still valid."""
+        try:
+            # Accessing a simple Qt property will raise RuntimeError
+            # if the C++ object has been deleted.
+            self.flags()
+            return True
+        except RuntimeError:
+            return False
 
     def mousePressEvent(self, event):
-        if event.button() == Qt.MouseButton.LeftButton:
-            x = event.pos().x()
-            if x < 6:
-                self._resizing = True
-                self._resize_edge = "left"
-                self._drag_start_pos = event.scenePos()
-                self._drag_start_time = self.module_item.start_time
-                self._drag_start_duration = self.module_item.duration
-            elif x > self.rect().width() - 6:
-                self._resizing = True
-                self._resize_edge = "right"
-                self._drag_start_pos = event.scenePos()
-                self._drag_start_duration = self.module_item.duration
-            else:
-                self._drag_start_pos = event.scenePos()
-                self._drag_start_time = self.module_item.start_time
-        super().mousePressEvent(event)
-
-    def _get_timeline_widget(self):
-        """Helper to get parent TimelineWidget."""
-        scene = self.scene()
-        if not scene:
-            return None
-        view = scene.views()[0] if scene.views() else None
-        return view.parent() if view else None
+        if not self._is_cpp_alive():
+            return
+        try:
+            if event.button() == Qt.MouseButton.LeftButton:
+                x = event.pos().x()
+                if x < 6:
+                    self._resizing = True
+                    self._resize_edge = "left"
+                    self._drag_start_pos = event.scenePos()
+                    self._drag_start_time = self.module_item.start_time
+                    self._drag_start_duration = self.module_item.duration
+                elif x > self.rect().width() - 6:
+                    self._resizing = True
+                    self._resize_edge = "right"
+                    self._drag_start_pos = event.scenePos()
+                    self._drag_start_duration = self.module_item.duration
+                else:
+                    self._drag_start_pos = event.scenePos()
+                    self._drag_start_time = self.module_item.start_time
+            super().mousePressEvent(event)
+        except RuntimeError:
+            pass
 
     def mouseMoveEvent(self, event):
-        if self._resizing and self._drag_start_pos:
-            delta_x = event.scenePos().x() - self._drag_start_pos.x()
-            delta_time = delta_x / self._pps
-            if self._resize_edge == "left":
-                new_start = max(0, self._drag_start_time + delta_time)
-                new_dur = self._drag_start_duration - delta_time
-                if new_dur >= 0.1:
-                    self.module_item.start_time = new_start
-                    self.module_item.duration = new_dur
-                    self._actualizar_geometria()
-            elif self._resize_edge == "right":
-                new_dur = self._drag_start_duration + delta_time
-                if new_dur >= 0.1:
-                    self.module_item.duration = new_dur
-                    self._actualizar_geometria()
-        elif self._drag_start_pos is not None:
-            delta_x = event.scenePos().x() - self._drag_start_pos.x()
-            delta_time = delta_x / self._pps
-            self.module_item.start_time = max(0, self._drag_start_time + delta_time)
-            
-            # Cross-track vertical movement for modules (effect-to-effect only)
-            tw = self._get_timeline_widget()
-            if tw and hasattr(tw, '_timeline'):
-                mouse_y = event.scenePos().y() - RULER_HEIGHT
-                target_track_idx = int(mouse_y / TRACK_HEIGHT)
-                if 0 <= target_track_idx < len(tw._timeline.tracks):
-                    target_track = tw._timeline.tracks[target_track_idx]
-                    if target_track.track_type == 'effect' and not target_track.locked:
-                        new_y = RULER_HEIGHT + target_track_idx * TRACK_HEIGHT
-                        self._track_y = new_y
-                        self.module_item.track_index = target_track_idx
-            
-            self._actualizar_geometria()
-        super().mouseMoveEvent(event)
+        if not self._is_cpp_alive():
+            return
+        try:
+            if self._resizing and self._drag_start_pos:
+                delta_x = event.scenePos().x() - self._drag_start_pos.x()
+                delta_time = delta_x / self._pps
+                if self._resize_edge == "left":
+                    new_start = max(0, self._drag_start_time + delta_time)
+                    new_dur = self._drag_start_duration - delta_time
+                    if new_dur >= 0.1:
+                        self.module_item.start_time = new_start
+                        self.module_item.duration = new_dur
+                        self._actualizar_geometria()
+                elif self._resize_edge == "right":
+                    new_dur = self._drag_start_duration + delta_time
+                    if new_dur >= 0.1:
+                        self.module_item.duration = new_dur
+                        self._actualizar_geometria()
+            elif self._drag_start_pos is not None:
+                delta_x = event.scenePos().x() - self._drag_start_pos.x()
+                delta_time = delta_x / self._pps
+                self.module_item.start_time = max(0, self._drag_start_time + delta_time)
+                self._actualizar_geometria()
+            super().mouseMoveEvent(event)
+        except RuntimeError:
+            pass
 
     def mouseReleaseEvent(self, event):
-        if not self._resizing and self._drag_start_pos is not None:
-            # Refresh timeline to commit track change
-            tw = self._get_timeline_widget()
-            if tw:
-                tw._refrescar_completo()
-                tw.clips_changed.emit()
         self._resizing = False
         self._drag_start_pos = None
-        super().mouseReleaseEvent(event)
+        if not self._is_cpp_alive():
+            return
+        try:
+            super().mouseReleaseEvent(event)
+        except RuntimeError:
+            pass
 
     def set_pixels_per_second(self, pps: float):
         self._pps = pps
@@ -797,21 +768,30 @@ class PlayheadItem(QGraphicsLineItem):
     
     def mouseReleaseEvent(self, event):
         """Termina arrastre del playhead."""
-        if event.button() == Qt.MouseButton.LeftButton and hasattr(self, '_dragging'):
-            self._dragging = False
-            event.accept()
-        else:
-            super().mouseReleaseEvent(event)
+        try:
+            if event.button() == Qt.MouseButton.LeftButton and hasattr(self, '_dragging'):
+                self._dragging = False
+                event.accept()
+            else:
+                super().mouseReleaseEvent(event)
+        except RuntimeError:
+            pass
     
     def hoverEnterEvent(self, event):
         """Cambia cursor al pasar sobre playhead."""
-        self.setCursor(Qt.CursorShape.SizeHorCursor)
-        super().hoverEnterEvent(event)
+        try:
+            self.setCursor(Qt.CursorShape.SizeHorCursor)
+            super().hoverEnterEvent(event)
+        except RuntimeError:
+            pass
     
     def hoverLeaveEvent(self, event):
         """Restaura cursor al salir del playhead."""
-        self.setCursor(Qt.CursorShape.ArrowCursor)
-        super().hoverLeaveEvent(event)
+        try:
+            self.setCursor(Qt.CursorShape.ArrowCursor)
+            super().hoverLeaveEvent(event)
+        except RuntimeError:
+            pass
 
     def set_height(self, h: float):
         self._height = h
@@ -989,14 +969,24 @@ class TimelineScene(QGraphicsScene):
 
     def _on_selection_changed(self):
         """Detecta qué tipo de item fue seleccionado y emite la señal apropiada."""
-        selected = self.selectedItems()
+        try:
+            selected = self.selectedItems()
+        except RuntimeError:
+            return
         if not selected:
             return
         item = selected[0]
-        if isinstance(item, ModuleTimelineGraphicsItem):
-            self.module_selected.emit(item.module_item)
-        elif isinstance(item, ClipItem):
-            self.clip_selected.emit(item.clip)
+        try:
+            if isinstance(item, ModuleTimelineGraphicsItem):
+                # Verify the C++ object is still alive before accessing attributes
+                item.flags()  # Will raise RuntimeError if deleted
+                self.module_selected.emit(item.module_item)
+            elif isinstance(item, ClipItem):
+                item.flags()
+                self.clip_selected.emit(item.clip)
+        except RuntimeError:
+            # The underlying C++ object was deleted (e.g. during scene.clear())
+            pass
 
     def update_snap_line(self, x: float = None, height: float = 0.0):
         """Muestra o oculta la linea indicadora de snap magnetico."""
@@ -1341,8 +1331,14 @@ class TimelineWidget(QWidget):
             
         if hasattr(self._scene, '_playhead') and self._scene._playhead:
             self._scene._playhead = None
-            
-        self._scene.clear()
+
+        # Block selectionChanged signal during clear() to prevent accessing
+        # deleted C++ objects (fixes RuntimeError crash in mouseReleaseEvent)
+        self._scene.blockSignals(True)
+        try:
+            self._scene.clear()
+        finally:
+            self._scene.blockSignals(False)
         self._scene._clip_items.clear()
 
         # Restaurar guías si estaban activas
@@ -1423,21 +1419,20 @@ class TimelineWidget(QWidget):
             y += TRACK_HEIGHT
             total_h += TRACK_HEIGHT
 
-        # Dibujar módulos del timeline en sus respectivos effect tracks
-        # Build a map of effect track indices to their Y positions
-        effect_tracks_y = {}
-        first_effect_y = y  # fallback: bottom of all tracks
+        # Dibujar módulos del timeline en el track de efectos
+        effect_track_y = None
         for i, track in enumerate(self._timeline.tracks):
             if track.track_type == 'effect':
-                effect_tracks_y[i] = RULER_HEIGHT + i * TRACK_HEIGHT
-                if first_effect_y == y:
-                    first_effect_y = effect_tracks_y[i]
+                effect_track_y = RULER_HEIGHT + i * TRACK_HEIGHT
+                break
+        
+        if effect_track_y is None:
+            # Si no hay track de efectos, usar la parte inferior
+            effect_track_y = y
         
         for mod_item in self._timeline.module_items:
-            # Place module on its assigned track, or first effect track as fallback
-            mod_y = effect_tracks_y.get(mod_item.track_index, first_effect_y)
             mod_gfx = ModuleTimelineGraphicsItem(
-                mod_item, self._pps, mod_y, TRACK_HEIGHT
+                mod_item, self._pps, effect_track_y, TRACK_HEIGHT
             )
             self._scene.addItem(mod_gfx)
 
@@ -1701,55 +1696,11 @@ class TimelineWidget(QWidget):
         from core.video_clip import detect_source_type
         
         from core.commands import AddClipCommand
-        target_track = self._timeline.tracks[track_index]
-        
         for url in urls:
             from core.video_clip import VideoClip
-            source_type = detect_source_type(url)
-            
-            # Validate content type matches track type
-            # Audio content should only go on audio tracks
-            # Video/image/gif content should only go on video tracks
-            if target_track.track_type == 'video' and source_type == 'audio':
-                logger.warning("Cannot place audio file '%s' on video track '%s'", 
-                             os.path.basename(url), target_track.name)
-                # Try to find an audio track instead
-                audio_track_index = None
-                for i, t in enumerate(self._timeline.tracks):
-                    if t.track_type == 'audio' and not t.locked:
-                        audio_track_index = i
-                        break
-                if audio_track_index is not None:
-                    track_index = audio_track_index
-                    logger.info("Redirecting audio to audio track %d", track_index)
-                else:
-                    logger.warning("No audio track available, skipping file '%s'", url)
-                    continue
-            elif target_track.track_type == 'audio' and source_type in ('video', 'image', 'gif'):
-                logger.warning("Cannot place %s file '%s' on audio track '%s'", 
-                             source_type, os.path.basename(url), target_track.name)
-                # Try to find a video track instead
-                video_track_index = None
-                for i, t in enumerate(self._timeline.tracks):
-                    if t.track_type == 'video' and not t.locked:
-                        video_track_index = i
-                        break
-                if video_track_index is not None:
-                    track_index = video_track_index
-                    logger.info("Redirecting video/image to video track %d", track_index)
-                else:
-                    logger.warning("No video track available, skipping file '%s'", url)
-                    continue
-            elif target_track.track_type == 'effect':
-                logger.warning("Cannot place media files on effect track, skipping '%s'", url)
-                continue
-            elif target_track.track_type == 'subtitle':
-                logger.warning("Cannot place media files on subtitle track, skipping '%s'", url)
-                continue
-            
             clip = VideoClip(
                 source_path=url,
-                source_type=source_type,
+                source_type=detect_source_type(url),
                 track_index=track_index,
                 start_time=tiempo
             )
@@ -1839,34 +1790,21 @@ class TimelineWidget(QWidget):
         
         tiempo = (x - HEADER_WIDTH) / self._pps
         
-        # Detect which track was targeted by the Y position
-        y = pos.y() - RULER_HEIGHT
-        target_track_index = int(y / TRACK_HEIGHT) if y >= 0 else -1
-        
-        # Validate it's an effect track, otherwise find the closest effect track
-        target_is_effect = False
-        if 0 <= target_track_index < len(self._timeline.tracks):
-            if self._timeline.tracks[target_track_index].track_type == 'effect':
-                target_is_effect = True
-        
-        if not target_is_effect:
-            # Fall back to first effect track
-            target_track_index = -1
-            for i, track in enumerate(self._timeline.tracks):
-                if track.track_type == 'effect':
-                    target_track_index = i
-                    break
-        
         # Crear ModuleTimelineItem
         item = ModuleTimelineItem(
             module_type=mod_type,
             start_time=max(0.0, tiempo),
             duration=5.0,
-            track_index=target_track_index,
         )
         
+        # Buscar track de efectos
+        for i, track in enumerate(self._timeline.tracks):
+            if track.track_type == 'effect':
+                item.track_index = i
+                break
+        
         self._timeline.add_module_item(item)
-        logger.info("Módulo '%s' añadido al timeline en t=%.1fs, track=%d", mod_type, tiempo, target_track_index)
+        logger.info("Módulo '%s' añadido al timeline en t=%.1fs", mod_type, tiempo)
         
         self._refrescar_completo()
         self.clips_changed.emit()

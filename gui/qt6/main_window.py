@@ -1077,11 +1077,7 @@ class VentanaPrincipalQt6(QMainWindow):
         return mod_instance
 
     def _prepare_module_audio(self, mod_instance, mod_item):
-        """Prepara el audio de un módulo que lo requiera (ej: waveform).
-        
-        Synchronizes the audio data with the module's position in the timeline
-        so that the module renders audio-reactive effects at the correct offset.
-        """
+        """Prepara el audio de un módulo que lo requiera (ej: waveform)."""
         try:
             # Buscar clips de audio activos en el rango del módulo
             audio_clips = self._timeline.get_audio_clips_at_time(mod_item.start_time)
@@ -1094,58 +1090,27 @@ class VentanaPrincipalQt6(QMainWindow):
                                 'path': clip.source_path,
                                 'clip_start': clip.start_time,
                                 'clip_duration': clip.duration,
-                                'trim_start': getattr(clip, 'trim_start', 0.0),
                             }]
                             break
                     if audio_clips:
                         break
             
             if audio_clips:
-                audio_info = audio_clips[0]
-                audio_path = audio_info['path']
+                audio_path = audio_clips[0]['path']
                 fps = getattr(self._preview, '_fps', 30)
                 duration = mod_item.duration
-                
-                # Calculate the audio offset: where in the audio file does the module start
-                # The module starts at mod_item.start_time in timeline coords
-                # The audio clip starts at clip_start in timeline coords
-                clip_start = audio_info.get('clip_start', 0.0)
-                trim_start = audio_info.get('trim_start', 0.0)
-                # Audio file position = trim_start + (module_start - clip_start)
-                audio_offset = trim_start + max(0.0, mod_item.start_time - clip_start)
-                
                 try:
-                    # Try passing audio_offset for proper synchronization
                     mod_instance.prepare_audio(
                         audio_path=audio_path,
                         mel_data=None,
                         sr=None,
                         hop=None,
                         duration=duration,
-                        fps=fps,
-                        audio_offset=audio_offset
+                        fps=fps
                     )
-                except TypeError:
-                    # Fallback if module doesn't support audio_offset parameter
-                    try:
-                        mod_instance.prepare_audio(
-                            audio_path=audio_path,
-                            mel_data=None,
-                            sr=None,
-                            hop=None,
-                            duration=duration,
-                            fps=fps
-                        )
-                    except Exception as e:
-                        log.debug("Error preparando audio para módulo '%s': %s",
-                                 mod_item.module_type, e)
                 except Exception as e:
                     log.debug("Error preparando audio para módulo '%s': %s",
                              mod_item.module_type, e)
-                
-                # Store the audio offset on the module instance for render-time use
-                mod_instance._audio_timeline_offset = audio_offset
-                mod_instance._module_timeline_start = mod_item.start_time
         except Exception as e:
             log.debug("Error buscando audio para módulo: %s", e)
 

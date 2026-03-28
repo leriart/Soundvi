@@ -1211,9 +1211,16 @@ class TimelineScene(QGraphicsScene):
     def get_selected_modules(self) -> List[ModuleTimelineItem]:
         """Retorna los módulos actualmente seleccionados."""
         modules = []
-        for item in self.selectedItems():
+        selected_items = self.selectedItems()
+        log = logging.getLogger("soundvi.qt6.timeline")
+        log.debug("get_selected_modules: %d items selected", len(selected_items))
+        
+        for item in selected_items:
             if isinstance(item, ModuleTimelineGraphicsItem):
                 modules.append(item.module_item)
+                log.debug("  - Module: %s (id: %s)", item.module_item.name, item.module_item.item_id)
+        
+        log.debug("Total modules selected: %d", len(modules))
         return modules
 
     def mousePressEvent(self, event):
@@ -2419,6 +2426,9 @@ class TimelineWidget(QWidget):
     # -- Menu contextual -------------------------------------------------------
     def contextMenuEvent(self, event):
         """Menu contextual del timeline."""
+        log = logging.getLogger("soundvi.qt6.timeline")
+        log.debug("Context menu event triggered at %s", event.globalPos())
+        
         menu = QMenu(self)
         menu.setStyleSheet("""
             QMenu {
@@ -2437,11 +2447,6 @@ class TimelineWidget(QWidget):
             menu.addAction(f"{ICONOS_UNICODE['copy']} Copiar", self.copiar_seleccion)
             menu.addAction(f"{ICONOS_UNICODE['trash']} Eliminar",
                            self.eliminar_clip_seleccionado)
-            menu.addSeparator()
-        
-        if mods_sel:
-            menu.addAction(f"{ICONOS_UNICODE['trash']} Eliminar módulo(s)",
-                           self.eliminar_modulo_seleccionado)
             menu.addSeparator()
 
             # Submenu de transiciones

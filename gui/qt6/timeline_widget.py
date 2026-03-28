@@ -876,65 +876,79 @@ class ModuleTimelineGraphicsItem(QGraphicsRectItem):
         self._actualizar_geometria()
 
 
-class PlayheadItem(QGraphicsLineItem):
-    """Linea vertical roja que indica la posicion de reproduccion."""
+class PlayheadItem(QGraphicsItem):
+    """Línea roja con un cabezal arriba que indica la posición y es fácil de arrastrar."""
 
     def __init__(self, height: float):
         super().__init__()
         self._height = height
-        self.setPen(QPen(QColor(PLAYHEAD_COLOR), 2))
         self.setZValue(1000)  # Siempre encima
-        self.setLine(0, 0, 0, height)
+        self.setAcceptHoverEvents(True)
+        self.setCursor(Qt.CursorShape.SizeHorCursor)
+        self._dragging = False
 
     def set_position(self, x: float):
         self.setPos(x, 0)
 
-    
+    def set_height(self, h: float):
+        self._height = h
+        self.prepareGeometryChange()
+
+    def boundingRect(self):
+        # 20px de ancho total (-10 a 10) para fácil arrastre
+        return QRectF(-10, 0, 20, self._height)
+
+    def paint(self, painter, option, widget=None):
+        # Dibujar línea fina vertical
+        painter.setPen(QPen(QColor(PLAYHEAD_COLOR), 2))
+        painter.drawLine(0, 0, 0, int(self._height))
+
+        # Dibujar cabezal (triángulo/bandera superior)
+        path = QPainterPath()
+        path.moveTo(-8, 0)
+        path.lineTo(8, 0)
+        path.lineTo(8, 12)
+        path.lineTo(0, 20)
+        path.lineTo(-8, 12)
+        path.closeSubpath()
+
+        painter.setBrush(QBrush(QColor(PLAYHEAD_COLOR)))
+        painter.setPen(Qt.PenStyle.NoPen)
+        painter.drawPath(path)
+
     def mousePressEvent(self, event):
-        """Inicia arrastre del playhead."""
         if event.button() == Qt.MouseButton.LeftButton:
             self._dragging = True
-            self._drag_start_x = event.scenePos().x()
             event.accept()
         else:
             super().mousePressEvent(event)
-    
+
     def mouseMoveEvent(self, event):
-        """Arrastra el playhead."""
         if hasattr(self, '_dragging') and self._dragging:
             scene = self.scene()
             if scene and hasattr(scene, '_pps'):
                 new_x = event.scenePos().x()
-                # Convertir a tiempo
                 tiempo = max(0.0, (new_x - HEADER_WIDTH) / scene._pps)
-                # Emitir señal para mover playhead
                 if hasattr(scene, 'playhead_moved'):
                     scene.playhead_moved.emit(tiempo)
             event.accept()
         else:
             super().mouseMoveEvent(event)
-    
+
     def mouseReleaseEvent(self, event):
-        """Termina arrastre del playhead."""
-        if event.button() == Qt.MouseButton.LeftButton and hasattr(self, '_dragging'):
+        if event.button() == Qt.MouseButton.LeftButton and hasattr(self, '_dragging') and self._dragging:
             self._dragging = False
             event.accept()
         else:
             super().mouseReleaseEvent(event)
-    
+
     def hoverEnterEvent(self, event):
-        """Cambia cursor al pasar sobre playhead."""
         self.setCursor(Qt.CursorShape.SizeHorCursor)
         super().hoverEnterEvent(event)
-    
+
     def hoverLeaveEvent(self, event):
-        """Restaura cursor al salir del playhead."""
         self.setCursor(Qt.CursorShape.ArrowCursor)
         super().hoverLeaveEvent(event)
-
-    def set_height(self, h: float):
-        self._height = h
-        self.setLine(0, 0, 0, h)
 
 
 # ---------------------------------------------------------------------------

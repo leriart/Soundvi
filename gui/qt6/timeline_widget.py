@@ -948,10 +948,28 @@ class TrackHeaderWidget(QFrame):
         layout.setContentsMargins(4, 2, 4, 2)
         layout.setSpacing(1)
 
-        # Nombre del track
-        nombre = QLabel(self.track.name)
+        # Icono según tipo de track
+        tipo_iconos = {
+            'video': '🎬',
+            'audio': '🎵',
+            'subtitle': '📝',
+            'effect': '✨'
+        }
+        icono = tipo_iconos.get(self.track.track_type, '📁')
+        
+        # Nombre del track con icono
+        nombre_texto = f"{icono} {self.track.name}"
+        nombre = QLabel(nombre_texto)
         nombre.setFont(QFont("Segoe UI", 9, QFont.Weight.Bold))
         nombre.setStyleSheet(f"color: {TRACK_COLORS.get(self.track.track_type, '#DEE2E6')};")
+        
+        # Tooltip con información del tipo de track
+        if hasattr(self.track, 'get_track_type_description'):
+            descripcion = self.track.get_track_type_description()
+            nombre.setToolTip(f"{descripcion}\n\nTipos permitidos: {', '.join(self.track.get_allowed_clip_types() or ['módulos'])}")
+        else:
+            nombre.setToolTip(f"Track de {self.track.track_type}")
+        
         layout.addWidget(nombre)
 
         # Controles (M S L)
@@ -1739,29 +1757,118 @@ class TimelineWidget(QWidget):
             QMenu::item:selected { background-color: #375A7F; }
         """)
 
-        # Verificar limites de perfil
-        for tipo, nombre in [("video", "Video"), ("audio", "Audio"),
-                             ("subtitle", "Subtitulos"), ("effect", "Efectos")]:
-            accion = menu.addAction(f"Pista de {nombre}")
-            accion.triggered.connect(lambda checked, t=tipo: self._agregar_track(t))
+        # Iconos para cada tipo de track
+        track_icons = {
+            "video": "🎬",
+            "audio": "🎵", 
+            "subtitle": "📝",
+            "effect": "✨"
+        }
+        
+        # Descripciones de tipos de tracks
+        track_descriptions = {
+            "video": "Multimedia (videos, imágenes, GIFs)",
+            "audio": "Audio (archivos de sonido)",
+            "subtitle": "Subtítulos y texto (módulos)",
+            "effect": "Efectos y módulos"
+        }
+        
+        # Tipos permitidos para cada track
+        allowed_types = {
+            "video": "Videos, imágenes, GIFs",
+            "audio": "Archivos de audio",
+            "subtitle": "Módulos de texto/subtítulos",
+            "effect": "Módulos de efectos"
+        }
 
+        for tipo in ["video", "audio", "subtitle", "effect"]:
+            icon = track_icons.get(tipo, "📁")
+            nombre = track_descriptions.get(tipo, tipo.capitalize())
+            count = len(self._timeline.get_tracks_by_type(tipo))
+            
+            accion = menu.addAction(f"{icon} {nombre} ({count})")
+            accion.triggered.connect(lambda checked, t=tipo: self._agregar_track(t))
+            
+            # Tooltip con información detallada
+            accion.setToolTip(f"Tipos permitidos: {allowed_types.get(tipo, 'Todos')}")
+            
             # Deshabilitar si se alcanzo el limite
             if self._pm:
                 perfil = self._pm.perfil_activo
                 if perfil:
-                    count = len(self._timeline.get_tracks_by_type(tipo))
                     if tipo == "audio" and perfil.max_pistas_audio >= 0 and count >= perfil.max_pistas_audio:
                         accion.setEnabled(False)
-                        accion.setText(f"Pista de {nombre} (limite alcanzado)")
+                        accion.setText(f"{icon} {nombre} ({count}) - Límite alcanzado")
                     elif tipo == "video" and perfil.max_capas_video >= 0 and count >= perfil.max_capas_video:
                         accion.setEnabled(False)
-                        accion.setText(f"Pista de {nombre} (limite alcanzado)")
+                        accion.setText(f"{icon} {nombre} ({count}) - Límite alcanzado")
+        
+        # Separador
+        menu.addSeparator()
+        
+        # Acción para mostrar ayuda sobre tipos de tracks
+        ayuda_action = menu.addAction("❓ Ayuda sobre tipos de tracks")
+        ayuda_action.triggered.connect(self._mostrar_ayuda_tipos_tracks)
 
         menu.exec(QCursor.pos())
+    
+    def _mostrar_ayuda_tipos_tracks(self):
+        """Muestra un diálogo de ayuda sobre los tipos de tracks."""
+        from PyQt6.QtWidgets import QMessageBox
+        
+        ayuda_texto = """
+        <h3>Tipos de Tracks en Soundvi</h3>
+        
+        <b>🎬 Multimedia (video):</b><br>
+        • Videos (.mp4, .avi, .mov, etc.)<br>
+        • Imágenes (.jpg, .png, .bmp, etc.)<br>
+        • GIFs animados (.gif)<br>
+        • Fondos de color<br>
+        <br>
+        
+        <b>🎵 Audio:</b><br>
+        • Archivos de audio (.mp3, .wav, .ogg, etc.)<br>
+        • Audio extraído de videos<br>
+        <br>
+        
+        <b>📝 Subtítulos:</b><br>
+        • Módulos de texto y subtítulos<br>
+        • Títulos animados<br>
+        • Créditos<br>
+        <br>
+        
+        <b>✨ Efectos:</b><br>
+        • Módulos de efectos visuales<br>
+        • Transiciones<br>
+        • Filtros y ajustes<br>
+        <br>
+        
+        <i>Nota: Los archivos se asignan automáticamente al track correcto.</i>
+        """
+        
+        msg = QMessageBox(self)
+        msg.setWindowTitle("Ayuda - Tipos de Tracks")
+        msg.setTextFormat(Qt.TextFormat.RichText)
+        msg.setText(ayuda_texto)
+        msg.setStandardButtons(QMessageBox.StandardButton.Ok)
+        msg.exec()
 
     def _agregar_track(self, tipo: str):
-        """Agrega un nuevo track al timeline."""
-        self._timeline.add_track(tipo)
+        """Agrega un nuevo track al timeline con nombre descriptivo."""
+        # Contar tracks existentes de este tipo para numeración
+        existing_tracks = self._timeline.get_tracks_by_type(tipo)
+        count = len(existing_tracks) + 1
+        
+        # Nombres descriptivos según tipo
+        track_names = {
+            "video": f"Multimedia {count}",
+            "audio": f"Audio {count}",
+            "subtitle": f"Subtítulos {count}" if count > 1 else "Subtítulos",
+            "effect": f"Efectos {count}" if count > 1 else "Efectos"
+        }
+        
+        name = track_names.get(tipo, f"{tipo.capitalize()} {count}")
+        self._timeline.add_track(track_type=tipo, name=name)
         self._refrescar_completo()
         self.clips_changed.emit()
 
@@ -1807,6 +1914,9 @@ class TimelineWidget(QWidget):
         from core.video_clip import detect_source_type
         
         from core.commands import AddClipCommand
+        successful_drops = 0
+        failed_drops = 0
+        
         for url in urls:
             from core.video_clip import VideoClip
             clip = VideoClip(
@@ -1820,14 +1930,40 @@ class TimelineWidget(QWidget):
             if clip.duration <= 0.1:
                 clip.duration = 5.0
             
-            cmd = AddClipCommand(self._timeline, clip, track_index)
-            self._cmd.execute(cmd)
+            # Verificar si el track es compatible con este tipo de archivo
+            target_track = self._timeline.get_track(track_index)
+            if target_track and not target_track._is_clip_type_allowed(clip):
+                # Track incompatible - intentar agregar automáticamente a un track compatible
+                result = self._timeline._add_clip_to_compatible_track(clip)
+                if result:
+                    successful_drops += 1
+                    logger.info(f"Archivo '{os.path.basename(url)}' agregado automáticamente a track compatible")
+                else:
+                    failed_drops += 1
+                    logger.warning(f"No se pudo agregar '{os.path.basename(url)}' - tipo incompatible")
+            else:
+                # Track compatible o no hay validación
+                cmd = AddClipCommand(self._timeline, clip, track_index)
+                self._cmd.execute(cmd)
+                successful_drops += 1
             
             # Avanzar tiempo para el siguiente clip droppeado a la vez
             tiempo += clip.duration
-            
-        self._refrescar_completo()
-        self.clips_changed.emit()
+        
+        # Mostrar notificación si hubo errores
+        if failed_drops > 0:
+            from PyQt6.QtWidgets import QMessageBox
+            msg = QMessageBox(self)
+            msg.setIcon(QMessageBox.Icon.Warning)
+            msg.setWindowTitle("Archivos no compatibles")
+            msg.setText(f"{failed_drops} de {len(urls)} archivos no pudieron ser agregados.")
+            msg.setInformativeText("Los archivos de audio deben ir en tracks de audio, "
+                                  "y los archivos de video/imágenes en tracks de multimedia.")
+            msg.exec()
+        
+        if successful_drops > 0:
+            self._refrescar_completo()
+            self.clips_changed.emit()
 
     def _on_transition_dropped(self, trans_type: str, pos: QPointF):
         """Maneja drop de una transición en el timeline."""
@@ -2079,10 +2215,40 @@ class TimelineWidget(QWidget):
         else:
             menu.addAction(f"{ICONOS_UNICODE['paste']} Pegar", self.pegar_clips)
             menu.addSeparator()
-            for tipo, nombre in [("video", "Video"), ("audio", "Audio"),
-                                 ("subtitle", "Subtitulos"), ("effect", "Efectos")]:
-                menu.addAction(f"Agregar pista de {nombre}",
-                               lambda t=tipo: self._agregar_track(t))
+            
+            # Submenú para agregar tracks específicos
+            add_track_menu = menu.addMenu("➕ Agregar pista")
+            
+            # Iconos para cada tipo de track
+            track_icons = {
+                "video": "🎬",
+                "audio": "🎵", 
+                "subtitle": "📝",
+                "effect": "✨"
+            }
+            
+            for tipo, nombre in [("video", "Multimedia (video/imágenes)"), 
+                                 ("audio", "Audio"), 
+                                 ("subtitle", "Subtítulos/texto"),
+                                 ("effect", "Efectos/módulos")]:
+                icon = track_icons.get(tipo, "📁")
+                action = add_track_menu.addAction(f"{icon} {nombre}")
+                action.triggered.connect(lambda checked, t=tipo: self._agregar_track(t))
+                
+                # Mostrar conteo actual de tracks de este tipo
+                count = len(self._timeline.get_tracks_by_type(tipo))
+                action.setText(f"{icon} {nombre} ({count})")
+                
+                # Deshabilitar si hay límites de perfil
+                if self._pm:
+                    perfil = self._pm.perfil_activo
+                    if perfil:
+                        if tipo == "audio" and perfil.max_pistas_audio >= 0 and count >= perfil.max_pistas_audio:
+                            action.setEnabled(False)
+                            action.setText(f"{icon} {nombre} ({count}) - Límite alcanzado")
+                        elif tipo == "video" and perfil.max_capas_video >= 0 and count >= perfil.max_capas_video:
+                            action.setEnabled(False)
+                            action.setText(f"{icon} {nombre} ({count}) - Límite alcanzado")
 
         menu.exec(event.globalPos())
 

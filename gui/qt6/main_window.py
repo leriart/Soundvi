@@ -438,7 +438,7 @@ class VentanaPrincipalQt6(QMainWindow):
                                                Qt.DockWidgetArea.LeftDockWidgetArea)
 
         # -- Dock: Media Library (izquierda, tabulada con sidebar) --
-        self._panel_media = MediaLibraryWidget()
+        self._panel_media = MediaLibraryWidget(project_manager=self._project_manager)
         self._dock_media = self._crear_dock("Biblioteca", self._panel_media,
                                              Qt.DockWidgetArea.LeftDockWidgetArea)
         self.tabifyDockWidget(self._dock_sidebar, self._dock_media)
@@ -1214,6 +1214,9 @@ class VentanaPrincipalQt6(QMainWindow):
             self._actualizar_titulo_ventana()
             # Restaurar módulos desde el estado guardado
             self._restaurar_modulos_desde_proyecto()
+            # Sincronizar biblioteca de medios
+            if hasattr(self._panel_media, 'set_project_manager'):
+                self._panel_media.set_project_manager(self._project_manager)
             # Registrar en historial y actualizar menu
             project_history.add_project(ruta, self._project_manager.project_name)
             self._actualizar_menu_recientes()
@@ -1281,6 +1284,12 @@ class VentanaPrincipalQt6(QMainWindow):
         
         # Sincronizar módulos antes de guardar
         self._sincronizar_modules_state()
+        
+        # Sincronizar biblioteca de medios antes de guardar
+        if hasattr(self._panel_media, 'sincronizar_con_project_manager'):
+            media_items = self._panel_media.sincronizar_con_project_manager()
+            if media_items:
+                self._project_manager.media_library = media_items
         
         # Guardar directamente sin preguntar (Ctrl+S rápido)
         # embed_media=False por defecto para guardado rápido
@@ -1361,6 +1370,12 @@ class VentanaPrincipalQt6(QMainWindow):
         
         # Sincronizar módulos antes de guardar
         self._sincronizar_modules_state()
+        
+        # Sincronizar biblioteca de medios antes de guardar
+        if hasattr(self._panel_media, 'sincronizar_con_project_manager'):
+            media_items = self._panel_media.sincronizar_con_project_manager()
+            if media_items:
+                self._project_manager.media_library = media_items
         
         # Guardar proyecto
         ok = self._project_manager.save_project(ruta, embed_media=embed_media)

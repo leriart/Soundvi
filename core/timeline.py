@@ -58,12 +58,17 @@ class Track:
 
     def add_clip(self, clip: VideoClip) -> bool:
         """
-        Agrega un clip al track verificando que no se superponga.
+        Agrega un clip al track verificando que no se superponga
+        y que el tipo de clip sea compatible con el tipo de track.
         
         Returns:
             True si se agrego exitosamente
         """
         if self.locked:
+            return False
+            
+        # Validar tipo de clip según tipo de track
+        if not self._is_clip_type_allowed(clip):
             return False
             
         clip.track_index = self.index
@@ -76,6 +81,58 @@ class Track:
         self.clips.append(clip)
         self._sort_clips()
         return True
+    
+    def _is_clip_type_allowed(self, clip: VideoClip) -> bool:
+        """
+        Verifica si el tipo de clip es compatible con el tipo de track.
+        
+        Reglas:
+        - Tracks 'video': aceptan 'video', 'image', 'gif', 'color'
+        - Tracks 'audio': aceptan 'audio' y 'video' (para audio de video)
+        - Tracks 'subtitle': no aceptan clips (solo módulos de texto)
+        - Tracks 'effect': no aceptan clips (solo módulos de efectos)
+        """
+        if self.track_type == 'video':
+            return clip.source_type in ['video', 'image', 'gif', 'color']
+        elif self.track_type == 'audio':
+            return clip.source_type in ['audio', 'video']  # Video puede tener audio
+        elif self.track_type == 'subtitle':
+            return False  # Los subtítulos se manejan como módulos
+        elif self.track_type == 'effect':
+            return False  # Los efectos se manejan como módulos
+        return True  # Por defecto para tracks personalizados
+    
+    def get_allowed_clip_types(self) -> list:
+        """
+        Retorna la lista de tipos de clips permitidos en este track.
+        
+        Returns:
+            Lista de strings con los tipos permitidos
+        """
+        if self.track_type == 'video':
+            return ['video', 'image', 'gif', 'color']
+        elif self.track_type == 'audio':
+            return ['audio', 'video']
+        elif self.track_type == 'subtitle':
+            return []  # No acepta clips
+        elif self.track_type == 'effect':
+            return []  # No acepta clips
+        return []  # Por defecto
+    
+    def get_track_type_description(self) -> str:
+        """
+        Retorna una descripción legible del tipo de track.
+        
+        Returns:
+            String con la descripción
+        """
+        descriptions = {
+            'video': 'Multimedia (videos, imágenes, GIFs)',
+            'audio': 'Audio (archivos de sonido)',
+            'subtitle': 'Subtítulos y texto',
+            'effect': 'Efectos y módulos'
+        }
+        return descriptions.get(self.track_type, self.track_type.capitalize())
 
     def remove_clip(self, clip_id: str) -> Optional[VideoClip]:
         """Elimina un clip del track por su ID."""
@@ -246,9 +303,9 @@ class Timeline:
     def _create_default_tracks(self):
         """Crea las pistas por defecto del timeline."""
         default_tracks = [
-            ("video", "Video 1"),
+            ("video", "Multimedia 1"),
             ("audio", "Audio 1"),
-            ("subtitle", "Subtitulos"),
+            ("subtitle", "Subtítulos"),
             ("effect", "Efectos"),
         ]
         for i, (track_type, name) in enumerate(default_tracks):
@@ -289,15 +346,81 @@ class Timeline:
 
     # -- Gestion de Clips --
 
-    def add_clip(self, clip: VideoClip, track_index: int = 0) -> bool:
-        """Agrega un clip a un track especifico."""
-        track = self.get_track(track_index)
-        if track is None:
-            return False
-        result = track.add_clip(clip)
+    def add_clip(self, clip: VideoClip, track_index: int = None) -> bool:
+        """
+        Agrega un clip al timeline.
+        
+        Si track_index es None, busca automáticamente un track compatible
+        según el tipo de archivo:
+        - Videos/imágenes → tracks de video
+        - Audio → tracks de audio
+        - Textos → tracks de subtítulos (como módulos)
+        - Efectos → tracks de efectos (como módulos)
+        
+        Args:
+            clip: Clip a agregar
+            track_index: Índice del track específico (opcional)
+            
+        Returns:
+            True si se agregó exitosamente
+        """
+        if track_index is not None:
+            # Intentar agregar al track específico
+            track = self.get_track(track_index)
+            if track is None:
+                return False
+            result = track.add_clip(clip)
+        else:
+            # Buscar automáticamente un track compatible
+            result = self._add_clip_to_compatible_track(clip)
+        
         if result:
             self._update_duration()
         return result
+    
+    def _add_clip_to_compatible_track(self, clip: VideoClip) -> bool:
+        """
+        Busca y agrega un clip a un track compatible según su tipo.
+        
+        Returns:
+            True si se encontró un track compatible y se agregó el clip
+        """
+        # Determinar tipo de track objetivo según tipo de archivo
+        target_track_type = self._get_target_track_type_for_clip(clip)
+        
+        # Buscar tracks del tipo objetivo
+        compatible_tracks = self.get_tracks_by_type(target_track_type)
+        
+        # Intentar agregar a cada track compatible (en orden)
+        for track in compatible_tracks:
+            if track.add_clip(clip):
+                return True
+        
+        # Si no hay tracks compatibles o todos están llenos, crear uno nuevo
+        if not compatible_tracks:
+            # Crear nuevo track del tipo requerido
+            new_track = self.add_track(track_type=target_track_type)
+            return new_track.add_clip(clip)
+        else:
+            # Todos los tracks existentes están llenos en esa posición
+            # Crear otro track del mismo tipo
+            track_name = f"{target_track_type.capitalize()} {len(compatible_tracks) + 1}"
+            new_track = self.add_track(track_type=target_track_type, name=track_name)
+            return new_track.add_clip(clip)
+    
+    def _get_target_track_type_for_clip(self, clip: VideoClip) -> str:
+        """
+        Determina el tipo de track adecuado para un clip según su tipo de archivo.
+        
+        Returns:
+            Tipo de track: 'video', 'audio', 'subtitle', o 'effect'
+        """
+        if clip.source_type in ['video', 'image', 'gif', 'color']:
+            return 'video'
+        elif clip.source_type == 'audio':
+            return 'audio'
+        # Nota: Los textos y efectos se manejan como módulos, no como clips
+        return 'video'  # Por defecto
 
     def remove_clip(self, clip_id: str) -> Optional[VideoClip]:
         """Busca y elimina un clip en todos los tracks."""
@@ -397,10 +520,101 @@ class Timeline:
     # -- Gestión de módulos en timeline --
 
     def add_module_item(self, item: ModuleTimelineItem) -> bool:
-        """Agrega un módulo al timeline."""
+        """
+        Agrega un módulo al timeline.
+        
+        Si item.track_index es -1, busca automáticamente un track compatible
+        según el tipo de módulo:
+        - Módulos de texto/subtítulos → tracks de subtítulos
+        - Módulos de efectos → tracks de efectos
+        
+        Args:
+            item: Módulo a agregar
+            
+        Returns:
+            True si se agregó exitosamente
+        """
+        # Determinar tipo de módulo
+        module_category = self._get_module_category(item.module_type)
+        
+        # Si no se especificó track, buscar uno compatible
+        if item.track_index == -1:
+            item.track_index = self._find_compatible_track_for_module(module_category)
+        
         self.module_items.append(item)
         self._update_duration()
         return True
+    
+    def _get_module_category(self, module_type: str) -> str:
+        """
+        Determina la categoría de un módulo según su tipo.
+        
+        Returns:
+            'subtitle' para módulos de texto/subtítulos
+            'effect' para módulos de efectos
+            'video' para módulos de procesamiento de video
+            'audio' para módulos de procesamiento de audio
+        """
+        module_type_lower = module_type.lower()
+        
+        # Módulos de texto y subtítulos
+        text_keywords = ['text', 'subtitle', 'caption', 'title', 'lyric']
+        if any(keyword in module_type_lower for keyword in text_keywords):
+            return 'subtitle'
+        
+        # Módulos de efectos visuales
+        effect_keywords = ['effect', 'filter', 'transition', 'blur', 'glow', 'distortion']
+        if any(keyword in module_type_lower for keyword in effect_keywords):
+            return 'effect'
+        
+        # Módulos de procesamiento de video
+        video_keywords = ['video', 'color', 'grading', 'stabilize', 'crop']
+        if any(keyword in module_type_lower for keyword in video_keywords):
+            return 'video'
+        
+        # Módulos de procesamiento de audio
+        audio_keywords = ['audio', 'equalizer', 'compressor', 'reverb', 'echo']
+        if any(keyword in module_type_lower for keyword in audio_keywords):
+            return 'audio'
+        
+        return 'effect'  # Por defecto
+    
+    def _find_compatible_track_for_module(self, module_category: str) -> int:
+        """
+        Encuentra un track compatible para un módulo.
+        
+        Args:
+            module_category: Categoría del módulo ('subtitle', 'effect', 'video', 'audio')
+            
+        Returns:
+            Índice del track compatible, o -1 si no se encontró
+        """
+        # Mapear categorías de módulos a tipos de tracks
+        category_to_track_type = {
+            'subtitle': 'subtitle',
+            'effect': 'effect',
+            'video': 'video',
+            'audio': 'audio'
+        }
+        
+        target_track_type = category_to_track_type.get(module_category, 'effect')
+        
+        # Buscar tracks del tipo objetivo
+        compatible_tracks = self.get_tracks_by_type(target_track_type)
+        
+        if compatible_tracks:
+            # Usar el primer track compatible
+            return compatible_tracks[0].index
+        else:
+            # Crear un nuevo track del tipo requerido
+            track_name = f"{target_track_type.capitalize()} 1"
+            if target_track_type == 'subtitle':
+                track_name = "Subtítulos"
+            elif target_track_type == 'effect':
+                track_name = "Efectos"
+            
+            new_track = self.add_track(track_type=target_track_type, name=track_name)
+            return new_track.index
 
     def remove_module_item(self, item_id: str) -> Optional[ModuleTimelineItem]:
         """Elimina un módulo del timeline por su ID."""

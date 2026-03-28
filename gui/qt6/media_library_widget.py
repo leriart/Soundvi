@@ -178,20 +178,27 @@ class MediaLibraryWidget(QFrame):
     """
     Biblioteca de medios con thumbnails, busqueda, filtrado,
     drag & drop y menu contextual.
+    Integrado con ProjectManager para guardar/cargar proyectos.
     """
 
     # Senales
     archivo_importado = pyqtSignal(str)      # ruta del archivo importado
     archivo_seleccionado = pyqtSignal(str)   # ruta del archivo seleccionado
     archivo_drag_started = pyqtSignal(str)   # ruta al iniciar drag al timeline
+    media_library_changed = pyqtSignal()     # cuando cambia la biblioteca
 
-    def __init__(self, parent: Optional[QWidget] = None):
+    def __init__(self, project_manager=None, parent: Optional[QWidget] = None):
         super().__init__(parent)
         self.setFrameShape(QFrame.Shape.StyledPanel)
         self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
 
+        self._project_manager = project_manager
         self._archivos: List[Dict[str, Any]] = []  # lista de {path, name, type, size, ...}
         self._construir_ui()
+        
+        # Cargar archivos del project manager si está disponible
+        if self._project_manager and hasattr(self._project_manager, 'media_library'):
+            self._cargar_desde_project_manager()
 
     # -- Construccion de UI ----------------------------------------------------
 
@@ -483,3 +490,100 @@ class MediaLibraryWidget(QFrame):
         self._archivos.clear()
         self._lista.clear()
         self._actualizar_info()
+        self.media_library_changed.emit()
+
+    def agregar_archivo(self, ruta: str, nombre: str = "", tipo: str = ""):
+        """Agrega un archivo a la biblioteca."""
+        if not os.path.exists(ruta):
+            return False
+        
+        # Verificar si ya existe
+        for archivo in self._archivos:
+            if archivo["path"] == ruta:
+                return False
+        
+        # Determinar tipo si no se especifica
+        if not tipo:
+            tipo = _detectar_tipo(ruta)
+        
+        # Obtener tamaño
+        tamano = os.path.getsize(ruta) if os.path.exists(ruta) else 0
+        
+        # Agregar a la lista
+        archivo_info = {
+            "path": ruta,
+            "name": nombre or os.path.basename(ruta),
+            "type": tipo,
+            "size": tamano,
+            "added_at": time.time()
+        }
+        
+        self._archivos.append(archivo_info)
+        self._agregar_item_lista(archivo_info)
+        self._actualizar_info()
+        self.media_library_changed.emit()
+        return True
+
+    # -- Integración con ProjectManager ----------------------------------------
+
+    def _cargar_desde_project_manager(self):
+        """Carga archivos desde el ProjectManager."""
+        if not self._project_manager or not hasattr(self._project_manager, 'media_library'):
+            return
+        
+        self.limpiar()
+        
+        for media_item in self._project_manager.media_library:
+            archivo_info = {
+                "path": media_item.path,
+                "name": media_item.name,
+                "type": media_item.media_type,
+                "size": media_item.file_size,
+                "added_at": media_item.added_at,
+                "duration": media_item.duration,
+                "width": media_item.width,
+                "height": media_item.height,
+                "embedded": media_item.embedded,
+                "embedded_path": media_item.embedded_path
+            }
+            self._archivos.append(archivo_info)
+            self._agregar_item_lista(archivo_info)
+        
+        self._actualizar_info()
+
+    def sincronizar_con_project_manager(self):
+        """
+        Sincroniza la biblioteca de medios con el ProjectManager.
+        
+        Returns:
+            Lista de MediaItem actualizada
+        """
+        if not self._project_manager:
+            return []
+        
+        from core.project_manager import MediaItem
+        
+        media_items = []
+        for archivo in self._archivos:
+            media_item = MediaItem(
+                path=archivo["path"],
+                name=archivo["name"],
+                media_type=archivo["type"]
+            )
+            media_item.file_size = archivo.get("size", 0)
+            media_item.added_at = archivo.get("added_at", time.time())
+            media_item.duration = archivo.get("duration", 0.0)
+            media_item.width = archivo.get("width", 0)
+            media_item.height = archivo.get("height", 0)
+            media_item.embedded = archivo.get("embedded", False)
+            media_item.embedded_path = archivo.get("embedded_path", "")
+            
+            media_items.append(media_item)
+        
+        return media_items
+
+    def set_project_manager(self, project_manager):
+        """Establece el ProjectManager para sincronización."""
+        self._project_manager = project_manager
+        if project_manager:
+            self._cargar_desde_project_manager()

@@ -894,7 +894,7 @@ class VentanaPrincipalQt6(QMainWindow):
         else:
             self._panel_inspector.limpiar()
 
-        def _on_property_changed(self, prop, valor):
+    def _on_property_changed(self, prop, valor):
         """Maneja cambios de propiedades desde el inspector."""
         if prop in ("start_time", "duration", "enabled", "name"):
             self._panel_timeline.refrescar()
@@ -906,7 +906,7 @@ class VentanaPrincipalQt6(QMainWindow):
                 if hasattr(obj, 'item_id') and hasattr(self, '_timeline_module_cache'):
                     self._timeline_module_cache.pop(obj.item_id, None)
 
-def _on_transicion_aplicada(self, tipo: str, duracion: float):
+    def _on_transicion_aplicada(self, tipo: str, duracion: float):
         """Aplica una transición al clip seleccionado en el timeline."""
         clips_sel = self._panel_timeline.get_selected_clips()
         

@@ -954,6 +954,20 @@ class VentanaPrincipalQt6(QMainWindow):
         self._toolbar.habilitar_accion("undo", self._cmd_manager.can_undo)
         self._toolbar.habilitar_accion("redo", self._cmd_manager.can_redo)
 
+    
+    def keyPressEvent(self, event):
+        """Manejo de atajos de teclado globales."""
+        # Ctrl+Z / Ctrl+Y para undo/redo
+        if event.key() == Qt.Key.Key_Z and event.modifiers() & Qt.KeyboardModifier.ControlModifier:
+            self._deshacer()
+            event.accept()
+        elif event.key() == Qt.Key.Key_Y and event.modifiers() & Qt.KeyboardModifier.ControlModifier:
+            self._rehacer()
+            event.accept()
+        else:
+            super().keyPressEvent(event)
+
+
     def _on_modulo_aplicado(self, type_key: str):
         """Aplica un modulo al clip seleccionado desde la sidebar."""
         import time

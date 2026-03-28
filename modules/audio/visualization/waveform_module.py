@@ -98,7 +98,11 @@ class WaveformModule(Module):
             print(f"[WaveformModule] Error en render: {e}")
             return frame
 
-    def get_config_widgets(self, parent, app):
+    
+    def get_config(self):
+        """Retorna la configuración actual del módulo."""
+        return dict(self._config)
+def get_config_widgets(self, parent, app):
         self.app = app
         _as = app
         content = QWidget(parent)

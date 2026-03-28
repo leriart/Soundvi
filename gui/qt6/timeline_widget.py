@@ -1152,9 +1152,9 @@ class TimelineScene(QGraphicsScene):
         # si la escena se refresca mientras procesa eventos del ratón
         from PyQt6.QtCore import QTimer
         if isinstance(item, ModuleTimelineGraphicsItem):
-            QTimer.singleShot(0, lambda: self.module_selected.emit(item.module_item))
+            QTimer.singleShot(0, lambda: [self.module_selected.emit(item.module_item), self.set_focus()])
         elif isinstance(item, ClipItem):
-            QTimer.singleShot(0, lambda: self.clip_selected.emit(item.clip))
+            QTimer.singleShot(0, lambda: [self.clip_selected.emit(item.clip), self.set_focus()])
 
     def update_snap_line(self, x: float = None, height: float = 0.0):
         """Muestra o oculta la linea indicadora de snap magnetico."""
@@ -1223,7 +1223,13 @@ class TimelineScene(QGraphicsScene):
         log.debug("Total modules selected: %d", len(modules))
         return modules
 
-    def mousePressEvent(self, event):
+    def set_focus(self):
+        """Fuerza el foco del teclado en este widget."""
+        self.setFocus(Qt.FocusReason.OtherFocusReason)
+        log = logging.getLogger("soundvi.qt6.timeline")
+        log.debug("TimelineWidget focus forced")
+
+def mousePressEvent(self, event):
         """Click en area vacia mueve el playhead."""
         pos = event.scenePos()
         # Si no hay item bajo el cursor, mover playhead

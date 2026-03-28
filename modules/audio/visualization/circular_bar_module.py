@@ -155,7 +155,11 @@ class CircularBarModule(Module):
         except Exception as e:
             return frame
 
-    def get_config_widgets(self, parent, app):
+    
+    def get_config(self):
+        """Retorna la configuración actual del módulo."""
+        return dict(self._config)
+def get_config_widgets(self, parent, app):
         content = QWidget(parent)
         layout = QVBoxLayout(content)
         layout.setContentsMargins(0, 0, 0, 0)

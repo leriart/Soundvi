@@ -2294,7 +2294,15 @@ class TimelineWidget(QWidget):
             True si se eliminó al menos un módulo, False si no había módulos seleccionados.
         """
         mods_sel = self._scene.get_selected_modules()
+        
+        # Debug: mostrar qué módulos están seleccionados
+        log = logging.getLogger("soundvi.qt6.timeline")
+        log.debug("Módulos seleccionados para eliminar: %d", len(mods_sel))
+        for i, mod in enumerate(mods_sel):
+            log.debug("  [%d] %s (id: %s)", i, mod.name, mod.item_id)
+        
         if not mods_sel:
+            log.debug("No hay módulos seleccionados para eliminar")
             return False
             
         for mod in mods_sel:
@@ -2370,6 +2378,7 @@ class TimelineWidget(QWidget):
         """)
 
         clips_sel = self._scene.get_selected_clips()
+        mods_sel = self._scene.get_selected_modules()
 
         if clips_sel:
             menu.addAction(f"{ICONOS_UNICODE['cut']} Dividir en playhead",
@@ -2432,6 +2441,16 @@ class TimelineWidget(QWidget):
             
             menu.addSeparator()
             menu.addAction("Propiedades...", lambda: self.clip_selected.emit(clips_sel[0]))
+        
+        # Opciones para módulos seleccionados
+        elif mods_sel:
+            menu.addAction(f"{ICONOS_UNICODE['trash']} Eliminar módulo(s)",
+                          self.eliminar_modulo_seleccionado)
+            menu.addSeparator()
+            menu.addAction("Propiedades del módulo...", 
+                          lambda: self.module_selected.emit(mods_sel[0]))
+        
+        # Si no hay clips ni módulos seleccionados
         else:
             menu.addAction(f"{ICONOS_UNICODE['paste']} Pegar", self.pegar_clips)
             menu.addSeparator()
@@ -2475,10 +2494,16 @@ class TimelineWidget(QWidget):
     # -- Atajos de teclado -----------------------------------------------------
     def keyPressEvent(self, event: QKeyEvent):
         """Manejo de atajos de teclado del timeline."""
+        log = logging.getLogger("soundvi.qt6.timeline")
+        
         if event.key() == Qt.Key.Key_Delete or event.key() == Qt.Key.Key_Backspace:
+            log.debug("Tecla DEL presionada - intentando eliminar")
             # Primero intentar eliminar módulos seleccionados
             mods_deleted = self.eliminar_modulo_seleccionado()
-            if not mods_deleted:
+            if mods_deleted:
+                log.debug("Módulo(s) eliminado(s) exitosamente")
+            else:
+                log.debug("No hay módulos seleccionados, intentando eliminar clips")
                 # Si no hay módulos seleccionados, eliminar clips
                 self.eliminar_clip_seleccionado()
         elif event.key() == Qt.Key.Key_S and event.modifiers() & Qt.KeyboardModifier.ControlModifier:

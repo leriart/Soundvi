@@ -1495,6 +1495,11 @@ class TimelineWidget(QWidget):
         
         # Headers se manejan DENTRO de la escena, no como widget separado
         # Esto asegura que se alineen con el sidebar
+        
+        # Conectar señal para centrar en contenido cuando se agregue
+        self._timeline.track_added.connect(self._centrar_en_contenido)
+        self._timeline.clip_added.connect(self._centrar_en_contenido)
+        self._timeline.module_item_added.connect(self._centrar_en_contenido)
 
         # Conectar senales de la escena
         self._scene.clip_selected.connect(self.clip_selected.emit)
@@ -1525,6 +1530,9 @@ class TimelineWidget(QWidget):
         
         log.info("Timeline extenso configurado: %.1fs -> %dpx, altura: %dpx", 
                 max_duration, total_width_px, total_height_px)
+        
+        # Después de refrescar, centrar en contenido si hay
+        QTimer.singleShot(100, self._centrar_en_contenido)
         
         # Guardar estado del asistente de alineación antes de limpiar
         alignment_enabled = False
@@ -1791,6 +1799,81 @@ class TimelineWidget(QWidget):
         # Actualizar guías de alineación si están activas
         if hasattr(self, '_btn_alignment') and self._btn_alignment.isChecked():
             self._actualizar_guias_alineacion()
+    
+    def _centrar_en_contenido(self):
+        """Centra la vista del timeline en donde hay contenido."""
+        if not self._timeline.tracks and not self._timeline.module_items:
+            return
+        
+        # Encontrar el tiempo máximo con contenido
+        max_time = 0
+        has_content = False
+        
+        for track in self._timeline.tracks:
+            for clip in track.clips:
+                clip_end = clip.start_time + clip.duration
+                if clip_end > max_time:
+                    max_time = clip_end
+                    has_content = True
+        
+        # También verificar módulos
+        for module in self._timeline.module_items:
+            module_end = module.start_time + module.duration
+            if module_end > max_time:
+                max_time = module_end
+                has_content = True
+        
+        if has_content and max_time > 0:
+            # Calcular posición X para centrar (considerando HEADER_WIDTH)
+            center_x = HEADER_WIDTH + (max_time * self._pps) / 2
+            
+            # Obtener el viewport y centrar horizontalmente
+            viewport = self._view.viewport()
+            viewport_width = viewport.width()
+            viewport_height = viewport.height()
+            
+            # Ajustar scroll para centrar en el contenido horizontalmente
+            scroll_x = center_x - (viewport_width / 2)
+            scroll_x = max(0, scroll_x)  # No scroll negativo
+            
+            # También centrar verticalmente si hay muchos tracks
+            num_tracks = len(self._timeline.tracks)
+            if num_tracks > 0:
+                # Calcular altura total de tracks
+                track_height = self._scene._track_height if hasattr(self._scene, '_track_height') else TRACK_HEIGHT
+                total_tracks_height = num_tracks * track_height + RULER_HEIGHT
+                
+                # Centrar verticalmente
+                scroll_y = (total_tracks_height - viewport_height) / 2
+                scroll_y = max(0, scroll_y)
+                self._view.verticalScrollBar().setValue(int(scroll_y))
+            
+            # Aplicar scroll horizontal suavemente
+            self._view.horizontalScrollBar().setValue(int(scroll_x))
+            
+            log = logging.getLogger("soundvi.qt6.timeline")
+            log.debug("Timeline centrado en contenido: tiempo máximo %.1fs, scroll X: %dpx", 
+                     max_time, int(scroll_x))
+    
+    def _centrar_en_tiempo(self, tiempo_segundos: float):
+        """Centra la vista del timeline en un tiempo específico."""
+        # Calcular posición X (considerando HEADER_WIDTH)
+        target_x = HEADER_WIDTH + (tiempo_segundos * self._pps)
+        
+        # Obtener el viewport
+        viewport = self._view.viewport()
+        viewport_width = viewport.width()
+        
+        # Ajustar scroll para centrar en el tiempo
+        scroll_x = target_x - (viewport_width / 2)
+        scroll_x = max(0, scroll_x)  # No scroll negativo
+        
+        # Aplicar scroll
+        self._view.horizontalScrollBar().setValue(int(scroll_x))
+        
+        log = logging.getLogger("soundvi.qt6.timeline")
+        log.debug("Timeline centrado en tiempo: %.1fs, scroll X: %dpx", 
+                 tiempo_segundos, int(scroll_x))
     
     def _ajustar_tamanos_dinamicos(self):
         """Ajusta dinámicamente los tamaños basado en el espacio disponible."""

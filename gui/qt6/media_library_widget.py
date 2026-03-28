@@ -338,6 +338,30 @@ class MediaLibraryWidget(QFrame):
         self.archivo_importado.emit(ruta)
         self._actualizar_info()
 
+    def _agregar_item_a_lista(self, archivo_info: dict):
+        """Agrega un item a la lista desde un diccionario de información."""
+        ruta = archivo_info.get("path", "")
+        nombre = archivo_info.get("name", os.path.basename(ruta))
+        tipo = archivo_info.get("type", _detectar_tipo(ruta))
+        
+        # Generar thumbnail y agregar a la lista
+        thumb = _generar_thumbnail(ruta) if ruta and os.path.isfile(ruta) else None
+        item = QListWidgetItem()
+        item.setText(nombre[:20])
+        if thumb:
+            item.setIcon(QIcon(thumb))
+
+        tooltip = (
+            f"Nombre: {nombre}\n"
+            f"Tipo: {tipo}\n"
+            f"Ruta: {ruta}"
+        )
+        item.setToolTip(tooltip)
+        item.setData(Qt.ItemDataRole.UserRole, ruta)
+        self._lista.addItem(item)
+        
+        self.archivo_importado.emit(ruta)
+
     def importar_desde_media_item(self, media_item):
         """Importa desde un objeto MediaItem del ProjectManager."""
         if hasattr(media_item, "path"):
@@ -547,7 +571,7 @@ class MediaLibraryWidget(QFrame):
                 "embedded_path": media_item.embedded_path
             }
             self._archivos.append(archivo_info)
-            self._agregar_item_lista(archivo_info)
+            self._agregar_item_a_lista(archivo_info)
         
         self._actualizar_info()
 

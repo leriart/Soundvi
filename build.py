@@ -226,7 +226,8 @@ def obtener_excludes() -> list:
     """Modulos a excluir para reducir tamano."""
     return [
         "tkinter", "_tkinter", "tcl", "tk",
-        "unittest", "test", "tests",
+        # "unittest" removed - required by librosa/scipy dependency chain
+        "test", "tests",
         "matplotlib", "matplotlib.backends",
         "IPython", "jupyter",
         "sphinx", "docutils",

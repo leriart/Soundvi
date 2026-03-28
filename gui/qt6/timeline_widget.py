@@ -646,6 +646,11 @@ class ModuleTimelineGraphicsItem(QGraphicsRectItem):
         super().hoverMoveEvent(event)
 
     def mousePressEvent(self, event):
+        # Verificación de seguridad: asegurar que module_item existe
+        if not hasattr(self, 'module_item') or self.module_item is None:
+            super().mousePressEvent(event)
+            return
+            
         if event.button() == Qt.MouseButton.LeftButton:
             x = event.pos().x()
             if x < 6:
@@ -667,6 +672,11 @@ class ModuleTimelineGraphicsItem(QGraphicsRectItem):
     def _get_snap_times(self, timeline_widget) -> list:
         """Obtiene todos los puntos de tiempo a los que se puede hacer snap."""
         snap_times = [0.0]
+        
+        # Verificación de seguridad
+        if not hasattr(self, 'module_item') or self.module_item is None:
+            return snap_times
+            
         if hasattr(timeline_widget, '_timeline') and timeline_widget._timeline:
             snap_times.append(timeline_widget._timeline.playhead)
             for track in timeline_widget._timeline.tracks:
@@ -805,6 +815,11 @@ class ModuleTimelineGraphicsItem(QGraphicsRectItem):
         return HEADER_WIDTH + best_end_time * self._pps
 
     def mouseMoveEvent(self, event):
+        # Verificación de seguridad
+        if not hasattr(self, 'module_item') or self.module_item is None:
+            super().mouseMoveEvent(event)
+            return
+            
         if self._resizing and self._drag_start_pos:
             delta_x = event.scenePos().x() - self._drag_start_pos.x()
             delta_time = delta_x / self._pps
@@ -845,6 +860,11 @@ class ModuleTimelineGraphicsItem(QGraphicsRectItem):
         super().mouseMoveEvent(event)
 
     def mouseReleaseEvent(self, event):
+        # Verificación de seguridad
+        if not hasattr(self, 'module_item') or self.module_item is None:
+            super().mouseReleaseEvent(event)
+            return
+            
         self._resizing = False
         self._drag_start_pos = None
         if hasattr(self.scene(), 'update_snap_line'):
@@ -1333,6 +1353,9 @@ class TimelineWidget(QWidget):
         self._construir_ui()
         self._refrescar_completo()
         
+        # Scrollbars en esquina superior izquierda al inicio
+        QTimer.singleShot(200, self._scrollbars_a_esquina_superior_izquierda)
+        
         # Asegurar que el widget sea visible
         log = logging.getLogger("soundvi.qt6.timeline")
         log.info("TimelineWidget inicializado - Altura: %d, Tracks: %d", 
@@ -1496,8 +1519,8 @@ class TimelineWidget(QWidget):
         # Headers se manejan DENTRO de la escena, no como widget separado
         # Esto asegura que se alineen con el sidebar
         
-        # Timeline no tiene señales PyQt, el centrado se maneja en los métodos
-        # que agregan contenido (_agregar_clip, _agregar_track, etc.)
+        # Scrollbars fijos en esquina superior izquierda - NO centrado automático
+        # Timeline no tiene señales PyQt
 
         # Conectar senales de la escena
         self._scene.clip_selected.connect(self.clip_selected.emit)
@@ -1529,8 +1552,8 @@ class TimelineWidget(QWidget):
         log.info("Timeline extenso configurado: %.1fs -> %dpx, altura: %dpx", 
                 max_duration, total_width_px, total_height_px)
         
-        # Después de refrescar, centrar en contenido si hay
-        QTimer.singleShot(100, self._centrar_en_contenido)
+        # Scrollbars fijos en esquina superior izquierda (no centrado automático)
+        QTimer.singleShot(100, self._scrollbars_a_esquina_superior_izquierda)
         
         # Guardar estado del asistente de alineación antes de limpiar
         alignment_enabled = False
@@ -1798,60 +1821,19 @@ class TimelineWidget(QWidget):
         if hasattr(self, '_btn_alignment') and self._btn_alignment.isChecked():
             self._actualizar_guias_alineacion()
     
+    def _scrollbars_a_esquina_superior_izquierda(self):
+        """Pone los scrollbars en la esquina superior izquierda (0,0)."""
+        self._view.horizontalScrollBar().setValue(0)
+        self._view.verticalScrollBar().setValue(0)
+        
+        log = logging.getLogger("soundvi.qt6.timeline")
+        log.debug("Scrollbars posicionados en esquina superior izquierda")
+    
     def _centrar_en_contenido(self):
-        """Centra la vista del timeline en donde hay contenido."""
-        if not self._timeline.tracks and not self._timeline.module_items:
-            return
-        
-        # Encontrar el tiempo máximo con contenido
-        max_time = 0
-        has_content = False
-        
-        for track in self._timeline.tracks:
-            for clip in track.clips:
-                clip_end = clip.start_time + clip.duration
-                if clip_end > max_time:
-                    max_time = clip_end
-                    has_content = True
-        
-        # También verificar módulos
-        for module in self._timeline.module_items:
-            module_end = module.start_time + module.duration
-            if module_end > max_time:
-                max_time = module_end
-                has_content = True
-        
-        if has_content and max_time > 0:
-            # Calcular posición X para centrar (considerando HEADER_WIDTH)
-            center_x = HEADER_WIDTH + (max_time * self._pps) / 2
-            
-            # Obtener el viewport y centrar horizontalmente
-            viewport = self._view.viewport()
-            viewport_width = viewport.width()
-            viewport_height = viewport.height()
-            
-            # Ajustar scroll para centrar en el contenido horizontalmente
-            scroll_x = center_x - (viewport_width / 2)
-            scroll_x = max(0, scroll_x)  # No scroll negativo
-            
-            # También centrar verticalmente si hay muchos tracks
-            num_tracks = len(self._timeline.tracks)
-            if num_tracks > 0:
-                # Calcular altura total de tracks
-                track_height = self._scene._track_height if hasattr(self._scene, '_track_height') else TRACK_HEIGHT
-                total_tracks_height = num_tracks * track_height + RULER_HEIGHT
-                
-                # Centrar verticalmente
-                scroll_y = (total_tracks_height - viewport_height) / 2
-                scroll_y = max(0, scroll_y)
-                self._view.verticalScrollBar().setValue(int(scroll_y))
-            
-            # Aplicar scroll horizontal suavemente
-            self._view.horizontalScrollBar().setValue(int(scroll_x))
-            
-            log = logging.getLogger("soundvi.qt6.timeline")
-            log.debug("Timeline centrado en contenido: tiempo máximo %.1fs, scroll X: %dpx", 
-                     max_time, int(scroll_x))
+        """(MÉTODO MANTENIDO PARA COMPATIBILIDAD - NO SE USA)
+        Centra la vista del timeline en donde hay contenido."""
+        # Este método ya no se usa - scrollbars fijos en esquina superior izquierda
+        pass
     
     def _centrar_en_tiempo(self, tiempo_segundos: float):
         """Centra la vista del timeline en un tiempo específico."""
@@ -2108,8 +2090,7 @@ class TimelineWidget(QWidget):
         self._refrescar_completo()
         self.clips_changed.emit()
         
-        # Centrar en contenido después de agregar track
-        QTimer.singleShot(50, self._centrar_en_contenido)
+        # NO centrar automáticamente - scrollbars fijos
 
     def _eliminar_track(self, track_id: str):
         """Elimina un track por su ID."""

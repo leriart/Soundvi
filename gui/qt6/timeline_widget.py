@@ -33,7 +33,7 @@ from PyQt6.QtWidgets import (
 )
 from core.logger import get_logger
 logger = get_logger(__name__)
-from PyQt6.QtCore import Qt, pyqtSignal, QPointF, QRectF, QUrl
+from PyQt6.QtCore import Qt, pyqtSignal, QPointF, QRectF, QUrl, QTimer
 from PyQt6.QtGui import (
     QColor, QBrush, QPen, QFont, QPainter, QPainterPath, QDrag, QCursor,
     QAction, QWheelEvent, QMouseEvent, QKeyEvent

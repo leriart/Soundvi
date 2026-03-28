@@ -433,9 +433,16 @@ class VentanaPrincipalQt6(QMainWindow):
         self.setCentralWidget(self._preview)
 
         # -- Dock: Sidebar de Modulos (izquierda) --
+        # Sidebar debe empezar desde el borde izquierdo de la ventana
         self._panel_sidebar = SidebarWidget(self._pm)
         self._dock_sidebar = self._crear_dock("Modulos", self._panel_sidebar,
                                                Qt.DockWidgetArea.LeftDockWidgetArea)
+        
+        # Forzar que el sidebar esté pegado al borde izquierdo
+        self._dock_sidebar.setFeatures(
+            QDockWidget.DockWidgetFeature.DockWidgetMovable |
+            QDockWidget.DockWidgetFeature.DockWidgetClosable
+        )
 
         # -- Dock: Media Library (izquierda, tabulada con sidebar) --
         self._panel_media = MediaLibraryWidget(project_manager=self._project_manager)
@@ -486,6 +493,11 @@ class VentanaPrincipalQt6(QMainWindow):
                                                  Qt.DockWidgetArea.BottomDockWidgetArea)
         self.tabifyDockWidget(self._dock_mixer, self._dock_keyframes)
         self._dock_timeline.raise_()
+
+        # IMPORTANTE: Configurar esquinas para alinear timeline con sidebar
+        # Esto hace que el timeline (dock inferior) se alinee con el sidebar (dock izquierdo)
+        self.setCorner(Qt.Corner.BottomLeftCorner, Qt.DockWidgetArea.LeftDockWidgetArea)
+        self.setCorner(Qt.Corner.BottomRightCorner, Qt.DockWidgetArea.RightDockWidgetArea)
 
         # Agregar acciones de visibilidad al menu View
         for dock in [self._dock_sidebar, self._dock_media, self._dock_transiciones,

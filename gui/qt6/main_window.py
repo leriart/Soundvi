@@ -1136,10 +1136,10 @@ class VentanaPrincipalQt6(QMainWindow):
         self._status.showMessage("Nuevo proyecto creado.", 3000)
 
     def _abrir_proyecto(self):
-        """Abre un proyecto .svproj usando ProjectManager."""
+        """Abre un proyecto .soundvi o .svproj usando ProjectManager."""
         ruta, _ = QFileDialog.getOpenFileName(
             self, "Abrir proyecto Soundvi", "",
-            "Proyectos Soundvi (*.svproj *.json);;Todos (*)"
+            "Proyectos Soundvi (*.soundvi *.svproj *.json);;Soundvi Projects (*.soundvi);;Legacy (*.svproj *.json);;Todos (*)"
         )
         if not ruta:
             return
@@ -1171,29 +1171,9 @@ class VentanaPrincipalQt6(QMainWindow):
             self._guardar_como()
             return
         
-        # Verificar si ya es un archivo .soundvi
-        if self._project_manager.project_path.endswith('.soundvi'):
-            # Preguntar si incrustar medios
-            from PyQt6.QtWidgets import QMessageBox
-            reply = QMessageBox.question(
-                self, "Guardar Proyecto",
-                "¿Deseas incrustar los archivos de medios en el proyecto?\n"
-                "Esto hará el archivo más grande pero será portable.",
-                QMessageBox.StandardButton.Yes | 
-                QMessageBox.StandardButton.No | 
-                QMessageBox.StandardButton.Cancel
-            )
-            
-            if reply == QMessageBox.StandardButton.Cancel:
-                return
-            
-            embed_media = (reply == QMessageBox.StandardButton.Yes)
-            
-            # Guardar con opción de incrustar medios
-            ok = self._project_manager.save_project(embed_media=embed_media)
-        else:
-            # Proyecto legacy .svproj - guardar normalmente
-            ok = self._project_manager.save_project()
+        # Guardar directamente sin preguntar (Ctrl+S rápido)
+        # embed_media=False por defecto para guardado rápido
+        ok = self._project_manager.save_project()
         
         if ok:
             # Registrar en historial y actualizar menu
@@ -1296,7 +1276,11 @@ class VentanaPrincipalQt6(QMainWindow):
     def _actualizar_titulo_ventana(self):
         """Actualiza el título de la ventana con el nombre del proyecto."""
         nombre = self._project_manager.project_name or "Sin titulo"
-        modificado = " *" if self._project_manager.is_modified else ""
+        try:
+            mod_flag = self._project_manager.is_modified
+        except TypeError:
+            mod_flag = False
+        modificado = " *" if mod_flag else ""
         self.setWindowTitle(f"Soundvi — {nombre}{modificado}")
 
     def _actualizar_menu_recientes(self):

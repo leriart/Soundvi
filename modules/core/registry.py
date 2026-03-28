@@ -18,8 +18,9 @@ MODULE_TYPES = {
     "audio": {
         "name": "Audio",
         "icon": "\U0001f50a",
-        "description": "Procesamiento y visualizaci\u00f3n de audio",
-        "categories": ["visualization", "effects", "analysis", "enhancement"]
+        "description": "Procesamiento y visualización de audio",
+        "categories": ["visualization", "effects", "analysis", "enhancement"],
+        "wav2bar_modules": ["straight_bar", "circular_bar", "particle_flow", "wave_visualizer"]
     },
     "text": {
         "name": "Texto",

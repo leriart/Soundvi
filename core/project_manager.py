@@ -3,8 +3,8 @@
 """
 Gestor de Proyecto -- Maneja el estado completo del proyecto Soundvi.
 
-Coordina el timeline, clips, modulos, configuracion y archivos de medios.
-Soporta guardar/cargar proyectos en formato .soundvi (comprimido) y .svproj (JSON legacy).
+Coordina el timeline, clips, módulos, configuración y archivos de medios.
+Soporta guardar/cargar proyectos en formato .soundvi (comprimido+cifrado) y .svproj (JSON legacy).
 """
 
 from __future__ import annotations
@@ -29,13 +29,15 @@ class MediaItem:
         self.tags: List[str] = []
         self.favorite: bool = False
         self.added_at: float = time.time()
-        
+
         # Metadatos del archivo
         self.file_size: int = 0
         self.duration: float = 0.0
         self.width: int = 0
         self.height: int = 0
-        
+        self.embedded: bool = False
+        self.embedded_path: str = ""
+
         if os.path.exists(path):
             self.file_size = os.path.getsize(path)
 
@@ -51,6 +53,8 @@ class MediaItem:
             "duration": self.duration,
             "width": self.width,
             "height": self.height,
+            "embedded": self.embedded,
+            "embedded_path": self.embedded_path,
         }
 
     @classmethod
@@ -58,50 +62,53 @@ class MediaItem:
         item = cls(
             path=data.get("path", ""),
             name=data.get("name", ""),
-            media_type=data.get("media_type", "")
+            media_type=data.get("media_type", data.get("type", ""))
         )
         item.tags = data.get("tags", [])
         item.favorite = data.get("favorite", False)
         item.added_at = data.get("added_at", time.time())
-        item.file_size = data.get("file_size", 0)
+        item.file_size = data.get("file_size", data.get("size", 0))
         item.duration = data.get("duration", 0.0)
         item.width = data.get("width", 0)
         item.height = data.get("height", 0)
+        item.embedded = data.get("embedded", False)
+        item.embedded_path = data.get("embedded_path", "")
         return item
 
 
 class ProjectManager:
     """
     Gestor principal del proyecto Soundvi.
-    
+
     Coordina todos los subsistemas:
     - Timeline con tracks y clips
     - Biblioteca de medios
     - Sistema de comandos (undo/redo)
-    - Configuracion del proyecto
+    - Configuración del proyecto
+    - Módulos activos
     - Guardado/carga de proyectos
     """
 
-    # Version del formato de proyecto
-    PROJECT_VERSION = "5.0.0"  # Formato .soundvi
+    # Versión del formato de proyecto
+    PROJECT_VERSION = "5.0.0"
 
     def __init__(self):
         # -- Subsistemas --
         self.timeline: Timeline = Timeline()
         self.command_manager: CommandManager = CommandManager(max_history=100)
-        
+
         # -- Biblioteca de medios --
         self.media_library: List[MediaItem] = []
-        
-        # -- Configuracion del proyecto --
+
+        # -- Configuración del proyecto --
         self.project_path: str = ""
         self.project_name: str = "Nuevo proyecto"
         self.created_at: float = time.time()
         self.modified_at: float = time.time()
         self.author: str = ""
         self.description: str = ""
-        
-        # -- Configuracion de render --
+
+        # -- Configuración de render --
         self.render_config: Dict[str, Any] = {
             "resolution": "1920x1080",
             "fps": 30,
@@ -110,242 +117,101 @@ class ProjectManager:
             "audio_bitrate": "192k",
             "output_format": "mp4"
         }
-        
+
         # -- Metadatos de video --
         self.video_metadata: Dict[str, Any] = {}
-        
+
+        # -- Estado de módulos (serializable) --
+        self.modules_state: List[Dict[str, Any]] = []
+
         # -- Estado interno --
         self._is_modified: bool = False
 
     # -------------------------------------------------------------------------
-    # Guardado y carga
+    # Nuevo proyecto
     # -------------------------------------------------------------------------
+    def new_project(self):
+        """Crea un proyecto completamente nuevo, limpiando todo el estado."""
+        self.clear()
+        print("[ProjectManager] Nuevo proyecto creado")
 
+    # -------------------------------------------------------------------------
+    # Guardado
+    # -------------------------------------------------------------------------
     def save_project(self, path: str = "", embed_media: bool = False) -> bool:
         """
-        Guarda el proyecto en formato .soundvi (comprimido/cifrado).
-        
+        Guarda el proyecto en formato .soundvi (comprimido/cifrado) o .svproj (legacy).
+
         Args:
-            path: Ruta del archivo. Si vacia, usa la ruta anterior.
+            path: Ruta del archivo. Si vacía, usa la ruta anterior.
             embed_media: Si True, incrusta archivos de medios en el proyecto
-            
+
         Returns:
-            True si se guardo exitosamente
+            True si se guardó exitosamente
         """
         if path:
             self.project_path = path
         elif not self.project_path:
             return False
-        
-        # Determinar formato basado en extensión
+
         is_soundvi = self.project_path.endswith(".soundvi")
-        
+
         try:
             if is_soundvi:
-                # Guardar en formato .soundvi
-                from core.soundvi_project import create_soundvi_project
-                
-                # Preparar datos del proyecto
-                project_data = {
-                    "project_name": self.project_name,
-                    "author": self.author,
-                    "description": self.description,
-                    "project_config": {
-                        "version": self.PROJECT_VERSION,
-                        "created_at": self.created_at,
-                        "modified_at": time.time(),
-                        "render_config": self.render_config,
-                        "video_metadata": self.video_metadata,
-                    },
-                    "timeline": self.timeline.to_dict(),
-                    "modules": self._get_active_modules(),
-                    "media_library": [m.to_dict() for m in self.media_library],
-                    "undo_stack": getattr(self.command_manager, 'undo_stack', []),
-                    "redo_stack": getattr(self.command_manager, 'redo_stack', []),
-                    "last_action": self._get_last_action(),
-                    "action_count": getattr(self.command_manager, 'history_count', 0)
-                }
-                
-                success = create_soundvi_project(
-                    project_data, 
-                    self.project_path,
-                    password=self._get_encryption_password(),
-                    embed_media=embed_media
-                )
-                
-                if success:
-                    self._is_modified = False
-                    file_size = os.path.getsize(self.project_path) if os.path.exists(self.project_path) else 0
-                    print(f"[ProjectManager] Proyecto .soundvi guardado: {self.project_path}")
-                    print(f"[ProjectManager] Tamaño: {file_size / 1024 / 1024:.2f} MB")
-                    print(f"[ProjectManager] Medios incrustados: {embed_media}")
-                else:
-                    print(f"[ProjectManager] Error guardando .soundvi")
-                    # Fallback a JSON
-                    return self._save_as_json_fallback(project_data)
-                
-                return success
-                
+                return self._save_soundvi(embed_media)
             else:
-                # Guardar en formato JSON legacy (.svproj)
-                return self._save_as_json_project(path)
-                
+                return self._save_json_legacy()
         except Exception as e:
             print(f"[ProjectManager] Error al guardar proyecto: {e}")
+            import traceback
+            traceback.print_exc()
             return False
 
-    def load_project(self, path: str) -> bool:
-        """
-        Carga un proyecto desde archivo .soundvi o .svproj (legacy).
-        
-        Args:
-            path: Ruta del archivo (.soundvi o .svproj)
-            
-        Returns:
-            True si se cargo exitosamente
-        """
-        if not os.path.exists(path):
-            print(f"[ProjectManager] Archivo no encontrado: {path}")
-            return False
-        
-        # Determinar formato basado en extensión
-        is_soundvi = path.endswith(".soundvi")
-        
-        try:
-            if is_soundvi:
-                # Cargar formato .soundvi
-                from core.soundvi_project import load_soundvi_project
-                project_data = load_soundvi_project(path, password=self._get_encryption_password())
-                
-                if not project_data:
-                    print(f"[ProjectManager] Error cargando proyecto .soundvi: {path}")
-                    return False
-                
-                # Extraer datos del formato .soundvi
-                manifest = project_data.get("manifest", {})
-                config = project_data.get("project_config", {})
-                timeline_data = project_data.get("timeline", {})
-                modules_data = project_data.get("modules", [])
-                media_library_data = project_data.get("media_library", [])
-                history_data = project_data.get("history", {})
-                
-                # Restaurar datos básicos
-                self.project_path = path
-                self.project_name = manifest.get("project_name", "Sin nombre")
-                self.created_at = config.get("created_at", time.time())
-                self.author = manifest.get("author", "")
-                self.description = manifest.get("description", "")
-                self.render_config = config.get("render_config", {})
-                self.video_metadata = config.get("video_metadata", {})
-                
-                # Restaurar timeline
-                if timeline_data:
-                    self.timeline = Timeline.from_dict(timeline_data)
-                
-                # Restaurar biblioteca de medios
-                self.media_library.clear()
-                for media_info in media_library_data:
-                    media_path = media_info.get("path", "")
-                    # Si el medio está incrustado, extraerlo a temporal
-                    if media_info.get("embedded", False):
-                        # Extraer medio incrustado
-                        import tempfile
-                        from core.soundvi_project import SoundviProject
-                        project = SoundviProject()
-                        temp_dir = tempfile.mkdtemp(prefix="soundvi_media_")
-                        extracted = project.extract_media(path, temp_dir)
-                        # Buscar el archivo extraído
-                        for extracted_path in extracted:
-                            if os.path.basename(extracted_path) == os.path.basename(media_path):
-                                media_path = extracted_path
-                                break
-                    
-                    # Crear MediaItem
-                    item = MediaItem(
-                        path=media_path,
-                        name=media_info.get("name", ""),
-                        media_type=media_info.get("type", "")
-                    )
-                    item.tags = media_info.get("tags", [])
-                    item.favorite = media_info.get("favorite", False)
-                    item.added_at = media_info.get("added_at", time.time())
-                    item.file_size = media_info.get("size", 0)
-                    self.media_library.append(item)
-                
-                # Restaurar historial si está disponible
-                if history_data:
-                    undo_stack = history_data.get("undo_stack", [])
-                    redo_stack = history_data.get("redo_stack", [])
-                    if hasattr(self.command_manager, 'load_history'):
-                        self.command_manager.load_history(undo_stack, redo_stack)
-                
-                print(f"[ProjectManager] Proyecto .soundvi cargado: {path}")
-                print(f"[ProjectManager] Medios incrustados: {any(m.get('embedded', False) for m in media_library_data)}")
-                
-            else:
-                # Cargar formato JSON legacy (.svproj)
-                return self._load_json_project(path)
-            
-            self.command_manager.clear()
+    def _save_soundvi(self, embed_media: bool = False) -> bool:
+        """Guarda en formato .soundvi con cifrado."""
+        from core.soundvi_project import create_soundvi_project
+
+        project_data = {
+            "project_name": self.project_name,
+            "author": self.author,
+            "description": self.description,
+            "project_config": {
+                "version": self.PROJECT_VERSION,
+                "created_at": self.created_at,
+                "modified_at": time.time(),
+                "video_metadata": self.video_metadata,
+            },
+            "render_config": self.render_config,
+            "timeline": self.timeline.to_dict(),
+            "modules": self.modules_state,
+            "media_library": [m.to_dict() for m in self.media_library],
+            "undo_stack": [],
+            "redo_stack": [],
+            "last_action": self._get_last_action(),
+            "action_count": 0,
+        }
+
+        success = create_soundvi_project(
+            project_data,
+            self.project_path,
+            password=None,  # Usa contraseña por defecto
+            embed_media=embed_media
+        )
+
+        if success:
             self._is_modified = False
-            return True
-            
-        except Exception as e:
-            print(f"[ProjectManager] Error al cargar proyecto: {e}")
-            return False
+            self.modified_at = time.time()
+            file_size = os.path.getsize(self.project_path) if os.path.exists(self.project_path) else 0
+            print(f"[ProjectManager] Proyecto .soundvi guardado: {self.project_path} "
+                  f"({file_size / 1024:.1f} KB, medios embebidos: {embed_media})")
+        else:
+            print("[ProjectManager] Error guardando .soundvi, intentando fallback JSON...")
+            return self._save_json_fallback()
 
-    # -------------------------------------------------------------------------
-    # Métodos auxiliares
-    # -------------------------------------------------------------------------
+        return success
 
-    def _get_active_modules(self):
-        """Obtiene lista de módulos activos en el proyecto."""
-        active_modules = []
-        # Buscar módulos en clips
-        for track in self.timeline.tracks:
-            for clip in track.clips:
-                if hasattr(clip, 'effects') and clip.effects:
-                    for effect in clip.effects:
-                        module_info = {
-                            "type": effect.get("type", "unknown"),
-                            "clip_id": clip.id,
-                            "enabled": True,
-                            "config": effect
-                        }
-                        active_modules.append(module_info)
-        return active_modules
-    
-    def _get_last_action(self):
-        """Obtiene la última acción realizada."""
-        if hasattr(self.command_manager, 'get_last_action'):
-            return self.command_manager.get_last_action()
-        return ""
-    
-    def _get_encryption_password(self):
-        """Obtiene contraseña de cifrado (si está configurada)."""
-        # Por ahora, sin cifrado. Se puede implementar con configuración de usuario.
-        return None
-    
-    def _save_as_json_fallback(self, project_data):
-        """Guarda proyecto en formato JSON como fallback."""
-        try:
-            # Cambiar extensión a .svproj para legacy
-            json_path = self.project_path.replace(".soundvi", ".svproj")
-            with open(json_path, "w", encoding="utf-8") as f:
-                json.dump(project_data, f, indent=2, ensure_ascii=False)
-            print(f"[ProjectManager] Proyecto guardado en formato JSON (fallback): {json_path}")
-            return True
-        except Exception as e:
-            print(f"[ProjectManager] Error en fallback JSON: {e}")
-            return False
-    
-    def _save_as_json_project(self, path: str = "") -> bool:
-        """Guarda proyecto en formato JSON legacy."""
-        if path:
-            self.project_path = path
-        elif not self.project_path:
-            return False
-            
+    def _save_json_legacy(self) -> bool:
+        """Guarda en formato JSON legacy (.svproj)."""
         project_data = {
             "version": self.PROJECT_VERSION,
             "project_name": self.project_name,
@@ -356,25 +222,118 @@ class ProjectManager:
             "render_config": self.render_config,
             "video_metadata": self.video_metadata,
             "timeline": self.timeline.to_dict(),
+            "modules": self.modules_state,
             "media_library": [m.to_dict() for m in self.media_library],
         }
-        
+
         try:
             with open(self.project_path, "w", encoding="utf-8") as f:
-                json.dump(project_data, f, indent=2, ensure_ascii=False)
+                json.dump(project_data, f, indent=2, ensure_ascii=False, default=str)
             self._is_modified = False
             print(f"[ProjectManager] Proyecto JSON guardado: {self.project_path}")
             return True
         except Exception as e:
             print(f"[ProjectManager] Error al guardar JSON: {e}")
             return False
-    
-    def _load_json_project(self, path: str) -> bool:
-        """Carga proyecto en formato JSON legacy."""
+
+    def _save_json_fallback(self) -> bool:
+        """Fallback: guarda como JSON si el .soundvi falla."""
+        json_path = self.project_path.replace(".soundvi", ".svproj")
+        old_path = self.project_path
+        self.project_path = json_path
+        result = self._save_json_legacy()
+        if not result:
+            self.project_path = old_path
+        return result
+
+    # -------------------------------------------------------------------------
+    # Carga
+    # -------------------------------------------------------------------------
+    def load_project(self, path: str) -> bool:
+        """
+        Carga un proyecto desde archivo .soundvi o .svproj (legacy).
+
+        Args:
+            path: Ruta del archivo
+
+        Returns:
+            True si se cargó exitosamente
+        """
+        if not os.path.exists(path):
+            print(f"[ProjectManager] Archivo no encontrado: {path}")
+            return False
+
+        is_soundvi = path.endswith(".soundvi")
+
+        try:
+            if is_soundvi:
+                return self._load_soundvi(path)
+            else:
+                return self._load_json_legacy(path)
+        except Exception as e:
+            print(f"[ProjectManager] Error al cargar proyecto: {e}")
+            import traceback
+            traceback.print_exc()
+            return False
+
+    def _load_soundvi(self, path: str) -> bool:
+        """Carga un proyecto .soundvi."""
+        from core.soundvi_project import load_soundvi_project
+
+        project_data = load_soundvi_project(path, password=None)
+        if not project_data:
+            print(f"[ProjectManager] Error cargando .soundvi: {path}")
+            return False
+
+        manifest = project_data.get("manifest", {})
+        config = project_data.get("project_config", {})
+        timeline_data = project_data.get("timeline", {})
+        modules_data = project_data.get("modules", [])
+        media_library_data = project_data.get("media_library", [])
+        history_data = project_data.get("history", {})
+        render_config = project_data.get("render_config", {})
+
+        # Restaurar datos básicos
+        self.project_path = path
+        self.project_name = manifest.get("project_name", "Sin nombre")
+        self.created_at = config.get("created_at", time.time())
+        self.modified_at = config.get("modified_at", time.time())
+        self.author = manifest.get("author", "")
+        self.description = manifest.get("description", "")
+        self.video_metadata = config.get("video_metadata", {})
+
+        if render_config:
+            self.render_config.update(render_config)
+
+        # Restaurar timeline
+        if timeline_data:
+            self.timeline = Timeline.from_dict(timeline_data)
+
+        # Restaurar módulos
+        self.modules_state = modules_data if isinstance(modules_data, list) else []
+
+        # Restaurar biblioteca de medios
+        self.media_library.clear()
+        for media_data in media_library_data:
+            item = MediaItem.from_dict(media_data)
+            self.media_library.append(item)
+
+        # Limpiar undo/redo
+        self.command_manager.clear()
+        self._is_modified = False
+
+        print(f"[ProjectManager] Proyecto .soundvi cargado: {path}")
+        print(f"  Nombre: {self.project_name}")
+        print(f"  Módulos: {len(self.modules_state)}")
+        print(f"  Medios: {len(self.media_library)}")
+        return True
+
+    def _load_json_legacy(self, path: str) -> bool:
+        """Carga un proyecto JSON legacy (.svproj o .json)."""
         try:
             with open(path, "r", encoding="utf-8") as f:
                 data = json.load(f)
-                
+
             self.project_path = path
             self.project_name = data.get("project_name", "Sin titulo")
             self.created_at = data.get("created_at", time.time())
@@ -383,47 +342,67 @@ class ProjectManager:
             self.description = data.get("description", "")
             self.render_config = data.get("render_config", self.render_config)
             self.video_metadata = data.get("video_metadata", self.video_metadata)
-            
-            # Cargar timeline
+
+            # Timeline
             timeline_data = data.get("timeline", {})
             if timeline_data:
                 self.timeline = Timeline.from_dict(timeline_data)
-                
-            # Cargar biblioteca de medios
+
+            # Módulos
+            self.modules_state = data.get("modules", [])
+
+            # Medios
             self.media_library.clear()
             for media_data in data.get("media_library", []):
                 item = MediaItem.from_dict(media_data)
                 self.media_library.append(item)
-                
+
             self.command_manager.clear()
             self._is_modified = False
-            
+
             print(f"[ProjectManager] Proyecto JSON cargado: {path}")
             return True
-            
+
         except Exception as e:
             print(f"[ProjectManager] Error cargando JSON: {e}")
             return False
 
     # -------------------------------------------------------------------------
+    # Estado de módulos
+    # -------------------------------------------------------------------------
+    def set_modules_state(self, modules_state: List[Dict[str, Any]]):
+        """Establece el estado serializable de los módulos."""
+        self.modules_state = modules_state
+        self.mark_modified()
+
+    def get_modules_state(self) -> List[Dict[str, Any]]:
+        """Obtiene el estado serializable de los módulos."""
+        return self.modules_state
+
+    # -------------------------------------------------------------------------
+    # Métodos auxiliares
+    # -------------------------------------------------------------------------
+    def _get_last_action(self):
+        """Obtiene la última acción realizada."""
+        if hasattr(self.command_manager, 'get_last_action'):
+            return self.command_manager.get_last_action()
+        return ""
+
+    # -------------------------------------------------------------------------
     # Utilidades
     # -------------------------------------------------------------------------
-
     def mark_modified(self):
-        """Marca el proyecto como modificado."""
         self._is_modified = True
         self.modified_at = time.time()
 
     def mark_saved(self):
-        """Marca el proyecto como guardado."""
         self._is_modified = False
 
+    @property
     def is_modified(self) -> bool:
-        """Retorna True si el proyecto tiene cambios sin guardar."""
         return self._is_modified
 
     def get_project_summary(self) -> Dict[str, Any]:
-        """Retorna un resumen del estado del proyecto."""
         total_clips = sum(len(t.clips) for t in self.timeline.tracks)
         return {
             "name": self.project_name,
@@ -431,26 +410,24 @@ class ProjectManager:
             "tracks": len(self.timeline.tracks),
             "clips": total_clips,
             "media_items": len(self.media_library),
+            "modules": len(self.modules_state),
             "modified": self._is_modified,
             "created": time.strftime("%Y-%m-%d %H:%M", time.localtime(self.created_at)),
             "modified_time": time.strftime("%Y-%m-%d %H:%M", time.localtime(self.modified_at)),
         }
 
     def add_media(self, path: str, name: str = "") -> MediaItem:
-        """Añade un archivo de medios a la biblioteca."""
         item = MediaItem(path, name)
         self.media_library.append(item)
         self.mark_modified()
         return item
 
     def remove_media(self, item: MediaItem):
-        """Elimina un archivo de medios de la biblioteca."""
         if item in self.media_library:
             self.media_library.remove(item)
             self.mark_modified()
 
     def find_media_by_path(self, path: str) -> Optional[MediaItem]:
-        """Busca un medio por su ruta."""
         for item in self.media_library:
             if item.path == path:
                 return item
@@ -461,6 +438,7 @@ class ProjectManager:
         self.timeline = Timeline()
         self.command_manager.clear()
         self.media_library.clear()
+        self.modules_state.clear()
         self.project_path = ""
         self.project_name = "Nuevo proyecto"
         self.created_at = time.time()

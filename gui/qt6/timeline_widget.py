@@ -1147,10 +1147,14 @@ class TimelineScene(QGraphicsScene):
         if not selected:
             return
         item = selected[0]
+        
+        # Emitir señales de forma asíncrona para evitar crashes 
+        # si la escena se refresca mientras procesa eventos del ratón
+        from PyQt6.QtCore import QTimer
         if isinstance(item, ModuleTimelineGraphicsItem):
-            self.module_selected.emit(item.module_item)
+            QTimer.singleShot(0, lambda: self.module_selected.emit(item.module_item))
         elif isinstance(item, ClipItem):
-            self.clip_selected.emit(item.clip)
+            QTimer.singleShot(0, lambda: self.clip_selected.emit(item.clip))
 
     def update_snap_line(self, x: float = None, height: float = 0.0):
         """Muestra o oculta la linea indicadora de snap magnetico."""
@@ -1361,7 +1365,7 @@ class TimelineWidget(QWidget):
         # Configuración de editor de video profesional
         # Timeline es el elemento principal, debe expandirse
         self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
-        self.setMinimumHeight(250)  # Altura mínima suficiente para ver tracks
+        self.setMinimumHeight(150)  # Altura mínima reducida para dar espacio al inspector y preview
         self.setMinimumWidth(800)   # Ancho mínimo para timeline extenso
 
         self._construir_ui()

@@ -523,9 +523,9 @@ class VentanaPrincipalQt6(QMainWindow):
             
             # TIMELINE - ELEMENTO PRINCIPAL DEL EDITOR DE VIDEO
             if titulo == "Timeline":
-                # Timeline más grande y prominente
-                dock.setMinimumHeight(300)  # Mucho más alto para ser principal
-                dock.setMaximumHeight(600)  # Pero con límite máximo
+                # Timeline con tamaño ajustado para dejar espacio a la preview
+                dock.setMinimumHeight(150)
+                dock.setMaximumHeight(350)
                 widget.setMinimumHeight(280)
                 
                 # Timeline siempre visible y con prioridad
@@ -1432,46 +1432,20 @@ class VentanaPrincipalQt6(QMainWindow):
         # Diálogo para guardar como .soundvi
         ruta, _ = QFileDialog.getSaveFileName(
             self, "Guardar proyecto como", "",
-            "Soundvi Projects (*.soundvi);;Proyectos Legacy (*.svproj);;Todos los archivos (*)"
+            "Soundvi Projects (*.soundvi);;Todos los archivos (*)"
         )
         if not ruta:
             return
         
-        # Determinar formato basado en extensión o preferencia
-        if not ruta.endswith(('.soundvi', '.svproj')):
-            # Preguntar formato preferido
-            reply = QMessageBox.question(
-                self, "Formato de Proyecto",
-                "¿Qué formato deseas usar?\n"
-                "• .soundvi: Comprimido, puede incrustar medios (recomendado)\n"
-                "• .svproj: JSON simple (legacy)",
-                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
-            )
-            
-            if reply == QMessageBox.StandardButton.Yes:
-                ruta += '.soundvi'  # Formato nuevo
-            else:
-                ruta += '.svproj'   # Formato legacy
+        # Forzar formato .soundvi siempre
+        if not ruta.endswith('.soundvi'):
+            ruta += '.soundvi'
         
         # Actualizar nombre del proyecto
         self._project_manager.project_name = os.path.splitext(os.path.basename(ruta))[0]
         
-        # Si es formato .soundvi, preguntar sobre incrustar medios
+        # Guardado directo sin preguntar
         embed_media = False
-        if ruta.endswith('.soundvi'):
-            reply = QMessageBox.question(
-                self, "Incrustar Medios",
-                "¿Deseas incrustar los archivos de medios en el proyecto?\n"
-                "Esto hará el archivo más grande pero será portable.",
-                QMessageBox.StandardButton.Yes | 
-                QMessageBox.StandardButton.No | 
-                QMessageBox.StandardButton.Cancel
-            )
-            
-            if reply == QMessageBox.StandardButton.Cancel:
-                return
-            
-            embed_media = (reply == QMessageBox.StandardButton.Yes)
         
         # Sincronizar módulos antes de guardar
         self._sincronizar_modules_state()

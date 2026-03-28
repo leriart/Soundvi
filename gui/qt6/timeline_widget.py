@@ -565,7 +565,7 @@ class ModuleTimelineGraphicsItem(QGraphicsRectItem):
         self.setFlag(QGraphicsItem.GraphicsItemFlag.ItemIsSelectable, True)
         self.setFlag(QGraphicsItem.GraphicsItemFlag.ItemIsMovable, False)
         self.setAcceptHoverEvents(True)
-        self.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.setCursor(Qt.CursorShape.SizeHorCursor)
 
         # Determinar color basado en tipo de módulo
         mod_type = module_item.module_type.split("/")[0] if "/" in module_item.module_type else "effect"
@@ -585,7 +585,39 @@ class ModuleTimelineGraphicsItem(QGraphicsRectItem):
         if not self.isSelected():
             print("DEBUG_MOUSE: Item not selected, selecting it")
             self.setSelected(True)
+        
+        # Iniciar arrastre si es click izquierdo
+        if event.button() == Qt.MouseButton.LeftButton:
+            self._drag_start_pos = event.scenePos()
+            self._drag_start_time = self.module_item.start_time
+            print(f"DEBUG_DRAG: Drag started at time {self._drag_start_time}, pos {self._drag_start_pos}")
 
+
+    def mouseMoveEvent(self, event):
+        """Handle mouse move events for dragging."""
+        if self._drag_start_pos is not None:
+            delta_x = event.scenePos().x() - self._drag_start_pos.x()
+            delta_time = delta_x / self._pps
+            new_start = max(0.0, self._drag_start_time + delta_time)
+            
+            # Apply alignment snap if available (similar to ClipItem)
+            if hasattr(self, '_apply_alignment_snap'):
+                new_start = self._apply_alignment_snap(new_start, event.scenePos().x(), check_end=False)
+            
+            self.module_item.start_time = new_start
+            self._actualizar_geometria()
+            print(f"DEBUG_DRAG: Module moved to time {new_start}")
+        
+        super().mouseMoveEvent(event)
+
+    def mouseReleaseEvent(self, event):
+        """Handle mouse release events."""
+        if event.button() == Qt.MouseButton.LeftButton and self._drag_start_pos is not None:
+            print(f"DEBUG_DRAG: Drag ended for {self.module_item.name}")
+            self._drag_start_pos = None
+            self._drag_start_time = 0.0
+        
+        super().mouseReleaseEvent(event)
     def hoverEnterEvent(self, event):
         """Handle hover enter events."""
         print(f"DEBUG_HOVER: ModuleTimelineGraphicsItem hoverEnterEvent: {self.module_item.name}")

@@ -345,9 +345,8 @@ class PreviewWidget(QWidget):
             self._pausar()
         else:
             self._reproducir()
-
-            # Sincronizar audio: siempre hacer stop+play desde la posición actual
-            # para garantizar que el audio empiece donde está el playhead.
+            
+            # Sincronizar audio con video
             self._sync_audio_playback()
 
     def _reproducir(self):
@@ -377,15 +376,11 @@ class PreviewWidget(QWidget):
         self._tiempo_actual = max(0, self._tiempo_actual - 5.0)
         self._actualizar_ui_tiempo()
         self.tiempo_cambiado.emit(self._tiempo_actual)
-        if self._reproduciendo:
-            self._sync_audio_playback()
 
     def _avanzar(self):
         self._tiempo_actual = min(self._duracion_total, self._tiempo_actual + 5.0)
         self._actualizar_ui_tiempo()
         self.tiempo_cambiado.emit(self._tiempo_actual)
-        if self._reproduciendo:
-            self._sync_audio_playback()
 
     def _tick(self):
         """Llamado por el timer durante la reproduccion."""
@@ -405,9 +400,6 @@ class PreviewWidget(QWidget):
             self._tiempo_actual = 0.0
         self._actualizar_ui_tiempo(actualizar_slider=False)
         self.tiempo_cambiado.emit(self._tiempo_actual)
-        # Si está reproduciendo, re-sincronizar audio con la nueva posición
-        if self._reproduciendo:
-            self._sync_audio_playback()
 
     def _actualizar_ui_tiempo(self, actualizar_slider: bool = True):
         """Actualiza labels y slider con el tiempo actual."""
@@ -457,7 +449,6 @@ class PreviewWidget(QWidget):
     def play(self):
         """Inicia la reproduccion."""
         self._reproducir()
-        self._sync_audio_playback()
 
     def pause(self):
         """Pausa la reproduccion."""

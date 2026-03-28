@@ -1537,6 +1537,7 @@ class TimelineWidget(QWidget):
         
         # Sincronizar scroll vertical entre headers y la vista de timeline
         self._view.verticalScrollBar().valueChanged.connect(self._headers_scroll.verticalScrollBar().setValue)
+        self._headers_scroll.verticalScrollBar().valueChanged.connect(self._view.verticalScrollBar().setValue)
         
         # Scrollbars fijos en esquina superior izquierda - NO centrado automático
 
@@ -1714,6 +1715,13 @@ class TimelineWidget(QWidget):
         scene_height = max(800.0, total_h + 100)
         
         self._scene.setSceneRect(0, 0, timeline_width, scene_height)
+        
+        # Igualar la altura del contenedor de headers para que el scroll cuadre exacto
+        # Añadimos un margen extra (200px) para evitar que el scroll vertical de los headers se bloquee
+        # si la vista principal tiene una barra de scroll horizontal que reduzca su viewport.
+        if hasattr(self, '_headers_container'):
+            self._headers_container.setFixedHeight(int(scene_height) + 200)
+
         self._scene._total_height = total_h
         
         # Asegurar que la vista pueda mostrar todo el contenido

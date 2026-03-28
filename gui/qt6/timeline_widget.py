@@ -932,7 +932,9 @@ class TrackHeaderWidget(QFrame):
         super().__init__(parent)
         self.track = track
         self.setFixedWidth(HEADER_WIDTH)
-        self.setFixedHeight(TRACK_HEIGHT)
+        # Altura será ajustada dinámicamente por el padre
+        self.setMinimumHeight(40)
+        self.setMaximumHeight(80)
         color = TRACK_BG_COLORS.get(track.track_type, "#2B3035")
         self.setStyleSheet(f"""
             QFrame {{
@@ -1100,6 +1102,7 @@ class TimelineScene(QGraphicsScene):
         self._snap_line: Optional[QGraphicsLineItem] = None
         self._pps: float = 100.0  # pixeles por segundo
         self._total_height: float = 0.0
+        self._track_height: float = TRACK_HEIGHT  # Altura dinámica de tracks
 
         # Detectar cambios de selección para emitir señales de módulo/clip
         self.selectionChanged.connect(self._on_selection_changed)
@@ -1321,6 +1324,10 @@ class TimelineWidget(QWidget):
         self._pps: float = 100.0  # pixeles por segundo
         self._track_headers: List[TrackHeaderWidget] = []
         self._clipboard: List[VideoClip] = []
+        
+        # Configuración de tamaño flexible
+        self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
+        self.setMinimumHeight(180)  # Altura mínima para ser usable
 
         self._construir_ui()
         self._refrescar_completo()
@@ -1477,7 +1484,8 @@ class TimelineWidget(QWidget):
         # Vista grafica (escena)
         self._scene = TimelineScene()
         self._view = TimelineView(self._scene)
-        self._view.setMinimumHeight(100)
+        self._view.setMinimumHeight(80)
+        self._view.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
         area.addWidget(self._view)
 
         # Conectar senales de la escena
@@ -1543,12 +1551,15 @@ class TimelineWidget(QWidget):
         self._dibujar_regla()
 
         # Dibujar tracks y clips
+        # Usar altura dinámica de tracks
+        track_height = self._scene._track_height if hasattr(self._scene, '_track_height') else TRACK_HEIGHT
+        
         for track in self._timeline.tracks:
             # Fondo del track
             color_bg = TRACK_BG_COLORS.get(track.track_type, "#2B3035")
             track_bg = QGraphicsRectItem()
             width_total = max(3000, (self._timeline.duration + 30) * self._pps + HEADER_WIDTH)
-            track_bg.setRect(HEADER_WIDTH, y, width_total, TRACK_HEIGHT)
+            track_bg.setRect(HEADER_WIDTH, y, width_total, track_height)
             track_bg.setBrush(QBrush(QColor(color_bg)))
             track_bg.setPen(QPen(QColor("#343A40"), 0.5))
             track_bg.setZValue(-10)
@@ -1568,14 +1579,14 @@ class TimelineWidget(QWidget):
 
             # Clips del track
             for clip in track.clips:
-                clip_item = ClipItem(clip, track.track_type, self._pps, y, TRACK_HEIGHT)
+                clip_item = ClipItem(clip, track.track_type, self._pps, y, track_height)
                 self._scene.addItem(clip_item)
                 self._scene.registrar_clip_item(clip.clip_id, clip_item)
 
                 # Dibujar indicadores de transición en el clip
                 if hasattr(clip, 'transition_in') and clip.transition_in:
                     trans_in = TransitionIndicatorItem(
-                        clip_item, 'in', clip.transition_in, self._pps, TRACK_HEIGHT
+                        clip_item, 'in', clip.transition_in, self._pps, track_height
                     )
                     trans_in.setPos(clip_item.pos().x(), y + 4)
                     trans_in.setZValue(60)
@@ -1584,21 +1595,21 @@ class TimelineWidget(QWidget):
                 if hasattr(clip, 'transition_out') and clip.transition_out:
                     trans_dur = clip.transition_out.get('duration', 1.0)
                     trans_out = TransitionIndicatorItem(
-                        clip_item, 'out', clip.transition_out, self._pps, TRACK_HEIGHT
+                        clip_item, 'out', clip.transition_out, self._pps, track_height
                     )
                     out_x = clip_item.pos().x() + clip_item.rect().width() - max(4, trans_dur * self._pps)
                     trans_out.setPos(out_x, y + 4)
                     trans_out.setZValue(60)
                     self._scene.addItem(trans_out)
 
-            y += TRACK_HEIGHT
-            total_h += TRACK_HEIGHT
+            y += track_height
+            total_h += track_height
 
         # Dibujar módulos del timeline en el track de efectos
         effect_track_y = None
         for i, track in enumerate(self._timeline.tracks):
             if track.track_type == 'effect':
-                effect_track_y = RULER_HEIGHT + i * TRACK_HEIGHT
+                effect_track_y = RULER_HEIGHT + i * track_height
                 break
         
         if effect_track_y is None:
@@ -1607,7 +1618,7 @@ class TimelineWidget(QWidget):
         
         for mod_item in self._timeline.module_items:
             mod_gfx = ModuleTimelineGraphicsItem(
-                mod_item, self._pps, effect_track_y, TRACK_HEIGHT
+                mod_item, self._pps, effect_track_y, track_height
             )
             self._scene.addItem(mod_gfx)
 
@@ -1745,11 +1756,39 @@ class TimelineWidget(QWidget):
                                   f"Ctrl+Rueda para ajustar")
 
     def resizeEvent(self, event):
-        """Maneja el cambio de tamaño de la ventana."""
+        """Maneja el cambio de tamaño del widget."""
         super().resizeEvent(event)
+        
+        # Ajustar altura de tracks basado en el tamaño disponible
+        self._ajustar_tamanos_dinamicos()
+        
         # Actualizar guías de alineación si están activas
         if hasattr(self, '_btn_alignment') and self._btn_alignment.isChecked():
             self._actualizar_guias_alineacion()
+    
+    def _ajustar_tamanos_dinamicos(self):
+        """Ajusta dinámicamente los tamaños basado en el espacio disponible."""
+        height = self.height()
+        
+        # Calcular altura disponible para tracks (excluyendo toolbar y ruler)
+        available_height = max(100, height - 80)  # 80px para toolbar + ruler
+        
+        # Ajustar altura de tracks si hay muchos
+        num_tracks = len(self._timeline.tracks)
+        if num_tracks > 0:
+            # Altura mínima por track: 40px, máxima: 80px
+            track_height = max(40, min(80, available_height // max(1, num_tracks)))
+            
+            # Actualizar altura en la escena
+            if hasattr(self._scene, '_track_height'):
+                self._scene._track_height = track_height
+            
+            # Ajustar altura de los headers
+            for header in self._track_headers:
+                header.setFixedHeight(track_height)
+            
+            # Recalcular layout
+            self._refrescar_completo()
 
     # -- Snap ------------------------------------------------------------------
     def _toggle_snap(self):

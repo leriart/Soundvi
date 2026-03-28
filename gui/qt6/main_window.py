@@ -491,14 +491,82 @@ class VentanaPrincipalQt6(QMainWindow):
             Qt.DockWidgetArea.RightDockWidgetArea |
             Qt.DockWidgetArea.BottomDockWidgetArea
         )
-        # Fijar tamaño minimo para que las pestañas tabuladas
-        # no queden ocultas detras de otros elementos
-        dock.setMinimumHeight(80)
+        
+        # Configuración específica por área
         if area == Qt.DockWidgetArea.BottomDockWidgetArea:
-            dock.setMinimumHeight(120)
-            widget.setMinimumHeight(100)
+            # Para docks inferiores (timeline, mixer, keyframes)
+            dock.setMinimumHeight(150)  # Altura mínima suficiente
+            widget.setMinimumHeight(120)
+            
+            # Timeline necesita más espacio y comportamiento especial
+            if titulo == "Timeline":
+                dock.setMinimumHeight(200)
+                widget.setMinimumHeight(180)
+                # Permitir que el timeline se expanda más
+                dock.setFeatures(
+                    QDockWidget.DockWidgetFeature.DockWidgetMovable |
+                    QDockWidget.DockWidgetFeature.DockWidgetClosable |
+                    QDockWidget.DockWidgetFeature.DockWidgetFloatable
+                )
+        else:
+            # Para docks laterales
+            dock.setMinimumWidth(200)
+            dock.setMinimumHeight(80)
+        
         self.addDockWidget(area, dock)
+        
+        # Conectar señal de cambio de visibilidad para ajustar layout
+        dock.visibilityChanged.connect(lambda visible: self._ajustar_layout_dinamico())
+        
         return dock
+    
+    def resizeEvent(self, event):
+        """Maneja el redimensionamiento de la ventana principal."""
+        super().resizeEvent(event)
+        self._ajustar_layout_dinamico()
+    
+    def _ajustar_layout_dinamico(self):
+        """Ajusta dinámicamente el layout cuando cambia la visibilidad de docks o tamaño."""
+        # Recalcular tamaños preferidos
+        self._actualizar_tamanos_preferidos()
+    
+    def _actualizar_tamanos_preferidos(self):
+        """Actualiza los tamaños preferidos de los docks basado en el espacio disponible."""
+        try:
+            # Obtener tamaño total de la ventana
+            total_width = self.width()
+            total_height = self.height()
+            
+            # Calcular espacio disponible para docks inferiores
+            # Cuando el sidebar está expandido, dar más espacio al timeline
+            sidebar_width = 0
+            if hasattr(self, '_dock_sidebar') and self._dock_sidebar.isVisible():
+                sidebar_width = self._dock_sidebar.width()
+            
+            # Más espacio horizontal disponible = más altura para timeline
+            available_horizontal_ratio = (total_width - sidebar_width) / total_width if total_width > 0 else 1.0
+            available_bottom_height = int(max(200, total_height * 0.25 * (1.0 + available_horizontal_ratio)))
+            
+            # Ajustar timeline si está visible
+            if hasattr(self, '_dock_timeline') and self._dock_timeline.isVisible():
+                # Dar más altura al timeline cuando hay espacio
+                timeline_height = int(max(200, min(500, available_bottom_height)))
+                
+                # Ajustar el dock (necesita entero)
+                self._dock_timeline.setMinimumHeight(timeline_height)
+                
+                # Ajustar también el widget interno
+                timeline_widget = self._dock_timeline.widget()
+                if timeline_widget and hasattr(timeline_widget, 'setMinimumHeight'):
+                    timeline_widget.setMinimumHeight(max(100, timeline_height - 40))
+                
+                # Forzar actualización del layout
+                if timeline_widget:
+                    timeline_widget.updateGeometry()
+        except Exception as e:
+            # Log error pero no crashear
+            import logging
+            logging.getLogger("soundvi.qt6.main").warning(f"Error ajustando tamaños: {e}")
 
     # -- Conectar senales entre widgets ----------------------------------------
     def _conectar_senales(self):

@@ -32,7 +32,7 @@ Cada track solo acepta tipos específicos de contenido:
 - La interfaz muestra iconos y conteos para cada tipo
 
 ### 4. Interfaz Mejorada
-- **Iconos visuales**: 🎬 Multimedia, 🎵 Audio, 📝 Subtítulos, ✨ Efectos
+- **Iconos visuales**: 🎥 Multimedia, ♪ Audio, 📄 Subtítulos, ★ Efectos
 - **Tooltips informativos**: Muestran los tipos permitidos en cada track
 - **Menús contextuales**: Con opciones para agregar tracks específicos
 - **Validación en tiempo real**: Muestra advertencias cuando se intenta agregar un archivo incompatible

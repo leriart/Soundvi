@@ -948,12 +948,12 @@ class TrackHeaderWidget(QFrame):
         layout.setContentsMargins(4, 2, 4, 2)
         layout.setSpacing(1)
 
-        # Icono según tipo de track
+        # Icono según tipo de track (caracteres Unicode)
         tipo_iconos = {
-            'video': '🎬',
-            'audio': '🎵',
-            'subtitle': '📝',
-            'effect': '✨'
+            'video': '🎥',  # Cámara de video (U+1F3A5)
+            'audio': '♪',   # Nota musical (U+266A)
+            'subtitle': '📄', # Documento (U+1F4C4)
+            'effect': '★'   # Estrella negra (U+2605)
         }
         icono = tipo_iconos.get(self.track.track_type, '📁')
         
@@ -1259,11 +1259,35 @@ class TimelineView(QGraphicsView):
             factor = 1.15 if delta > 0 else 1.0 / 1.15
             scene = self.scene()
             if isinstance(scene, TimelineScene):
-                new_pps = max(10.0, min(1000.0, scene._pps * factor))
+                # Rango de zoom ampliado: 1px por segundo hasta 5000px por segundo
+                new_pps = max(1.0, min(5000.0, scene._pps * factor))
                 scene._pps = new_pps
                 self.zoom_changed.emit(new_pps)
+                
+                # Ajustar viewport para mantener el punto bajo el cursor
+                if delta != 0:
+                    self._zoom_around_cursor(event.position(), factor)
         else:
             super().wheelEvent(event)
+    
+    def _zoom_around_cursor(self, cursor_pos: QPointF, factor: float):
+        """
+        Ajusta el viewport para hacer zoom centrado en el cursor.
+        
+        Args:
+            cursor_pos: Posición del cursor en coordenadas de vista
+            factor: Factor de zoom (ej: 1.15 para acercar, 0.87 para alejar)
+        """
+        # Obtener posición actual del viewport
+        old_center = self.mapToScene(self.viewport().rect().center())
+        
+        # Calcular nueva transformación
+        self.scale(factor, 1.0)
+        
+        # Ajustar para mantener el punto bajo el cursor en la misma posición
+        new_center = self.mapToScene(self.viewport().rect().center())
+        delta = new_center - old_center
+        self.translate(delta.x(), 0)
 
 
 # ---------------------------------------------------------------------------
@@ -1407,10 +1431,32 @@ class TimelineWidget(QWidget):
 
         btn_zoom_fit = QPushButton("\u2922")
         btn_zoom_fit.setFixedSize(24, 24)
-        btn_zoom_fit.setToolTip("Ajustar al ancho")
-        btn_zoom_fit.setStyleSheet("QPushButton { background-color: #343A40; border: 1px solid #495057; border-radius: 3px; } QPushButton:hover { border-color: #00BC8C; }")
+        btn_zoom_fit.setToolTip("Ajustar timeline completo a ventana")
+        btn_zoom_fit.setStyleSheet("""
+            QPushButton {
+                background-color: #343A40; color: #DEE2E6;
+                border: 1px solid #495057; border-radius: 3px;
+                font-size: 14px;
+            }
+            QPushButton:hover { border-color: #00BC8C; }
+        """)
         btn_zoom_fit.clicked.connect(self._zoom_fit)
         toolbar.addWidget(btn_zoom_fit)
+
+        btn_zoom_to_selection = QPushButton("🔎")  # Lupa (carácter Unicode)
+        btn_zoom_to_selection.setFixedSize(24, 24)
+        btn_zoom_to_selection.setToolTip("Zoom a selección (ajustar a clips seleccionados)")
+        btn_zoom_to_selection.setStyleSheet("""
+            QPushButton {
+                background-color: #343A40; color: #DEE2E6;
+                border: 1px solid #495057; border-radius: 3px;
+                font-size: 12px;
+            }
+            QPushButton:hover { border-color: #00BC8C; }
+            QPushButton:disabled { color: #6C757D; }
+        """)
+        btn_zoom_to_selection.clicked.connect(self._zoom_to_selection)
+        toolbar.addWidget(btn_zoom_to_selection)
 
         layout.addLayout(toolbar)
 
@@ -1571,9 +1617,17 @@ class TimelineWidget(QWidget):
         self._scene.crear_playhead(total_h)
         self._scene.actualizar_playhead(self._timeline.playhead)
 
-        # Ajustar escena
-        self._scene.setSceneRect(0, 0, max(3000, (self._timeline.duration + 30) * self._pps + HEADER_WIDTH), total_h + 20)
+        # Ajustar escena - asegurar que sea lo suficientemente grande para todo el contenido
+        # Ancho mínimo: 2000px o duración del timeline + margen
+        timeline_width = max(2000.0, (self._timeline.duration + 60) * self._pps + HEADER_WIDTH)
+        # Alto mínimo: altura total de tracks + margen
+        scene_height = max(800.0, total_h + 100)
+        
+        self._scene.setSceneRect(0, 0, timeline_width, scene_height)
         self._scene._total_height = total_h
+        
+        # Asegurar que la vista pueda mostrar todo el contenido
+        self._view.ensureVisible(0, 0, timeline_width, scene_height)
 
         self._actualizar_lbl_zoom()
         
@@ -1583,8 +1637,8 @@ class TimelineWidget(QWidget):
 
     def _dibujar_regla(self):
         """Dibuja la regla temporal en la parte superior."""
-        # Fondo de regla
-        width_total = max(3000, (self._timeline.duration + 30) * self._pps + HEADER_WIDTH)
+        # Fondo de regla - usar el mismo cálculo que en _refrescar_completo
+        width_total = max(2000.0, (self._timeline.duration + 60) * self._pps + HEADER_WIDTH)
         ruler_bg = QGraphicsRectItem(HEADER_WIDTH, 0, width_total, RULER_HEIGHT)
         ruler_bg.setBrush(QBrush(QColor("#2B3035")))
         ruler_bg.setPen(QPen(Qt.PenStyle.NoPen))
@@ -1624,18 +1678,43 @@ class TimelineWidget(QWidget):
 
     # -- Zoom ------------------------------------------------------------------
     def _zoom_in(self):
-        self._pps = min(1000.0, self._pps * 1.3)
+        """Acercar (aumentar píxeles por segundo)."""
+        self._pps = min(5000.0, self._pps * 1.3)
         self._aplicar_zoom()
 
     def _zoom_out(self):
-        self._pps = max(10.0, self._pps / 1.3)
+        """Alejar (disminuir píxeles por segundo)."""
+        self._pps = max(1.0, self._pps / 1.3)
         self._aplicar_zoom()
 
     def _zoom_fit(self):
+        """Ajustar zoom para que todo el timeline quepa en la vista."""
         if self._timeline.duration > 0:
-            ancho_disponible = self._view.viewport().width() - HEADER_WIDTH
-            self._pps = max(10.0, ancho_disponible / self._timeline.duration)
+            ancho_disponible = self._view.viewport().width() - HEADER_WIDTH - 100  # Margen
+            if ancho_disponible > 0:
+                self._pps = max(1.0, min(5000.0, ancho_disponible / self._timeline.duration))
         self._aplicar_zoom()
+    
+    def _zoom_to_selection(self):
+        """Ajustar zoom para que la selección quepa en la vista."""
+        selected_clips = self.get_selected_clips()
+        if not selected_clips:
+            return
+        
+        # Calcular rango de la selección
+        min_time = min(c.start_time for c in selected_clips)
+        max_time = max(c.end_time for c in selected_clips)
+        selection_duration = max_time - min_time
+        
+        if selection_duration > 0:
+            ancho_disponible = self._view.viewport().width() - HEADER_WIDTH - 100  # Margen
+            if ancho_disponible > 0:
+                self._pps = max(1.0, min(5000.0, ancho_disponible / selection_duration))
+                self._aplicar_zoom()
+                
+                # Centrar en la selección
+                center_time = (min_time + max_time) / 2
+                self._view.centerOn(HEADER_WIDTH + center_time * self._pps, self._view.viewport().height() / 2)
 
     def _on_zoom_changed(self, pps: float):
         self._pps = pps
@@ -1647,8 +1726,23 @@ class TimelineWidget(QWidget):
         self._refrescar_completo()
 
     def _actualizar_lbl_zoom(self):
-        porcentaje = int(self._pps)
-        self._lbl_zoom.setText(f"{porcentaje}%")
+        """Actualiza la etiqueta de zoom con información útil."""
+        # Calcular porcentaje basado en 100px/segundo como 100%
+        base_pps = 100.0
+        porcentaje = int((self._pps / base_pps) * 100)
+        
+        # Mostrar información adicional para zoom extremo
+        if self._pps >= 1000:
+            zoom_text = f"{porcentaje}% (⏩)"
+        elif self._pps <= 5:
+            zoom_text = f"{porcentaje}% (⏪)"
+        else:
+            zoom_text = f"{porcentaje}%"
+        
+        self._lbl_zoom.setText(zoom_text)
+        self._lbl_zoom.setToolTip(f"Zoom: {self._pps:.1f} px/segundo\n"
+                                  f"Rango: 1-5000 px/segundo\n"
+                                  f"Ctrl+Rueda para ajustar")
 
     def resizeEvent(self, event):
         """Maneja el cambio de tamaño de la ventana."""
@@ -1757,12 +1851,12 @@ class TimelineWidget(QWidget):
             QMenu::item:selected { background-color: #375A7F; }
         """)
 
-        # Iconos para cada tipo de track
+        # Iconos para cada tipo de track (caracteres Unicode)
         track_icons = {
-            "video": "🎬",
-            "audio": "🎵", 
-            "subtitle": "📝",
-            "effect": "✨"
+            "video": "🎥",  # Cámara de video (U+1F3A5)
+            "audio": "♪",   # Nota musical (U+266A)
+            "subtitle": "📄", # Documento (U+1F4C4)
+            "effect": "★"   # Estrella negra (U+2605)
         }
         
         # Descripciones de tipos de tracks
@@ -1819,25 +1913,25 @@ class TimelineWidget(QWidget):
         ayuda_texto = """
         <h3>Tipos de Tracks en Soundvi</h3>
         
-        <b>🎬 Multimedia (video):</b><br>
+        <b>🎥 Multimedia (video):</b><br>
         • Videos (.mp4, .avi, .mov, etc.)<br>
         • Imágenes (.jpg, .png, .bmp, etc.)<br>
         • GIFs animados (.gif)<br>
         • Fondos de color<br>
         <br>
         
-        <b>🎵 Audio:</b><br>
+        <b>♪ Audio:</b><br>
         • Archivos de audio (.mp3, .wav, .ogg, etc.)<br>
         • Audio extraído de videos<br>
         <br>
         
-        <b>📝 Subtítulos:</b><br>
+        <b>📄 Subtítulos:</b><br>
         • Módulos de texto y subtítulos<br>
         • Títulos animados<br>
         • Créditos<br>
         <br>
         
-        <b>✨ Efectos:</b><br>
+        <b>★ Efectos:</b><br>
         • Módulos de efectos visuales<br>
         • Transiciones<br>
         • Filtros y ajustes<br>
@@ -2219,12 +2313,12 @@ class TimelineWidget(QWidget):
             # Submenú para agregar tracks específicos
             add_track_menu = menu.addMenu("➕ Agregar pista")
             
-            # Iconos para cada tipo de track
+            # Iconos para cada tipo de track (caracteres Unicode)
             track_icons = {
-                "video": "🎬",
-                "audio": "🎵", 
-                "subtitle": "📝",
-                "effect": "✨"
+                "video": "🎥",  # Cámara de video (U+1F3A5)
+                "audio": "♪",   # Nota musical (U+266A)
+                "subtitle": "📄", # Documento (U+1F4C4)
+                "effect": "★"   # Estrella negra (U+2605)
             }
             
             for tipo, nombre in [("video", "Multimedia (video/imágenes)"), 

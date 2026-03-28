@@ -34,12 +34,12 @@ class TestResults:
 
     def ok(self, name):
         self.passed += 1
-        print(f"  ✅ {name}")
+        print(f"  [OK] {name}")
 
     def fail(self, name, msg=""):
         self.failed += 1
         self.errors.append(f"{name}: {msg}")
-        print(f"  ❌ {name}: {msg}")
+        print(f"  [NO] {name}: {msg}")
 
     def summary(self):
         total = self.passed + self.failed

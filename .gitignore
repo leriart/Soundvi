@@ -168,3 +168,5 @@ site/
 # Archivos de configuración personalizados
 # (agregar aquí cualquier archivo de configuración local)
 /.thumb_cache
+/docs
+/tests

@@ -1501,7 +1501,26 @@ class TimelineWidget(QWidget):
         area.setContentsMargins(0, 0, 0, 0)
         area.setSpacing(0)
 
-        # Vista grafica (escena) - Timeline "infinito" CON HEADERS INCLUIDOS
+        # Columna de headers de tracks
+        from PyQt6.QtWidgets import QScrollArea
+        
+        self._headers_container = QWidget()
+        self._headers_layout = QVBoxLayout(self._headers_container)
+        self._headers_layout.setContentsMargins(0, RULER_HEIGHT, 0, 0)
+        self._headers_layout.setSpacing(0)
+        
+        # Envolver en QScrollArea para poder sincronizar el scroll vertical
+        self._headers_scroll = QScrollArea()
+        self._headers_scroll.setWidget(self._headers_container)
+        self._headers_scroll.setWidgetResizable(True)
+        self._headers_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        self._headers_scroll.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        self._headers_scroll.setFixedWidth(HEADER_WIDTH)
+        self._headers_scroll.setStyleSheet("QScrollArea { border: none; background-color: #212529; } QWidget { background-color: #212529; }")
+        
+        area.addWidget(self._headers_scroll)
+
+        # Vista grafica (escena) - Timeline "infinito"
         self._scene = TimelineScene()
         self._view = TimelineView(self._scene)
         self._view.setMinimumHeight(150)  # Más altura para ver mejor
@@ -1511,16 +1530,15 @@ class TimelineWidget(QWidget):
         self._view.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
         self._view.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
         
-        # Área de escena muy grande para timeline "infinito" (INCLUYENDO HEADERS)
-        self._scene.setSceneRect(0, 0, 10000 + HEADER_WIDTH, 1000)  # Headers incluidos
+        # Área de escena muy grande para timeline "infinito"
+        self._scene.setSceneRect(0, 0, 10000 + HEADER_WIDTH, 1000)
         
         area.addWidget(self._view)
         
-        # Headers se manejan DENTRO de la escena, no como widget separado
-        # Esto asegura que se alineen con el sidebar
+        # Sincronizar scroll vertical entre headers y la vista de timeline
+        self._view.verticalScrollBar().valueChanged.connect(self._headers_scroll.verticalScrollBar().setValue)
         
         # Scrollbars fijos en esquina superior izquierda - NO centrado automático
-        # Timeline no tiene señales PyQt
 
         # Conectar senales de la escena
         self._scene.clip_selected.connect(self.clip_selected.emit)
@@ -1584,8 +1602,14 @@ class TimelineWidget(QWidget):
                 guide.setVisible(True)
 
         # Limpiar headers
-        # Headers ahora están en la escena, se limpian automáticamente
-        # al llamar self._scene.clear()
+        for h in getattr(self, '_track_headers', []):
+            h.deleteLater()
+        self._track_headers = []
+        if hasattr(self, '_headers_layout'):
+            while self._headers_layout.count():
+                item = self._headers_layout.takeAt(0)
+                if item.widget():
+                    item.widget().deleteLater()
 
         self._pps = self._timeline.zoom_level * 100.0
         if self._pps < 10:
@@ -1598,40 +1622,37 @@ class TimelineWidget(QWidget):
         # Dibujar regla temporal
         self._dibujar_regla()
 
-        # Dibujar tracks y clips CON HEADERS INCLUIDOS EN ESCENA
-        # Usar altura dinámica de tracks
+        # Dibujar tracks y clips
         track_height = self._scene._track_height if hasattr(self._scene, '_track_height') else TRACK_HEIGHT
         
         for track in self._timeline.tracks:
-            # Fondo del track (INCLUYENDO ÁREA DE HEADER)
+            # Fondo del track
             color_bg = TRACK_BG_COLORS.get(track.track_type, "#2B3035")
             track_bg = QGraphicsRectItem()
             width_total = max(3000, (self._timeline.duration + 30) * self._pps + HEADER_WIDTH)
-            track_bg.setRect(0, y, width_total, track_height)  # Empieza en 0, no HEADER_WIDTH
+            track_bg.setRect(HEADER_WIDTH, y, width_total, track_height)
             track_bg.setBrush(QBrush(QColor(color_bg)))
             track_bg.setPen(QPen(QColor("#343A40"), 0.5))
             track_bg.setZValue(-10)
             self._scene.addItem(track_bg)
             
-            # Área de header (parte izquierda del track)
-            header_bg = QGraphicsRectItem(0, y, HEADER_WIDTH, track_height)
-            header_bg.setBrush(QBrush(QColor("#1A1D21")))  # Color oscuro para headers
-            header_bg.setPen(QPen(QColor("#343A40"), 0.5))
-            header_bg.setZValue(-5)
-            self._scene.addItem(header_bg)
-            
-            # Texto del header (dibujado en escena)
-            header_text = QGraphicsTextItem(f"{track.track_type.capitalize()} Track")
-            header_text.setDefaultTextColor(QColor("#ADB5BD"))
-            header_text.setFont(QFont("Segoe UI", 9))
-            header_text.setPos(4, y + 4)
-            header_text.setZValue(10)
-            self._scene.addItem(header_text)
+            # Header del track (agregado al layout de headers, no en la escena)
+            header = TrackHeaderWidget(track)
+            header.setFixedHeight(int(track_height))
+            header.mute_toggled.connect(lambda tid, m: self.track_changed.emit(
+                next((t for t in self._timeline.tracks if t.track_id == tid), None)))
+            header.solo_toggled.connect(lambda tid, s: self.track_changed.emit(
+                next((t for t in self._timeline.tracks if t.track_id == tid), None)))
+            header.lock_toggled.connect(lambda tid, l: self.track_changed.emit(
+                next((t for t in self._timeline.tracks if t.track_id == tid), None)))
+            header.delete_requested.connect(self._eliminar_track)
+            if hasattr(self, '_headers_layout'):
+                self._headers_layout.addWidget(header)
+            self._track_headers.append(header)
 
-            # Clips del track (posición ajustada para incluir HEADER_WIDTH)
+            # Clips del track
             for clip in track.clips:
                 clip_item = ClipItem(clip, track.track_type, self._pps, y, track_height)
-                # Posicionar clip considerando HEADER_WIDTH
                 clip_item.setPos(HEADER_WIDTH + clip.start_time * self._pps, y)
                 self._scene.addItem(clip_item)
                 self._scene.registrar_clip_item(clip.clip_id, clip_item)
@@ -1657,6 +1678,9 @@ class TimelineWidget(QWidget):
 
             y += track_height
             total_h += track_height
+            
+        if hasattr(self, '_headers_layout'):
+            self._headers_layout.addStretch()
 
         # Dibujar módulos del timeline en el track de efectos
         effect_track_y = None

@@ -53,6 +53,9 @@ class WaveformModule(Module):
             "color5": [255, 255, 0]
         }
         self.engine = None
+        self._audio_data = None
+        self._sample_rate = None
+        self._audio_duration = 0.0
 
     def get_config(self):
         """Retorna la configuración actual del módulo."""
@@ -132,7 +135,11 @@ class WaveformModule(Module):
             if key in config_map:
                 setattr(self.engine, config_map[key], value)
 
-    def render(self, frame, audio_data, fps, current_time, app):
+    def render(self, frame, tiempo, **kwargs):
+        # Obtener audio_data de kwargs si está disponible, sino usar self._audio_data
+        audio_data = kwargs.get('audio_data', self._audio_data)
+        fps = kwargs.get('fps', 30)
+        
         if audio_data is None or len(audio_data) == 0:
             return frame
 
@@ -191,6 +198,27 @@ class WaveformModule(Module):
         
         return result
 
-    def prepare_audio(self, audio_data, sample_rate, audio_offset=0):
+    def prepare_audio(self, audio_path, mel_data=None, sr=None, hop=None, duration=None, fps=None, **kwargs):
         """Prepara el audio para el renderizado."""
-        return audio_data
+        try:
+            import librosa
+            offset = kwargs.get('audio_offset', 0.0)
+            
+            if audio_path:
+                # Cargar audio desde archivo
+                y, sr = librosa.load(audio_path, sr=22050, mono=True, offset=offset, duration=duration)
+                self._audio_data = y
+                self._sample_rate = sr
+                self._audio_duration = duration if duration else librosa.get_duration(y=y, sr=sr)
+                print(f"DEBUG_WAVEFORM: Audio loaded, duration={self._audio_duration:.2f}s, samples={len(y)}")
+            else:
+                # No hay archivo de audio, usar datos de mel si están disponibles
+                self._audio_data = None
+                self._sample_rate = sr
+                self._audio_duration = duration if duration else 0.0
+                
+        except Exception as e:
+            print(f"ERROR_WAVEFORM: Failed to prepare audio: {e}")
+            self._audio_data = None
+            self._sample_rate = None
+            self._audio_duration = 0.0

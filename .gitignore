@@ -1,0 +1,169 @@
+# ============================================
+# .gitignore optimizado para Soundvi
+# ============================================
+
+# Python bytecode y cachés
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+
+# Entornos virtuales
+.env
+.venv
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+soundvi-venv/
+venv-soundvi/
+
+# Distribuciones y builds
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# PyInstaller
+*.manifest
+*.spec
+
+# Logs de instalación
+pip-log.txt
+pip-delete-this-directory.txt
+
+# Tests y cobertura
+htmlcov/
+.tox/
+.nox/
+.coverage
+.coverage.*
+.cache
+nosetests.xml
+coverage.xml
+*.cover
+*.py,cover
+.hypothesis/
+.pytest_cache/
+cover/
+
+# Archivos de proyecto Soundvi
+*.soundvi          # Proyectos guardados (opcional, descomentar si no quieres versionar)
+*.svproj~          # Archivos temporales de proyecto
+user_profile.json  # Configuración de usuario local
+config.local.json  # Configuración local
+
+# Cache de Soundvi
+.thumb_cache/      # Cache de thumbnails
+timeline_cache/    # Cache del timeline
+modules/temp_*     # Módulos temporales
+
+# Archivos temporales
+*.tmp
+*.temp
+temp_*
+output_*
+render_*
+export_temp/       # Carpeta temporal de exportación
+processed_audio/   # Audio procesado
+processed_video/   # Video procesado
+
+# Archivos multimedia de prueba
+test_*.mp4
+test_*.mp3
+test_*.wav
+test_*.png
+test_*.jpg
+test_*.gif
+
+# Logs
+*.log
+logs/
+soundvi.log
+
+# Archivos de sistema
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+
+# Archivos de IDE
+.idea/
+*.iws
+*.iml
+*.ipr
+.vscode/
+*.code-workspace
+*.sublime-workspace
+*.sublime-project
+.project
+.pydevproject
+.settings/
+nbproject/
+
+# Archivos de sistema operativo
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+Icon
+._*
+.DocumentRevisions-V100
+.fseventsd
+.Spotlight-V100
+.TemporaryItems
+.Trashes
+.VolumeIcon.icns
+.com.apple.timemachine.donotpresent
+.AppleDB
+.AppleDesktop
+Network Trash Folder
+Temporary Items
+.apdisk
+
+# Windows
+Thumbs.db
+Thumbs.db:encryptable
+ehthumbs.db
+ehthumbs_vista.db
+*.stackdump
+[Dd]esktop.ini
+$RECYCLE.BIN/
+*.cab
+*.msi
+*.msm
+*.msp
+*.lnk
+
+# Outputs de build
+*.exe
+Soundvi-*.AppImage
+Soundvi-*.deb
+Soundvi-*.rpm
+
+# Scripts de prueba (opcional, descomentar si no quieres versionar tests)
+# test_*.py
+# tests/output/
+
+# Archivos de documentación generados
+docs/_build/
+site/
+
+# Archivos de configuración personalizados
+# (agregar aquí cualquier archivo de configuración local)

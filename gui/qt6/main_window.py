@@ -883,15 +883,22 @@ class VentanaPrincipalQt6(QMainWindow):
 
     def _on_module_selected(self, module_item):
         """Muestra propiedades del módulo seleccionado en el inspector."""
+        log = logging.getLogger("soundvi.qt6.main")
         if module_item is not None:
+            log.debug("Module selected: %s (type: %s)", module_item.name, module_item.module_type)
             # Obtener o crear la instancia del módulo para el inspector
             mod_instance = None
             if self._module_manager is not None:
                 mod_instance = self._get_or_create_timeline_module(module_item)
+                log.debug("Module instance created: %s", mod_instance is not None)
+                if mod_instance:
+                    log.debug("Instance type: %s", type(mod_instance).__name__)
+                    log.debug("Has get_config: %s", hasattr(mod_instance, 'get_config'))
             self._panel_inspector.mostrar_modulo_timeline(
                 module_item, mod_instance, self._module_manager
             )
         else:
+            log.debug("Module selection cleared")
             self._panel_inspector.limpiar()
 
     def _on_property_changed(self, prop, valor):
@@ -1166,25 +1173,33 @@ class VentanaPrincipalQt6(QMainWindow):
         Utiliza caché para evitar recrear módulos en cada frame.
         Aplica los parámetros del ModuleTimelineItem a la instancia.
         """
+        log = logging.getLogger("soundvi.qt6.main")
+        log.debug("Getting/Creating module for item: %s (type: %s)", mod_item.name, mod_item.module_type)
         item_id = mod_item.item_id
         cached = self._timeline_module_cache.get(item_id)
         
         if cached is not None:
             # Verificar que el tipo sigue siendo el mismo
             cached_type = getattr(cached, '_cached_module_type', None)
+            log.debug("Cache hit: cached_type=%s, item_type=%s", cached_type, mod_item.module_type)
             if cached_type == mod_item.module_type:
                 # Sincronizar parámetros si cambiaron
                 if mod_item.params and hasattr(cached, 'set_config'):
                     cached.set_config(mod_item.params)
+                log.debug("Returning cached instance")
                 return cached
             else:
                 # Tipo cambió, recrear
+                log.debug("Cache type mismatch, recreating")
                 del self._timeline_module_cache[item_id]
         
         # Crear nueva instancia
+        log.debug("Creating new instance for type: %s", mod_item.module_type)
         mod_instance = self._module_manager.create_module_instance(mod_item.module_type)
         if mod_instance is None:
+            log.warning("Failed to create instance for type: %s", mod_item.module_type)
             return None
+        log.debug("Instance created successfully: %s", type(mod_instance).__name__)
         
         # Habilitar el módulo para que se renderice
         mod_instance.habilitado = True

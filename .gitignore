@@ -170,3 +170,5 @@ site/
 /.thumb_cache
 /docs
 /tests
+fix_module_item.py
+gui/qt6/timeline_widget.py.backup

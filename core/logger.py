@@ -11,7 +11,7 @@ from typing import Optional
 from datetime import datetime
 
 
-def setup_logging(level: int = logging.INFO, log_file: Optional[str] = None) -> logging.Logger:
+def setup_logging(level: int = logging.DEBUG, log_file: Optional[str] = None) -> logging.Logger:
     """
     Configura el sistema de logging.
     

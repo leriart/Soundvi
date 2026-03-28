@@ -544,6 +544,13 @@ class InspectorWidget(QWidget):
             mod_instance: Instancia real del módulo (Module) si existe
             module_manager: ModuleManager para acceder a tipos de módulos
         """
+        log = logging.getLogger("soundvi.qt6.inspector")
+        log.debug("Showing module timeline item: %s (type: %s)", mod_item.name, mod_item.module_type)
+        log.debug("Module instance provided: %s", mod_instance is not None)
+        if mod_instance:
+            log.debug("Instance type: %s", type(mod_instance).__name__)
+            log.debug("Has get_config: %s", hasattr(mod_instance, 'get_config'))
+        
         self._objeto_actual = mod_item
         self._limpiar_contenido()
         self._lbl_titulo.setText(f"Módulo: {mod_item.name}")
@@ -609,13 +616,21 @@ class InspectorWidget(QWidget):
         # -- Sección: Parámetros del módulo (desde la instancia real) --
         config = {}
         if mod_instance is not None:
+            log.debug("Getting config from module instance")
             if hasattr(mod_instance, 'get_config'):
                 config = mod_instance.get_config()
+                log.debug("Got config via get_config(): %d keys", len(config))
             elif hasattr(mod_instance, '_config'):
                 config = dict(mod_instance._config)
+                log.debug("Got config via _config: %d keys", len(config))
         # Fallback: usar params del ModuleTimelineItem
         if not config and mod_item.params:
             config = dict(mod_item.params)
+            log.debug("Using params from ModuleTimelineItem: %d keys", len(config))
+        
+        log.debug("Final config to display: %d keys", len(config))
+        if config:
+            log.debug("Config keys: %s", list(config.keys()))
 
         if config:
             grupo_params = PropertyGroup("Parámetros del módulo", expandido=True)

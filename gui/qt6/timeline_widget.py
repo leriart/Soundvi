@@ -551,6 +551,7 @@ class ModuleTimelineGraphicsItem(QGraphicsRectItem):
 
     def __init__(self, module_item: ModuleTimelineItem, pps: float,
                  track_y: float, track_height: float):
+        print(f"DEBUG_INIT: ModuleTimelineGraphicsItem __init__ for {module_item.name}")
         super().__init__()
         self.module_item = module_item
         self._pps = pps
@@ -572,7 +573,31 @@ class ModuleTimelineGraphicsItem(QGraphicsRectItem):
 
         self._actualizar_geometria()
 
+    def mousePressEvent(self, event):
+        """Handle mouse press events."""
+        print(f"DEBUG_MOUSE: ModuleTimelineGraphicsItem mousePressEvent: {self.module_item.name}")
+        print(f"DEBUG_MOUSE: Event type: {event.type()}, buttons: {event.buttons()}")
+        
+        # Call parent to handle selection
+        super().mousePressEvent(event)
+        
+        # Force selection
+        if not self.isSelected():
+            print("DEBUG_MOUSE: Item not selected, selecting it")
+            self.setSelected(True)
+
+    def hoverEnterEvent(self, event):
+        """Handle hover enter events."""
+        print(f"DEBUG_HOVER: ModuleTimelineGraphicsItem hoverEnterEvent: {self.module_item.name}")
+        super().hoverEnterEvent(event)
+        
+    def hoverLeaveEvent(self, event):
+        """Handle hover leave events."""
+        print(f"DEBUG_HOVER: ModuleTimelineGraphicsItem hoverLeaveEvent: {self.module_item.name}")
+        super().hoverLeaveEvent(event)
+
     def _actualizar_geometria(self):
+        print(f"DEBUG_GEOM: _actualizar_geometria for {self.module_item.name}")
         x = HEADER_WIDTH + self.module_item.start_time * self._pps
         w = max(8, self.module_item.duration * self._pps)
         h = self._track_height - 8
@@ -634,247 +659,35 @@ class ModuleTimelineGraphicsItem(QGraphicsRectItem):
 
         # Indicador deshabilitado
         if not self.module_item.enabled:
-            painter.setPen(QPen(QColor("#E74C3C"), 2))
-            painter.drawLine(rect.topLeft().toPoint(), rect.bottomRight().toPoint())
+            painter.save()
+            painter.setBrush(QBrush(QColor(255, 255, 255, 40)))
+            painter.setPen(Qt.PenStyle.NoPen)
+            painter.drawRect(rect)
+            painter.restore()
 
-    def hoverMoveEvent(self, event):
-        x = event.pos().x()
-        if x < 6 or x > self.rect().width() - 6:
-            self.setCursor(Qt.CursorShape.SizeHorCursor)
-        else:
-            self.setCursor(Qt.CursorShape.PointingHandCursor)
-        super().hoverMoveEvent(event)
-
-    def mousePressEvent(self, event):
-        # Verificación de seguridad: asegurar que module_item existe
-        if not hasattr(self, 'module_item') or self.module_item is None:
-            super().mousePressEvent(event)
-            return
-            
-        if event.button() == Qt.MouseButton.LeftButton:
-            x = event.pos().x()
-            if x < 6:
-                self._resizing = True
-                self._resize_edge = "left"
-                self._drag_start_pos = event.scenePos()
-                self._drag_start_time = self.module_item.start_time
-                self._drag_start_duration = self.module_item.duration
-            elif x > self.rect().width() - 6:
-                self._resizing = True
-                self._resize_edge = "right"
-                self._drag_start_pos = event.scenePos()
-                self._drag_start_duration = self.module_item.duration
+        # Indicador de tipo (icono pequeño)
+        icon_text = ""
+        if "/" in self.module_item.module_type:
+            cat = self.module_item.module_type.split("/")[0]
+            if cat == "video":
+                icon_text = "🎬"
+            elif cat == "audio":
+                icon_text = "🎵"
+            elif cat == "text":
+                icon_text = "📝"
+            elif cat == "utility":
+                icon_text = "🔧"
+            elif cat == "export":
+                icon_text = "📤"
             else:
-                self._drag_start_pos = event.scenePos()
-                self._drag_start_time = self.module_item.start_time
-        super().mousePressEvent(event)
-
-    def _get_snap_times(self, timeline_widget) -> list:
-        """Obtiene todos los puntos de tiempo a los que se puede hacer snap."""
-        snap_times = [0.0]
+                icon_text = "⚡"
         
-        # Verificación de seguridad
-        if not hasattr(self, 'module_item') or self.module_item is None:
-            return snap_times
-            
-        if hasattr(timeline_widget, '_timeline') and timeline_widget._timeline:
-            snap_times.append(timeline_widget._timeline.playhead)
-            for track in timeline_widget._timeline.tracks:
-                for c in track.clips:
-                    snap_times.append(c.start_time)
-                    snap_times.append(c.end_time)
-            # Snap a otros módulos
-            for m in timeline_widget._timeline.module_items:
-                if m.item_id != self.module_item.item_id:
-                    snap_times.append(m.start_time)
-                    snap_times.append(m.start_time + m.duration)
-        return snap_times
-
-    def _apply_alignment_snap(self, proposed_start: float, mouse_x: float, check_end: bool = True) -> float:
-        """Aplica magnetismo (snap) a otros clips, módulos, playhead y guías."""
-        scene = self.scene()
-        if not scene:
-            return proposed_start
-        view = scene.views()[0] if scene.views() else None
-        timeline_widget = view.parent() if view else None
-        if not timeline_widget:
-            return proposed_start
-
-        snap_active = False
-        if hasattr(timeline_widget, '_timeline') and timeline_widget._timeline.snap_enabled:
-            snap_active = True
-        elif hasattr(timeline_widget, '_btn_alignment') and timeline_widget._btn_alignment.isChecked():
-            snap_active = True
-
-        if not snap_active:
-            if hasattr(scene, 'update_snap_line'):
-                scene.update_snap_line(None)
-            return proposed_start
-
-        SNAP_THRESHOLD_PX = 8
-        threshold_time = SNAP_THRESHOLD_PX / self._pps
-
-        best_start = proposed_start
-        min_dist = threshold_time
-        snapped_time_point = None
-
-        snap_times = self._get_snap_times(timeline_widget)
-        proposed_end = proposed_start + self.module_item.duration
-
-        for t in snap_times:
-            dist_start = abs(proposed_start - t)
-            if dist_start < min_dist:
-                min_dist = dist_start
-                best_start = t
-                snapped_time_point = t
-
-            if check_end:
-                dist_end = abs(proposed_end - t)
-                if dist_end < min_dist:
-                    min_dist = dist_end
-                    best_start = t - self.module_item.duration
-                    snapped_time_point = t
-
-        # Snap a guías de alineación
-        if hasattr(timeline_widget, '_alignment_guides') and hasattr(timeline_widget, '_btn_alignment') and timeline_widget._btn_alignment.isChecked():
-            prop_x_start = HEADER_WIDTH + proposed_start * self._pps
-            prop_x_end = HEADER_WIDTH + proposed_end * self._pps
-            for guide in timeline_widget._alignment_guides[:9]:
-                if guide.isVisible():
-                    guide_x = guide.line().x1()
-                    dist_start_px = abs(prop_x_start - guide_x)
-                    if dist_start_px < SNAP_THRESHOLD_PX and (dist_start_px / self._pps) < min_dist:
-                        min_dist = dist_start_px / self._pps
-                        best_start = (guide_x - HEADER_WIDTH) / self._pps
-                        snapped_time_point = best_start
-                    if check_end:
-                        dist_end_px = abs(prop_x_end - guide_x)
-                        if dist_end_px < SNAP_THRESHOLD_PX and (dist_end_px / self._pps) < min_dist:
-                            min_dist = dist_end_px / self._pps
-                            best_start = ((guide_x - HEADER_WIDTH) / self._pps) - self.module_item.duration
-                            snapped_time_point = (guide_x - HEADER_WIDTH) / self._pps
-
-        if snapped_time_point is not None and hasattr(scene, 'update_snap_line'):
-            scene.update_snap_line(HEADER_WIDTH + snapped_time_point * self._pps)
-        elif hasattr(scene, 'update_snap_line'):
-            scene.update_snap_line(None)
-
-        return max(0.0, best_start)
-
-    def _apply_alignment_snap_edge(self, proposed_x: float, mouse_x: float) -> float:
-        """Aplica snap para el borde derecho del módulo durante el redimensionado."""
-        scene = self.scene()
-        if not scene:
-            return proposed_x
-        view = scene.views()[0] if scene.views() else None
-        timeline_widget = view.parent() if view else None
-        if not timeline_widget:
-            return proposed_x
-
-        snap_active = False
-        if hasattr(timeline_widget, '_timeline') and timeline_widget._timeline.snap_enabled:
-            snap_active = True
-        elif hasattr(timeline_widget, '_btn_alignment') and timeline_widget._btn_alignment.isChecked():
-            snap_active = True
-
-        if not snap_active:
-            if hasattr(scene, 'update_snap_line'):
-                scene.update_snap_line(None)
-            return proposed_x
-
-        SNAP_THRESHOLD_PX = 8
-        proposed_end_time = (proposed_x - HEADER_WIDTH) / self._pps
-        best_end_time = proposed_end_time
-        min_dist = SNAP_THRESHOLD_PX / self._pps
-        snapped_time_point = None
-
-        snap_times = self._get_snap_times(timeline_widget)
-        for t in snap_times:
-            dist = abs(proposed_end_time - t)
-            if dist < min_dist:
-                min_dist = dist
-                best_end_time = t
-                snapped_time_point = t
-
-        # Snap a guías de alineación
-        if hasattr(timeline_widget, '_alignment_guides') and hasattr(timeline_widget, '_btn_alignment') and timeline_widget._btn_alignment.isChecked():
-            for guide in timeline_widget._alignment_guides[:9]:
-                if guide.isVisible():
-                    guide_x = guide.line().x1()
-                    dist_px = abs(proposed_x - guide_x)
-                    if dist_px < SNAP_THRESHOLD_PX and (dist_px / self._pps) < min_dist:
-                        min_dist = dist_px / self._pps
-                        best_end_time = (guide_x - HEADER_WIDTH) / self._pps
-                        snapped_time_point = best_end_time
-
-        if snapped_time_point is not None and hasattr(scene, 'update_snap_line'):
-            scene.update_snap_line(HEADER_WIDTH + snapped_time_point * self._pps)
-        elif hasattr(scene, 'update_snap_line'):
-            scene.update_snap_line(None)
-
-        return HEADER_WIDTH + best_end_time * self._pps
-
-    def mouseMoveEvent(self, event):
-        # Verificación de seguridad
-        if not hasattr(self, 'module_item') or self.module_item is None:
-            super().mouseMoveEvent(event)
-            return
-            
-        if self._resizing and self._drag_start_pos:
-            delta_x = event.scenePos().x() - self._drag_start_pos.x()
-            delta_time = delta_x / self._pps
-            if self._resize_edge == "left":
-                new_start = self._drag_start_time + delta_time
-                new_dur = self._drag_start_duration - delta_time
-
-                # Aplicar snap al borde izquierdo
-                new_start = self._apply_alignment_snap(new_start, event.scenePos().x(), check_end=False)
-                new_dur = self._drag_start_duration - (new_start - self._drag_start_time)
-
-                if new_dur >= 0.1 and new_start >= 0.0:
-                    self.module_item.start_time = new_start
-                    self.module_item.duration = new_dur
-                    self._actualizar_geometria()
-            elif self._resize_edge == "right":
-                new_dur = self._drag_start_duration + delta_time
-
-                # Aplicar snap al borde derecho
-                mod_end_x = HEADER_WIDTH + (self.module_item.start_time + new_dur) * self._pps
-                snapped_end_x = self._apply_alignment_snap_edge(mod_end_x, event.scenePos().x())
-                if snapped_end_x != mod_end_x:
-                    new_dur = (snapped_end_x - HEADER_WIDTH) / self._pps - self.module_item.start_time
-
-                if new_dur >= 0.1:
-                    self.module_item.duration = new_dur
-                    self._actualizar_geometria()
-        elif self._drag_start_pos is not None:
-            delta_x = event.scenePos().x() - self._drag_start_pos.x()
-            delta_time = delta_x / self._pps
-            new_start = max(0, self._drag_start_time + delta_time)
-
-            # Aplicar snap a clips, módulos, playhead y guías
-            new_start = self._apply_alignment_snap(new_start, event.scenePos().x(), check_end=True)
-
-            self.module_item.start_time = new_start
-            self._actualizar_geometria()
-        super().mouseMoveEvent(event)
-
-    def mouseReleaseEvent(self, event):
-        # Verificación de seguridad
-        if not hasattr(self, 'module_item') or self.module_item is None:
-            super().mouseReleaseEvent(event)
-            return
-            
-        self._resizing = False
-        self._drag_start_pos = None
-        if hasattr(self.scene(), 'update_snap_line'):
-            self.scene().update_snap_line(None)
-        super().mouseReleaseEvent(event)
-
-    def set_pixels_per_second(self, pps: float):
-        self._pps = pps
-        self._actualizar_geometria()
-
+        if icon_text and rect.width() > 40:
+            painter.setPen(QPen(QColor("#FFFFFF")))
+            painter.setFont(QFont("Segoe UI Emoji", 9))
+            painter.drawText(rect.adjusted(rect.width() - 22, 2, -4, -2),
+                             Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignTop,
+                             icon_text)
 
 class PlayheadItem(QGraphicsItem):
     """Línea roja con un cabezal arriba que indica la posición y es fácil de arrastrar."""
@@ -1109,6 +922,9 @@ class TrackHeaderWidget(QFrame):
 
     def contextMenuEvent(self, event):
         menu = QMenu(self)
+        # DEBUG PRINT - WILL ALWAYS SHOW
+        print("DEBUG_TIMELINE: contextMenuEvent called")
+        print(f"DEBUG_TIMELINE: Event at {event.globalPos()}")
         menu.setStyleSheet("""
             QMenu { background-color: #2B3035; color: #DEE2E6; border: 1px solid #495057; padding: 4px; }
             QMenu::item:selected { background-color: #E74C3C; }
@@ -1143,17 +959,27 @@ class TimelineScene(QGraphicsScene):
 
     def _on_selection_changed(self):
         """Detecta qué tipo de item fue seleccionado y emite la señal apropiada."""
+        # DEBUG PRINT - WILL ALWAYS SHOW
+        print("DEBUG_TIMELINE: _on_selection_changed called")
         selected = self.selectedItems()
+        print(f"DEBUG_TIMELINE: {len(selected)} items selected")
+        log = logging.getLogger("soundvi.qt6.timeline")
+        selected = self.selectedItems()
+        log.debug("Selection changed: %d items selected", len(selected))
         if not selected:
+            log.debug("No items selected, returning")
             return
         item = selected[0]
+        log.debug("Selected item type: %s", type(item).__name__)
         
         # Emitir señales de forma asíncrona para evitar crashes 
         # si la escena se refresca mientras procesa eventos del ratón
         from PyQt6.QtCore import QTimer
         if isinstance(item, ModuleTimelineGraphicsItem):
+            log.debug("Module selected: %s (type: %s)", item.module_item.name, item.module_item.module_type)
             QTimer.singleShot(0, lambda: [self.module_selected.emit(item.module_item), self.set_focus()])
         elif isinstance(item, ClipItem):
+            log.debug("Clip selected: %s", item.clip.name)
             QTimer.singleShot(0, lambda: [self.clip_selected.emit(item.clip), self.set_focus()])
 
     def update_snap_line(self, x: float = None, height: float = 0.0):
@@ -1727,11 +1553,13 @@ class TimelineWidget(QWidget):
             effect_track_y = y
         
         for mod_item in self._timeline.module_items:
+            print(f"DEBUG_CREATE: Creating ModuleTimelineGraphicsItem for {mod_item.name} (type: {mod_item.module_type})")
             mod_gfx = ModuleTimelineGraphicsItem(
                 mod_item, self._pps, effect_track_y, track_height
             )
             # Posicionar módulo considerando HEADER_WIDTH
             mod_gfx.setPos(HEADER_WIDTH + mod_item.start_time * self._pps, effect_track_y)
+            print(f"DEBUG_CREATE: Created item at position {HEADER_WIDTH + mod_item.start_time * self._pps}, {effect_track_y}")
             self._scene.addItem(mod_gfx)
 
         # Headers ahora están en la escena, no en layout separado
@@ -2434,6 +2262,8 @@ class TimelineWidget(QWidget):
         """Menu contextual del timeline."""
         log = logging.getLogger("soundvi.qt6.timeline")
         log.debug("Context menu event triggered at %s", event.globalPos())
+        log.debug("Event type: context menu, widget: TimelineWidget")
+        log.debug("Mouse position: %s", event.pos())
         
         menu = QMenu(self)
         menu.setStyleSheet("""
@@ -2446,6 +2276,11 @@ class TimelineWidget(QWidget):
 
         clips_sel = self._scene.get_selected_clips()
         mods_sel = self._scene.get_selected_modules()
+        
+        log.debug("Context menu - Clips selected: %d, Modules selected: %d", 
+                 len(clips_sel), len(mods_sel))
+        if mods_sel:
+            log.debug("Selected modules: %s", [m.name for m in mods_sel])
 
         if clips_sel:
             menu.addAction(f"{ICONOS_UNICODE['cut']} Dividir en playhead",
@@ -2602,6 +2437,7 @@ class TimelineWidget(QWidget):
 
     def refrescar(self):
         """Refresca la visualizacion completa."""
+        print("DEBUG_REFRESCAR: Refrescando timeline con módulos")
         self._refrescar_completo()
 
     def get_selected_clips(self) -> List[VideoClip]:

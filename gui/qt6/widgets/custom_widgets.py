@@ -91,9 +91,18 @@ class ColorPickerWidget(QWidget):
 #  SliderWithLabel -- Slider con etiqueta y valor numerico
 # ---------------------------------------------------------------------------
 class SliderWithLabel(QWidget):
-    """Slider horizontal con etiqueta, valor numerico y rango configurable."""
+    """Slider horizontal con etiqueta, valor numerico y rango configurable.
 
-    value_changed = pyqtSignal(float)
+    Señales:
+        value_changed(float) – se emite **solo al soltar** el slider (mouse‑release)
+            o cuando el valor cambia programáticamente.  Esto evita re‑renders
+            continuos mientras el usuario arrastra el control.
+        value_display_changed(float) – se emite en **cada tick** del slider
+            (útil para actualizar labels/displays sin disparar render).
+    """
+
+    value_changed = pyqtSignal(float)           # solo al soltar (commit)
+    value_display_changed = pyqtSignal(float)    # cada tick (display only)
 
     def __init__(self, label: str, minimo: float = 0.0, maximo: float = 1.0,
                  valor: float = 0.5, decimales: int = 2, paso: int = 100,
@@ -115,7 +124,10 @@ class SliderWithLabel(QWidget):
         self._slider = QSlider(Qt.Orientation.Horizontal)
         self._slider.setRange(0, paso)
         self._slider.setValue(self._valor_a_slider(valor))
-        self._slider.valueChanged.connect(self._on_slider_changed)
+        # Solo actualizar el label numérico mientras se arrastra
+        self._slider.valueChanged.connect(self._on_slider_display)
+        # Emitir value_changed solo al soltar el mouse
+        self._slider.sliderReleased.connect(self._on_slider_released)
         layout.addWidget(self._slider)
 
         self._lbl_valor = QLabel(f"{valor:.{decimales}f}")
@@ -132,9 +144,15 @@ class SliderWithLabel(QWidget):
     def _slider_a_valor(self, pos: int) -> float:
         return self._min + (pos / self._paso) * (self._max - self._min)
 
-    def _on_slider_changed(self, pos: int):
+    def _on_slider_display(self, pos: int):
+        """Actualiza el label numérico en tiempo real (sin disparar render)."""
         val = self._slider_a_valor(pos)
         self._lbl_valor.setText(f"{val:.{self._decimales}f}")
+        self.value_display_changed.emit(val)
+
+    def _on_slider_released(self):
+        """Emite value_changed solo cuando el usuario suelta el slider."""
+        val = self._slider_a_valor(self._slider.value())
         self.value_changed.emit(val)
 
     def get_value(self) -> float:

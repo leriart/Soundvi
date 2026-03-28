@@ -97,6 +97,13 @@ class AudioPlayer:
             return
 
         try:
+            # --- FIX: Si necesita seek, usar SOLO pygame.mixer.music ---
+            # Antes se reproducía primero en un channel (desde t=0) y luego
+            # también en mixer.music (desde start_time), causando audio duplicado.
+            if start_time > 0.01:
+                self._play_with_seek(audio_path, start_time, volume, fade_in_ms)
+                return
+
             sound = self._get_sound(audio_path)
             if sound is None:
                 return
@@ -116,13 +123,6 @@ class AudioPlayer:
             else:
                 channel.play(sound)
 
-            # Seek: pygame no soporta seek nativo en Sound, 
-            # pero podemos usar music para archivos principales
-            if start_time > 0.01:
-                # Para archivos largos, usar pygame.mixer.music que sí soporta seek
-                self._play_with_seek(audio_path, start_time, volume, fade_in_ms)
-                return
-
             with self._lock:
                 self._active_channels.append((channel, audio_path, start_time))
                 self._playing = True
@@ -140,10 +140,6 @@ class AudioPlayer:
             pygame.mixer.music.load(audio_path)
             pygame.mixer.music.set_volume(volume * self._volume)
             pygame.mixer.music.play(start=start_time)
-            if fade_in_ms > 0:
-                pygame.mixer.music.fadeout(0)  # Reset
-                pygame.mixer.music.play(start=start_time)
-                # Fade in manual via volumen progresivo
             with self._lock:
                 self._playing = True
                 self._start_wall_time = time.monotonic()

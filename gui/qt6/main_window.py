@@ -519,9 +519,7 @@ class VentanaPrincipalQt6(QMainWindow):
         self._preview.tiempo_cambiado.connect(self._actualizar_preview)
 
         # Inspector -> Preview: actualizar preview al cambiar propiedades
-        # Invalidate the video frame cache first, then refresh the preview
-        # so that property changes (speed, trim, color, etc.) are reflected.
-        self._panel_inspector.preview_requested.connect(self._invalidar_cache_y_preview)
+        self._panel_inspector.preview_requested.connect(self._actualizar_preview)
 
         # Inspector -> Timeline: refrescar al cambiar propiedades de clip
         self._panel_inspector.property_changed.connect(
@@ -961,49 +959,8 @@ class VentanaPrincipalQt6(QMainWindow):
                 track.solo = solo
                 break
 
-    def _invalidar_cache_y_preview(self):
-        """Invalida el frame cache del clip/módulo actual y actualiza la preview.
-        
-        Called when inspector property changes require a fresh render
-        (cache entries may be stale after property edits).
-        """
-        try:
-            from core.video_cache import get_global_cache
-            obj = self._panel_inspector.objeto_actual
-            if obj is not None:
-                cache = get_global_cache()
-                # If the inspected object is a VideoClip, clear its cached frames
-                clip_id = getattr(obj, 'clip_id', None)
-                if clip_id:
-                    cache.clear_clip(clip_id)
-                else:
-                    # For modules or other objects, clear the whole cache to be safe
-                    cache.clear_all()
-            else:
-                # No specific object — clear everything
-                from core.video_cache import get_global_cache
-                get_global_cache().clear_all()
-        except Exception:
-            pass  # Cache invalidation is best-effort
-
-        # Also invalidate the timeline module cache for the current object
-        # so modules re-read their updated parameters on the next render.
-        try:
-            obj = self._panel_inspector.objeto_actual
-            item_id = getattr(obj, 'item_id', None)
-            if item_id and item_id in self._timeline_module_cache:
-                del self._timeline_module_cache[item_id]
-        except Exception:
-            pass
-
-        self._actualizar_preview()
-
-    def _actualizar_preview(self, *_args):
-        """Actualiza el frame del preview con el estado actual.
-        
-        Acepta argumentos opcionales para poder conectarse a señales que
-        emiten valores (e.g. tiempo_cambiado(float)) sin problemas.
-        """
+    def _actualizar_preview(self):
+        """Actualiza el frame del preview con el estado actual."""
         if not hasattr(self, '_preview') or not self._preview:
             return
             
@@ -1123,33 +1080,34 @@ class VentanaPrincipalQt6(QMainWindow):
                 tiempo, preview_width, preview_height
             )
             
-            # Aplicar módulos globales activos (del ModuleManager)
-            # NOTE: Always apply modules even on a black/empty canvas so that
-            # generators (shapes, text, waveforms) can draw on the base frame
-            # and inspector parameter changes are always reflected in the preview.
-            if self._module_manager is not None:
-                try:
-                    frame_composito = self._module_manager.render_all(
-                        frame_composito, tiempo, fps=self._preview._fps
-                    )
-                except Exception as e:
-                    log.warning("Error aplicando modulos globales: %s", e)
-
-            # Aplicar módulos posicionados en el timeline
-            active_tl_modules = self._timeline.get_active_modules_at_time(tiempo)
-            if active_tl_modules and self._module_manager is not None:
-                for mod_item in active_tl_modules:
+            # Verificar si hay contenido real (no todo negro)
+            has_content = np.any(frame_composito > 0)
+            
+            if has_content:
+                # Aplicar módulos globales activos (del ModuleManager)
+                if self._module_manager is not None:
                     try:
-                        mod_instance = self._get_or_create_timeline_module(mod_item)
-                        if mod_instance and hasattr(mod_instance, 'render'):
-                            # Tiempo relativo dentro del módulo
-                            mod_time = tiempo - mod_item.start_time
-                            frame_composito = mod_instance.render(
-                                frame_composito, mod_time, fps=self._preview._fps
-                            )
+                        frame_composito = self._module_manager.render_all(
+                            frame_composito, tiempo, fps=self._preview._fps
+                        )
                     except Exception as e:
-                        log.debug("Error aplicando módulo timeline '%s': %s",
-                                 mod_item.module_type, e)
+                        log.warning("Error aplicando modulos globales: %s", e)
+                
+                # Aplicar módulos posicionados en el timeline
+                active_tl_modules = self._timeline.get_active_modules_at_time(tiempo)
+                if active_tl_modules and self._module_manager is not None:
+                    for mod_item in active_tl_modules:
+                        try:
+                            mod_instance = self._get_or_create_timeline_module(mod_item)
+                            if mod_instance and hasattr(mod_instance, 'render'):
+                                # Tiempo relativo dentro del módulo
+                                mod_time = tiempo - mod_item.start_time
+                                frame_composito = mod_instance.render(
+                                    frame_composito, mod_time, fps=self._preview._fps
+                                )
+                        except Exception as e:
+                            log.debug("Error aplicando módulo timeline '%s': %s",
+                                     mod_item.module_type, e)
             
             return frame_composito
             

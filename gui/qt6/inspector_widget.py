@@ -25,7 +25,7 @@ from PyQt6.QtWidgets import (
     QFrame, QScrollArea, QSizePolicy, QLineEdit, QCheckBox,
     QComboBox, QSpinBox, QDoubleSpinBox
 )
-from PyQt6.QtCore import Qt, pyqtSignal
+from PyQt6.QtCore import Qt, pyqtSignal, QTimer
 from PyQt6.QtGui import QFont
 
 _RAIZ = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -57,6 +57,9 @@ class InspectorWidget(QWidget):
     property_changed = pyqtSignal(str, object)  # nombre_propiedad, nuevo_valor
     preview_requested = pyqtSignal()
 
+    # Intervalo de debounce para el preview (ms).
+    _DEBOUNCE_MS = 350
+
     def __init__(self, command_manager: Optional[CommandManager] = None,
                  profile_manager: Optional[ProfileManager] = None,
                  user_level_adapter: Optional[UserLevelAdapter] = None,
@@ -66,6 +69,14 @@ class InspectorWidget(QWidget):
         self._pm = profile_manager
         self._adapter = user_level_adapter or UserLevelAdapter(profile_manager)
         self._objeto_actual: Any = None
+
+        # --- Debounce timer global para preview ---
+        # Cada petición de preview reinicia este timer; el render solo
+        # ocurre cuando el usuario deja de interactuar durante _DEBOUNCE_MS.
+        self._debounce_timer = QTimer(self)
+        self._debounce_timer.setSingleShot(True)
+        self._debounce_timer.setInterval(self._DEBOUNCE_MS)
+        self._debounce_timer.timeout.connect(self._emitir_preview)
 
         self._construir_ui()
 
@@ -373,7 +384,7 @@ class InspectorWidget(QWidget):
                 clip.transition_in = trans_data
             else:
                 clip.transition_out = trans_data
-        self.preview_requested.emit()
+        self._solicitar_preview()
         self.property_changed.emit(f"transition_{position}", trans_type)
 
     def _set_transition_duration(self, clip: VideoClip, position: str, duration: float):
@@ -381,7 +392,7 @@ class InspectorWidget(QWidget):
         trans = clip.transition_in if position == 'in' else clip.transition_out
         if trans:
             trans['duration'] = duration
-            self.preview_requested.emit()
+            self._solicitar_preview()
             self.property_changed.emit(f"transition_{position}_duration", str(duration))
 
     # -- Mostrar propiedades de Track ------------------------------------------
@@ -508,13 +519,14 @@ class InspectorWidget(QWidget):
                 spin.setRange(0, max(valor * 3, 100))
                 spin.setValue(valor)
                 spin.setStyleSheet("QSpinBox { background-color: #3B4148; color: #DEE2E6; border: 1px solid #495057; border-radius: 3px; }")
-                spin.valueChanged.connect(
-                    lambda v, k=clave: self._cambiar_propiedad(modulo, k, v, f"Cambiar {k}"))
+                # Usar editingFinished para no disparar render en cada tecla
+                spin.editingFinished.connect(
+                    lambda k=clave, s=spin: self._cambiar_propiedad(modulo, k, s.value(), f"Cambiar {k}"))
                 spin_layout.addWidget(spin)
                 grupo_mod.agregar_layout(spin_layout)
             elif isinstance(valor, str):
                 if valor.startswith("#") and len(valor) in (7, 9):
-                    # Parece ser un color
+                    # Parece ser un color — solo actualiza al confirmar diálogo
                     picker = ColorPickerWidget(clave.replace("_", " ").title(), valor)
                     picker.color_changed.connect(
                         lambda c, k=clave: self._cambiar_propiedad(modulo, k, c, f"Cambiar {k}"))
@@ -652,9 +664,10 @@ class InspectorWidget(QWidget):
                         "QSpinBox { background-color: #3B4148; color: #DEE2E6; "
                         "border: 1px solid #495057; border-radius: 3px; }"
                     )
-                    spin.valueChanged.connect(
-                        lambda v, k=clave: self._cambiar_param_modulo_tl(
-                            mod_item, mod_instance, k, v))
+                    # Usar editingFinished para no disparar render en cada tecla
+                    spin.editingFinished.connect(
+                        lambda k=clave, s=spin: self._cambiar_param_modulo_tl(
+                            mod_item, mod_instance, k, s.value()))
                     spin_layout.addWidget(spin)
                     grupo_params.agregar_layout(spin_layout)
                 elif isinstance(valor, str):
@@ -691,7 +704,7 @@ class InspectorWidget(QWidget):
                     def trigger_auto_save(self):
                         pass
                     def update_preview(self):
-                        self._inspector.preview_requested.emit()
+                        self._inspector._solicitar_preview()
 
                 proxy = _AppProxy(self)
                 config_widget = mod_instance.get_config_widgets(
@@ -709,7 +722,7 @@ class InspectorWidget(QWidget):
         """Cambia una propiedad directa del ModuleTimelineItem."""
         setattr(mod_item, prop, valor)
         self.property_changed.emit(prop, valor)
-        self.preview_requested.emit()
+        self._solicitar_preview()
 
     def _cambiar_param_modulo_tl(self, mod_item, mod_instance, param: str, valor):
         """Cambia un parámetro del módulo y lo sincroniza con el ModuleTimelineItem."""
@@ -722,6 +735,19 @@ class InspectorWidget(QWidget):
             if hasattr(mod_instance, 'set_config'):
                 mod_instance.set_config({param: valor})
         self.property_changed.emit(param, valor)
+        self._solicitar_preview()
+
+    # -- Helpers de debounce ---------------------------------------------------
+    def _solicitar_preview(self):
+        """Solicita un refresh del preview con debounce.
+
+        Reinicia el timer; el render real ocurre solo cuando el usuario
+        deja de interactuar durante ``_DEBOUNCE_MS`` milisegundos.
+        """
+        self._debounce_timer.start()          # (re)inicia el timer
+
+    def _emitir_preview(self):
+        """Callback del debounce timer — dispara la señal real."""
         self.preview_requested.emit()
 
     # -- Cambiar propiedades con Undo/Redo -------------------------------------
@@ -730,7 +756,7 @@ class InspectorWidget(QWidget):
         cmd = ChangePropertyCommand(obj, prop, valor, desc)
         self._cmd.execute(cmd)
         self.property_changed.emit(prop, valor)
-        self.preview_requested.emit()
+        self._solicitar_preview()
 
     # -- Reset -----------------------------------------------------------------
     def _reset_defaults(self):
@@ -758,7 +784,7 @@ class InspectorWidget(QWidget):
             obj.params = {}
             self.mostrar_modulo_timeline(obj)
 
-        self.preview_requested.emit()
+        self._solicitar_preview()
 
     # -- API publica -----------------------------------------------------------
     def limpiar(self):

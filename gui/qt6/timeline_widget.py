@@ -649,6 +649,53 @@ class ModuleTimelineGraphicsItem(QGraphicsRectItem):
             
         return max(0.0, best_start)
 
+    def _apply_alignment_snap_edge(self, proposed_x: float, mouse_x: float) -> float:
+        """
+        Aplica snap para el borde derecho del módulo durante el redimensionado.
+        """
+        scene = self.scene()
+        if not scene: return proposed_x
+        view = scene.views()[0] if scene.views() else None
+        timeline_widget = view.parent() if view else None
+        if not timeline_widget: return proposed_x
+        
+        snap_active = False
+        if hasattr(timeline_widget, '_timeline') and timeline_widget._timeline.snap_enabled:
+            snap_active = True
+        elif hasattr(timeline_widget, '_btn_alignment') and timeline_widget._btn_alignment.isChecked():
+            snap_active = True
+            
+        if not snap_active:
+            if hasattr(scene, 'update_snap_line'): scene.update_snap_line(None)
+            return proposed_x
+            
+        SNAP_THRESHOLD_PX = 8
+        threshold_time = SNAP_THRESHOLD_PX / self._pps
+        
+        proposed_end_time = (proposed_x - HEADER_WIDTH) / self._pps
+        best_end_time = proposed_end_time
+        min_dist = threshold_time
+        snapped_time_point = None
+        
+        snap_times = self._get_snap_times()
+        
+        for snap_time in snap_times:
+            dist = abs(snap_time - proposed_end_time)
+            if dist < min_dist:
+                min_dist = dist
+                best_end_time = snap_time
+                snapped_time_point = snap_time
+        
+        if snapped_time_point is not None:
+            snapped_x = HEADER_WIDTH + snapped_time_point * self._pps
+            if hasattr(scene, 'update_snap_line'):
+                scene.update_snap_line(snapped_x)
+            return snapped_x
+        else:
+            if hasattr(scene, 'update_snap_line'):
+                scene.update_snap_line(None)
+            return proposed_x
+
     def mousePressEvent(self, event):
         """Inicio de arrastre o redimensionado."""
         if event.button() == Qt.MouseButton.LeftButton:
@@ -692,7 +739,7 @@ class ModuleTimelineGraphicsItem(QGraphicsRectItem):
                     # Recalcular duración basada en el nuevo inicio
                     new_duration = self._drag_start_duration - (new_start - self._drag_start_time)
                     
-                    if new_duration >= 0.5 and new_start >= 0.0:  # Mínimo 0.5 segundos
+                    if new_duration >= 0.1 and new_start >= 0.0:  # Mínimo 0.1 segundos como los clips
                         self.module_item.start_time = new_start
                         self.module_item.duration = new_duration
                         self._actualizar_geometria()
@@ -700,7 +747,16 @@ class ModuleTimelineGraphicsItem(QGraphicsRectItem):
                 elif self._resize_edge == "right":
                     new_duration = self._drag_start_duration + delta_time
                     
-                    if new_duration >= 0.5:  # Mínimo 0.5 segundos
+                    # Para el borde derecho, podemos snap el final del módulo
+                    # Calcular posición X del final del módulo
+                    module_end_x = HEADER_WIDTH + (self.module_item.start_time + new_duration) * self._pps
+                    # Aplicar snap basado en la posición del mouse (que está en el borde derecho)
+                    snapped_end_x = self._apply_alignment_snap_edge(module_end_x, event.scenePos().x())
+                    # Convertir de vuelta a duración
+                    if snapped_end_x != module_end_x:
+                        new_duration = (snapped_end_x - HEADER_WIDTH) / self._pps - self.module_item.start_time
+                    
+                    if new_duration >= 0.1:  # Mínimo 0.1 segundos como los clips
                         self.module_item.duration = new_duration
                         self._actualizar_geometria()
                         
@@ -726,6 +782,17 @@ class ModuleTimelineGraphicsItem(QGraphicsRectItem):
             self._drag_start_duration = 0.0
         
         super().mouseReleaseEvent(event)
+    def hoverMoveEvent(self, event):
+        """Cambia cursor en bordes para indicar redimensionado."""
+        x = event.pos().x()
+        if x < 6:
+            self.setCursor(Qt.CursorShape.SizeHorCursor)
+        elif x > self.rect().width() - 6:
+            self.setCursor(Qt.CursorShape.SizeHorCursor)
+        else:
+            self.setCursor(Qt.CursorShape.PointingHandCursor)
+        super().hoverMoveEvent(event)
+        
     def hoverEnterEvent(self, event):
         """Handle hover enter events."""
         super().hoverEnterEvent(event)

@@ -1,14 +1,7 @@
 #!/usr/bin/env python3
 """
-Módulo de barras rectas (Straight Bar Visualizer)
-Inspirado en wav2bar-reborn: vo_visualizer_straight_bar
-
-Visualiza el espectro de audio como barras verticales con:
-- Escalado logarítmico de frecuencias
-- Suavizado temporal configurable
-- Gradientes de color
-- Sombras y bordes opcionales
-- Modo espejo
+Módulo de barras rectas (Straight Bar Visualizer) - Versión Wav2Bar
+Reemplazo del módulo original con funcionalidad wav2bar-reborn.
 """
 
 import numpy as np
@@ -16,11 +9,12 @@ import cv2
 
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QSlider,
-    QSpinBox, QComboBox, QCheckBox, QDoubleSpinBox
+    QSpinBox, QComboBox, QCheckBox, QDoubleSpinBox, QGroupBox
 )
 from PyQt6.QtCore import Qt
 
-from modules.core.base import Module
+from modules.base import Module
+from modules.audio.visualization.wav2bar_base import Wav2BarBase, Wav2BarConfig
 
 
 class StraightBarModule(Module):
@@ -28,218 +22,272 @@ class StraightBarModule(Module):
 
     module_type = "audio"
     module_category = "visualization"
-    module_tags = ["bars", "straight", "spectrum", "wav2bar", "visualizer"]
-    module_version = "1.0.0"
-    module_author = "Soundvi (wav2bar-reborn)"
-
+    module_tags = ["wav2bar", "straight_bar", "bars", "spectrum", "visualizer"]
+    module_version = "2.0.0"
+    module_author = "Soundvi (basado en wav2bar-reborn)"
+    
     def __init__(self):
         super().__init__(
             nombre="Barras Rectas (wav2bar)",
-            descripcion="Barras verticales con escalado logarítmico y suavizado"
+            descripcion="Barras verticales con física avanzada estilo wav2bar-reborn"
         )
-        self._audio_data = None
-        self._prev_bands = None
-        self._duration = 0.0
+        
+        # Configuración específica de barras rectas
+        self.config = Wav2BarConfig(
+            num_bars=64,
+            bar_width_ratio=0.7,
+            spacing_ratio=0.3,
+            scale_y=0.4,
+            pos_y=0.85,
+            corner_radius=4
+        )
+        
+        # Motor wav2bar
+        self.engine = Wav2BarBase(self.config)
+        
+        # Configuración del módulo (manteniendo compatibilidad)
         self._config = {
-            "n_bars": 64,
-            "bar_width_ratio": 0.7,
-            "gap_ratio": 0.3,
-            "height_ratio": 0.4,
-            "pos_y": 0.85,
-            "opacity": 0.9,
-            "smoothing": 0.3,
-            "color_mode": "gradient",
-            "color_start_r": 0, "color_start_g": 200, "color_start_b": 255,
-            "color_end_r": 255, "color_end_g": 50, "color_end_b": 100,
-            "mirror": False,
-            "rounded_caps": True,
-            "shadow": True,
-            "shadow_offset": 3,
-            "shadow_alpha": 0.3,
-            "min_freq": 50,
-            "max_freq": 16000,
-            "log_scale": True,
-            "power_scale": 0.4,
+            "n_bars": self.config.num_bars,
+            "bar_width_ratio": self.config.bar_width_ratio,
+            "spacing_ratio": self.config.spacing_ratio,
+            "height_ratio": self.config.scale_y,
+            "pos_y": self.config.pos_y,
+            "opacity": self.config.opacity,
+            "smoothing": self.config.smoothing,
+            "gravity": self.config.gravity,
+            "inertia": self.config.inertia,
+            "response": self.config.response,
+            "mirror": self.config.mirror,
+            "invert": self.config.invert,
+            "color_r": self.config.color[0],
+            "color_g": self.config.color[1],
+            "color_b": self.config.color[2],
+            "glow_intensity": self.config.glow_intensity,
+            "shadow_enabled": self.config.shadow_enabled,
+            "gradient_enabled": self.config.gradient_enabled,
+            "corner_radius": self.config.corner_radius,
+            "low_freq": self.config.low_freq,
+            "high_freq": self.config.high_freq,
+            "gamma": self.config.gamma,
         }
-
-    def prepare_audio(self, audio_path, mel_data, sr, hop, duration, fps, **kwargs):
-        """Pre-procesa el audio para la visualización."""
+    
+    def prepare_audio(self, audio_path, mel_data, sr, hop, duration, fps):
+        """Prepara el módulo con datos de audio."""
         try:
-            import librosa
-            offset = kwargs.get('audio_offset', 0.0)
-            y, sr = librosa.load(audio_path, sr=22050, mono=True, offset=offset, duration=duration)
-            n_fft = 2048
-            hop_length = 512
-            S = np.abs(librosa.stft(y, n_fft=n_fft, hop_length=hop_length))
-            freqs = librosa.fft_frequencies(sr=sr, n_fft=n_fft)
-
-            n_bars = self._config.get("n_bars", 64)
-            min_f = self._config.get("min_freq", 50)
-            max_f = self._config.get("max_freq", 16000)
-
-            if self._config.get("log_scale", True):
-                bands = np.logspace(np.log10(max(min_f, 20)), np.log10(min(max_f, sr//2)), n_bars + 1)
-            else:
-                bands = np.linspace(min_f, max_f, n_bars + 1)
-
-            energy = np.zeros((n_bars, S.shape[1]))
-            for i in range(n_bars):
-                idx = np.where((freqs >= bands[i]) & (freqs < bands[i+1]))[0]
-                if len(idx) > 0:
-                    energy[i] = np.mean(S[idx, :], axis=0)
-
-            power = self._config.get("power_scale", 0.4)
-            energy = np.power(np.maximum(energy, 1e-10), power)
-            for i in range(n_bars):
-                mx = np.max(energy[i])
-                if mx > 0:
-                    energy[i] /= mx
-
-            from scipy.interpolate import interp1d
-            n_frames = int(duration * fps)
-            x_old = np.linspace(0, 1, energy.shape[1])
-            x_new = np.linspace(0, 1, n_frames)
-            self._audio_data = np.zeros((n_frames, n_bars))
-            for i in range(n_bars):
-                f = interp1d(x_old, energy[i], kind='linear', fill_value='extrapolate')
-                self._audio_data[:, i] = np.clip(f(x_new), 0, 1)
-            self._duration = duration
-            self._prev_bands = None
+            self.engine.load_audio(audio_path, fps)
+            print(f"[StraightBarModule] Audio preparado: {duration:.2f}s, {fps} FPS")
         except Exception as e:
             print(f"[StraightBarModule] Error preparando audio: {e}")
-
-    def render(self, frame, tiempo, **kwargs):
-        if not self.habilitado or self._audio_data is None:
+    
+    def render(self, frame: np.ndarray, tiempo: float, **kwargs) -> np.ndarray:
+        """Renderiza el visualizador en el frame."""
+        if not self.habilitado or not self.engine.is_ready():
             return frame
+        
         try:
-            h, w = frame.shape[:2]
             fps = kwargs.get('fps', 30)
-            fi = min(int(tiempo * fps), len(self._audio_data) - 1)
-            bands = self._audio_data[fi].copy()
-
-            # Suavizado temporal
-            sm = self._config.get("smoothing", 0.3)
-            if self._prev_bands is not None and sm > 0:
-                bands = bands * (1 - sm) + self._prev_bands * sm
-            self._prev_bands = bands.copy()
-
-            n = len(bands)
-            max_h = int(h * self._config["height_ratio"])
-            base_y = int(h * self._config["pos_y"])
-            total_w = w
-            bar_section = total_w / n
-            bar_w = max(1, int(bar_section * self._config["bar_width_ratio"]))
-            gap = max(0, int(bar_section * self._config["gap_ratio"]))
-
-            overlay = frame.copy()
-
-            for i in range(n):
-                bh = int(bands[i] * max_h)
-                if bh < 2:
-                    continue
-
-                ratio = i / max(n - 1, 1)
-                cr = int(self._config["color_start_r"] * (1 - ratio) + self._config["color_end_r"] * ratio)
-                cg = int(self._config["color_start_g"] * (1 - ratio) + self._config["color_end_g"] * ratio)
-                cb = int(self._config["color_start_b"] * (1 - ratio) + self._config["color_end_b"] * ratio)
-
-                x1 = int(i * bar_section + gap // 2)
-                x2 = x1 + bar_w
-                y1 = base_y - bh
-                y2 = base_y
-
-                # Sombra
-                if self._config.get("shadow", False):
-                    so = self._config.get("shadow_offset", 3)
-                    sa = self._config.get("shadow_alpha", 0.3)
-                    shadow_overlay = overlay.copy()
-                    cv2.rectangle(shadow_overlay, (x1 + so, y1 + so), (x2 + so, y2 + so), (0, 0, 0), -1)
-                    cv2.addWeighted(shadow_overlay, sa, overlay, 1 - sa, 0, overlay)
-
-                # Barra principal
-                if self._config.get("rounded_caps", False) and bh > bar_w:
-                    radius = bar_w // 2
-                    cv2.rectangle(overlay, (x1, y1 + radius), (x2, y2), (cb, cg, cr), -1)
-                    cv2.ellipse(overlay, (x1 + radius, y1 + radius), (radius, radius), 0, 180, 360, (cb, cg, cr), -1)
-                else:
-                    cv2.rectangle(overlay, (x1, y1), (x2, y2), (cb, cg, cr), -1)
-
-                # Modo espejo
-                if self._config.get("mirror", False):
-                    mirror_y1 = base_y
-                    mirror_y2 = base_y + int(bh * 0.5)
-                    mirror_alpha = 0.4
-                    mirror_overlay = overlay.copy()
-                    cv2.rectangle(mirror_overlay, (x1, mirror_y1), (x2, mirror_y2), (cb, cg, cr), -1)
-                    cv2.addWeighted(mirror_overlay, mirror_alpha, overlay, 1 - mirror_alpha, 0, overlay)
-
-            alpha = self._config.get("opacity", 0.9)
-            return cv2.addWeighted(overlay, alpha, frame, 1 - alpha, 0)
+            frame_index = min(int(tiempo * fps), self.engine.total_frames - 1)
+            
+            # Obtener alturas actuales
+            heights = self.engine.get_heights(frame_index)
+            
+            # Renderizar barras
+            rendered = self._render_bars(frame, heights)
+            
+            # Aplicar opacidad
+            opacity = self._config["opacity"]
+            if opacity < 1.0:
+                blended = cv2.addWeighted(frame, 1.0 - opacity,
+                                        rendered, opacity, 0)
+                return blended
+            
+            return rendered
+            
         except Exception as e:
+            print(f"[StraightBarModule] Error en render: {e}")
             return frame
-
+    
+    def _render_bars(self, frame: np.ndarray, heights: np.ndarray) -> np.ndarray:
+        """Renderiza barras en el frame."""
+        height, width = frame.shape[:2]
+        output = frame.copy()
+        
+        # Calcular dimensiones
+        n_bars = len(heights)
+        total_width = width * self._config["bar_width_ratio"]
+        total_spacing = self._config["spacing_ratio"] * total_width
+        bar_width = (total_width - total_spacing) / n_bars
+        spacing = total_spacing / (n_bars - 1) if n_bars > 1 else 0
+        
+        # Posición base
+        start_x = (width - total_width) / 2
+        base_y = int(height * self._config["pos_y"])
+        max_h = height * self._config["height_ratio"]
+        
+        # Color
+        color = (
+            int(self._config["color_b"]),
+            int(self._config["color_g"]),
+            int(self._config["color_r"])
+        )
+        
+        # Modo espejo
+        if self._config["mirror"]:
+            heights = np.concatenate([heights[::-1], heights])
+            n_bars_display = n_bars * 2
+            # Ajustar ancho para modo espejo
+            bar_width_mirror = bar_width / 2
+            spacing_mirror = spacing / 2
+        else:
+            n_bars_display = n_bars
+            bar_width_mirror = bar_width
+            spacing_mirror = spacing
+        
+        # Renderizar cada barra
+        for i in range(n_bars_display):
+            # Calcular posición X
+            if self._config["mirror"]:
+                if i < n_bars:
+                    # Lado izquierdo (espejo)
+                    x = start_x + (n_bars - 1 - i) * (bar_width_mirror + spacing_mirror)
+                else:
+                    # Lado derecho
+                    x = start_x + total_width/2 + (i - n_bars) * (bar_width_mirror + spacing_mirror)
+            else:
+                x = start_x + i * (bar_width_mirror + spacing_mirror)
+            
+            # Altura de la barra
+            h_idx = i % n_bars
+            h = heights[h_idx] if i < len(heights) else heights[-1]
+            h_px = int(h * max_h)
+            
+            if h_px < 1:
+                continue
+            
+            # Coordenadas del rectángulo
+            x1, y1 = int(x), int(base_y - h_px)
+            x2, y2 = int(x + bar_width_mirror), base_y
+            
+            # Dibujar barra con esquinas redondeadas
+            radius = min(self._config["corner_radius"], h_px // 2)
+            if radius > 0:
+                # Rectángulo principal
+                cv2.rectangle(output, (x1 + radius, y1), 
+                            (x2 - radius, y2), color, -1)
+                cv2.rectangle(output, (x1, y1 + radius), 
+                            (x2, y2 - radius), color, -1)
+                
+                # Semicírculos para esquinas
+                cv2.ellipse(output, (x1 + radius, y1 + radius), 
+                          (radius, radius), 180, 0, 90, color, -1)
+                cv2.ellipse(output, (x2 - radius, y1 + radius), 
+                          (radius, radius), 270, 0, 90, color, -1)
+                cv2.ellipse(output, (x1 + radius, y2 - radius), 
+                          (radius, radius), 90, 0, 90, color, -1)
+                cv2.ellipse(output, (x2 - radius, y2 - radius), 
+                          (radius, radius), 0, 0, 90, color, -1)
+            else:
+                cv2.rectangle(output, (x1, y1), (x2, y2), color, -1)
+            
+            # Sombra si está activada
+            if self._config["shadow_enabled"] and h_px > 5:
+                shadow_color = tuple(max(0, c - 40) for c in color)
+                cv2.rectangle(output, (x1, y2 - 2), (x2, y2), 
+                            shadow_color, -1)
+            
+            # Brillo/glow si está activado
+            if self._config["glow_intensity"] > 0 and h_px > 10:
+                glow_color = tuple(min(255, c + 50) for c in color)
+                glow_alpha = self._config["glow_intensity"]
+                glow_layer = output.copy()
+                cv2.rectangle(glow_layer, (x1-2, y1-2), (x2+2, y2+2), 
+                            glow_color, -1)
+                cv2.addWeighted(glow_layer, glow_alpha, output, 
+                              1 - glow_alpha, 0, output)
+        
+        return output
+    
+    def get_config_widgets(self, parent, app):
+        """Crea widgets de configuración para el sidebar."""
+        from PyQt6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QLabel, QSlider, QSpinBox, QCheckBox, QGroupBox
+        from PyQt6.QtCore import Qt
+        
+        self.app = app
+        _as = app
+        
+        content = QWidget(parent)
+        main_layout = QVBoxLayout(content)
+        main_layout.setContentsMargins(0, 0, 0, 0)
+        
+        # Grupo de audio
+        audio_group = QGroupBox("Procesamiento de Audio")
+        agl = QVBoxLayout(audio_group)
+        
+        # Número de barras
+        bars_row = QWidget()
+        brl = QHBoxLayout(bars_row)
+        brl.setContentsMargins(0, 0, 0, 0)
+        brl.addWidget(QLabel("Nº Barras:"))
+        bars_spin = QSpinBox()
+        bars_spin.setRange(8, 256)
+        bars_spin.setValue(self._config["n_bars"])
+        bars_spin.valueChanged.connect(lambda v: self._update_config("n_bars", v, _as))
+        brl.addWidget(bars_spin)
+        agl.addWidget(bars_row)
+        
+        main_layout.addWidget(audio_group)
+        
+        # Grupo de opciones visuales
+        vis_group = QGroupBox("Opciones Visuales")
+        vgl = QVBoxLayout(vis_group)
+        
+        # Espejo
+        mirror_check = QCheckBox("Espejo")
+        mirror_check.setChecked(self._config["mirror"])
+        mirror_check.toggled.connect(lambda v: self._update_config("mirror", v, _as))
+        vgl.addWidget(mirror_check)
+        
+        main_layout.addWidget(vis_group)
+        
+        return content
+    
+    def _update_config(self, key: str, value, app):
+        """Actualiza la configuración y propaga al motor."""
+        super()._update_config(key, value, app)
+        
+        # Mapear configuraciones al motor
+        config_map = {
+            "n_bars": "num_bars",
+            "height_ratio": "scale_y",
+            "pos_y": "pos_y",
+            "smoothing": "smoothing",
+            "response": "response",
+            "gravity": "gravity",
+            "inertia": "inertia",
+            "mirror": "mirror",
+            "invert": "invert",
+            "low_freq": "low_freq",
+            "high_freq": "high_freq",
+            "gamma": "gamma",
+            "bar_width_ratio": "bar_width_ratio",
+            "spacing_ratio": "spacing_ratio",
+            "corner_radius": "corner_radius",
+            "glow_intensity": "glow_intensity",
+            "shadow_enabled": "shadow_enabled",
+            "gradient_enabled": "gradient_enabled",
+        }
+        
+        if key in config_map:
+            engine_key = config_map[key]
+            self.engine.update_config(**{engine_key: value})
+        
+        # Actualizar color
+        if key.startswith("color_"):
+            r = self._config.get("color_r", 255)
+            g = self._config.get("color_g", 255)
+            b = self._config.get("color_b", 255)
+            self.engine.update_config(color=(r, g, b))
     
     def get_config(self):
         """Retorna la configuración actual del módulo."""
         return dict(self._config)
-    def get_config_widgets(self, parent, app):
-        content = QWidget(parent)
-        layout = QVBoxLayout(content)
-        layout.setContentsMargins(0, 0, 0, 0)
-
-        # Número de barras
-        row = QHBoxLayout()
-        row.addWidget(QLabel("Barras:"))
-        n_spin = QSpinBox()
-        n_spin.setRange(8, 256)
-        n_spin.setValue(self._config["n_bars"])
-        n_spin.valueChanged.connect(lambda v: self._update_config("n_bars", v, app))
-        row.addWidget(n_spin)
-        layout.addLayout(row)
-
-        # Opacidad
-        layout.addWidget(QLabel("Opacidad:"))
-        op_slider = QSlider(Qt.Orientation.Horizontal)
-        op_slider.setRange(0, 100)
-        op_slider.setValue(int(self._config["opacity"] * 100))
-        op_slider.valueChanged.connect(lambda v: self._update_config("opacity", v / 100.0, app))
-        layout.addWidget(op_slider)
-
-        # Suavizado
-        layout.addWidget(QLabel("Suavizado temporal:"))
-        sm_slider = QSlider(Qt.Orientation.Horizontal)
-        sm_slider.setRange(0, 95)
-        sm_slider.setValue(int(self._config["smoothing"] * 100))
-        sm_slider.valueChanged.connect(lambda v: self._update_config("smoothing", v / 100.0, app))
-        layout.addWidget(sm_slider)
-
-        # Altura
-        layout.addWidget(QLabel("Altura:"))
-        h_slider = QSlider(Qt.Orientation.Horizontal)
-        h_slider.setRange(5, 80)
-        h_slider.setValue(int(self._config["height_ratio"] * 100))
-        h_slider.valueChanged.connect(lambda v: self._update_config("height_ratio", v / 100.0, app))
-        layout.addWidget(h_slider)
-
-        # Opciones
-        mirror_cb = QCheckBox("Modo espejo")
-        mirror_cb.setChecked(self._config["mirror"])
-        mirror_cb.toggled.connect(lambda v: self._update_config("mirror", v, app))
-        layout.addWidget(mirror_cb)
-
-        shadow_cb = QCheckBox("Sombras")
-        shadow_cb.setChecked(self._config["shadow"])
-        shadow_cb.toggled.connect(lambda v: self._update_config("shadow", v, app))
-        layout.addWidget(shadow_cb)
-
-        rounded_cb = QCheckBox("Bordes redondeados")
-        rounded_cb.setChecked(self._config["rounded_caps"])
-        rounded_cb.toggled.connect(lambda v: self._update_config("rounded_caps", v, app))
-        layout.addWidget(rounded_cb)
-
-        log_cb = QCheckBox("Escala logarítmica")
-        log_cb.setChecked(self._config["log_scale"])
-        log_cb.toggled.connect(lambda v: self._update_config("log_scale", v, app))
-        layout.addWidget(log_cb)
-
-        return content

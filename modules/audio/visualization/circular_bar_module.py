@@ -100,13 +100,22 @@ class CircularBarModule(Module):
         
         try:
             fps = kwargs.get('fps', 30)
-            frame_index = min(int(tiempo * fps), self.engine.total_frames - 1)
+            module_duration = kwargs.get('module_duration', None)
+            
+            # Calcular frame index proporcional a la duración del módulo
+            if module_duration and module_duration > 0:
+                # Tiempo normalizado (0 a 1) dentro de la duración del módulo
+                normalized_time = min(tiempo / module_duration, 1.0)
+                frame_index = int(normalized_time * (self.engine.total_frames - 1))
+            else:
+                # Fallback: usar tiempo absoluto (compatibilidad)
+                frame_index = min(int(tiempo * fps), self.engine.total_frames - 1)
             
             # Obtener alturas actuales del motor wav2bar
             heights = self.engine.get_heights(frame_index)
             
             # Renderizar barras circulares
-            rendered = self._render_circular_bars(frame, heights, tiempo)
+            rendered = self._render_circular_bars(frame, heights, tiempo, module_duration)
             
             # Aplicar opacidad
             opacity = self._config["opacity"]
@@ -121,7 +130,7 @@ class CircularBarModule(Module):
             print(f"[CircularBarModule] Error en render: {e}")
             return frame
     
-    def _render_circular_bars(self, frame: np.ndarray, heights: np.ndarray, tiempo: float) -> np.ndarray:
+    def _render_circular_bars(self, frame: np.ndarray, heights: np.ndarray, tiempo: float, module_duration: float = None) -> np.ndarray:
         """Renderiza barras circulares en el frame."""
         height, width = frame.shape[:2]
         output = frame.copy()
@@ -138,8 +147,14 @@ class CircularBarModule(Module):
         end_angle = math.radians(self._config["end_angle"])
         total_angle = end_angle - start_angle
         
-        # Rotación
-        rotation = self._config.get("rotation_speed", 0.0) * tiempo * 360
+        # Rotación (proporcional a la duración del módulo)
+        rotation_speed = self._config.get("rotation_speed", 0.0)
+        if module_duration and module_duration > 0:
+            # Normalizar tiempo para que la rotación sea consistente sin importar la duración
+            normalized_time = tiempo / module_duration
+            rotation = rotation_speed * normalized_time * 360
+        else:
+            rotation = rotation_speed * tiempo * 360
         rotation_rad = math.radians(rotation)
         
         # Dimensiones de barras

@@ -1314,7 +1314,9 @@ class VentanaPrincipalQt6(QMainWindow):
                             # Tiempo relativo dentro del módulo
                             mod_time = tiempo - mod_item.start_time
                             frame_composito = mod_instance.render(
-                                frame_composito, mod_time, fps=self._preview._fps
+                                frame_composito, mod_time, 
+                                fps=self._preview._fps,
+                                module_duration=mod_item.duration
                             )
                     except Exception as e:
                         log.debug("Error aplicando módulo timeline '%s': %s",

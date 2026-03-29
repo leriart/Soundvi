@@ -251,7 +251,16 @@ class WaveformModule(Module):
         
         try:
             fps = kwargs.get('fps', 30)
-            frame_index = min(int(tiempo * fps), self.engine.total_frames - 1)
+            module_duration = kwargs.get('module_duration', None)
+            
+            # Calcular frame index proporcional a la duración del módulo
+            if module_duration and module_duration > 0:
+                # Tiempo normalizado (0 a 1) dentro de la duración del módulo
+                normalized_time = min(tiempo / module_duration, 1.0)
+                frame_index = int(normalized_time * (self.engine.total_frames - 1))
+            else:
+                # Fallback: usar tiempo absoluto (compatibilidad)
+                frame_index = min(int(tiempo * fps), self.engine.total_frames - 1)
             
             # Obtener alturas actuales del motor wav2bar
             heights = self.engine.get_heights(frame_index)

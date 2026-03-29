@@ -551,7 +551,6 @@ class ModuleTimelineGraphicsItem(QGraphicsRectItem):
 
     def __init__(self, module_item: ModuleTimelineItem, pps: float,
                  track_y: float, track_height: float):
-        print(f"DEBUG_INIT: ModuleTimelineGraphicsItem __init__ for {module_item.name}")
         super().__init__()
         self.module_item = module_item
         self._pps = pps
@@ -566,7 +565,7 @@ class ModuleTimelineGraphicsItem(QGraphicsRectItem):
         self.setFlag(QGraphicsItem.GraphicsItemFlag.ItemIsSelectable, True)
         self.setFlag(QGraphicsItem.GraphicsItemFlag.ItemIsMovable, False)
         self.setAcceptHoverEvents(True)
-        self.setCursor(Qt.CursorShape.SizeHorCursor)
+        self.setCursor(Qt.CursorShape.PointingHandCursor)
 
         # Determinar color basado en tipo de módulo
         mod_type = module_item.module_type.split("/")[0] if "/" in module_item.module_type else "effect"
@@ -651,21 +650,8 @@ class ModuleTimelineGraphicsItem(QGraphicsRectItem):
         return max(0.0, best_start)
 
     def mousePressEvent(self, event):
-        """Handle mouse press events for selection, dragging and resizing."""
-        print(f"DEBUG_MOUSE: ModuleTimelineGraphicsItem mousePressEvent: {self.module_item.name}")
-        print(f"DEBUG_MOUSE: Event type: {event.type()}, buttons: {event.buttons()}")
-        
-        # Call parent to handle selection
-        super().mousePressEvent(event)
-        
-        # Force selection
-        if not self.isSelected():
-            print("DEBUG_MOUSE: Item not selected, selecting it")
-            self.setSelected(True)
-        
-        # Iniciar arrastre o redimensionado si es click izquierdo
+        """Inicio de arrastre o redimensionado."""
         if event.button() == Qt.MouseButton.LeftButton:
-            # Detectar si el click está cerca de los bordes para redimensionar
             x = event.pos().x()
             rect_width = self.rect().width()
             
@@ -676,40 +662,33 @@ class ModuleTimelineGraphicsItem(QGraphicsRectItem):
                 self._drag_start_pos = event.scenePos()
                 self._drag_start_time = self.module_item.start_time
                 self._drag_start_duration = self.module_item.duration
-                print(f"DEBUG_RESIZE: Resize left started at time {self._drag_start_time}, duration {self._drag_start_duration}")
-                
             elif x > rect_width - 6:
                 # Click cerca del borde derecho -> redimensionar desde derecha
                 self._resizing = True
                 self._resize_edge = "right"
                 self._drag_start_pos = event.scenePos()
                 self._drag_start_duration = self.module_item.duration
-                print(f"DEBUG_RESIZE: Resize right started, duration {self._drag_start_duration}")
-                
             else:
                 # Click en el centro -> arrastrar
                 self._resizing = False
                 self._drag_start_pos = event.scenePos()
                 self._drag_start_time = self.module_item.start_time
-                print(f"DEBUG_DRAG: Drag started at time {self._drag_start_time}, pos {self._drag_start_pos}")
+        super().mousePressEvent(event)
 
 
     def mouseMoveEvent(self, event):
-        """Handle mouse move events for dragging and resizing."""
+        """Arrastre del módulo o redimensionado."""
         if self._drag_start_pos is not None:
             delta_x = event.scenePos().x() - self._drag_start_pos.x()
             delta_time = delta_x / self._pps
             
             if self._resizing:
-                # Redimensionamiento
                 if self._resize_edge == "left":
                     new_start = self._drag_start_time + delta_time
                     new_duration = self._drag_start_duration - delta_time
                     
-                    # Aplicar snap a guías de alineación si está activo (similar a ClipItem)
-                    if hasattr(self, '_apply_alignment_snap'):
-                        new_start = self._apply_alignment_snap(new_start, event.scenePos().x(), check_end=False)
-                    
+                    # Aplicar snap a guías de alineación si está activo
+                    new_start = self._apply_alignment_snap(new_start, event.scenePos().x(), check_end=False)
                     # Recalcular duración basada en el nuevo inicio
                     new_duration = self._drag_start_duration - (new_start - self._drag_start_time)
                     
@@ -717,7 +696,6 @@ class ModuleTimelineGraphicsItem(QGraphicsRectItem):
                         self.module_item.start_time = new_start
                         self.module_item.duration = new_duration
                         self._actualizar_geometria()
-                        print(f"DEBUG_RESIZE: Module resized left: start={new_start:.2f}s, duration={new_duration:.2f}s")
                         
                 elif self._resize_edge == "right":
                     new_duration = self._drag_start_duration + delta_time
@@ -725,32 +703,24 @@ class ModuleTimelineGraphicsItem(QGraphicsRectItem):
                     if new_duration >= 0.5:  # Mínimo 0.5 segundos
                         self.module_item.duration = new_duration
                         self._actualizar_geometria()
-                        print(f"DEBUG_RESIZE: Module resized right: duration={new_duration:.2f}s")
                         
             else:
                 # Arrastre normal
                 new_start = max(0.0, self._drag_start_time + delta_time)
                 
-                # Apply alignment snap if available (similar to ClipItem)
-                if hasattr(self, '_apply_alignment_snap'):
-                    new_start = self._apply_alignment_snap(new_start, event.scenePos().x(), check_end=False)
+                # Aplicar snap a guías de alineación si está activo
+                new_start = self._apply_alignment_snap(new_start, event.scenePos().x(), check_end=False)
                 
                 self.module_item.start_time = new_start
                 self._actualizar_geometria()
-                print(f"DEBUG_DRAG: Module moved to time {new_start:.2f}s")
         
         super().mouseMoveEvent(event)
 
     def mouseReleaseEvent(self, event):
-        """Handle mouse release events."""
+        """Fin de arrastre o redimensionado."""
         if event.button() == Qt.MouseButton.LeftButton and self._drag_start_pos is not None:
-            if self._resizing:
-                print(f"DEBUG_RESIZE: Resize ended for {self.module_item.name}")
-                self._resizing = False
-                self._resize_edge = ""
-            else:
-                print(f"DEBUG_DRAG: Drag ended for {self.module_item.name}")
-            
+            self._resizing = False
+            self._resize_edge = ""
             self._drag_start_pos = None
             self._drag_start_time = 0.0
             self._drag_start_duration = 0.0
@@ -758,21 +728,20 @@ class ModuleTimelineGraphicsItem(QGraphicsRectItem):
         super().mouseReleaseEvent(event)
     def hoverEnterEvent(self, event):
         """Handle hover enter events."""
-        print(f"DEBUG_HOVER: ModuleTimelineGraphicsItem hoverEnterEvent: {self.module_item.name}")
         super().hoverEnterEvent(event)
         
     def hoverLeaveEvent(self, event):
         """Handle hover leave events."""
-        print(f"DEBUG_HOVER: ModuleTimelineGraphicsItem hoverLeaveEvent: {self.module_item.name}")
         super().hoverLeaveEvent(event)
 
     def _actualizar_geometria(self):
-        print(f"DEBUG_GEOM: _actualizar_geometria for {self.module_item.name}")
+        """Recalcula posición y tamaño basado en el módulo."""
         x = HEADER_WIDTH + self.module_item.start_time * self._pps
         w = max(8, self.module_item.duration * self._pps)
         h = self._track_height - 8
         self.setRect(0, 0, w, h)
         self.setPos(x, self._track_y + 4)
+        self._pintar()
         self._pintar()
 
     def _pintar(self):
